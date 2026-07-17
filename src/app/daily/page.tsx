@@ -111,15 +111,23 @@ export default function DailyDashboardPage() {
             구성에 생산품목·조립제 항목을 추가했습니다.
           </p>
         </div>
-        <label className="flex flex-col text-xs gap-1">
-          <span className="text-slate-500">대상 월</span>
-          <input
-            type="month"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-            className="border rounded-md px-2 py-1"
-          />
-        </label>
+        <div className="flex items-end gap-2">
+          <label className="flex flex-col text-xs gap-1">
+            <span className="text-slate-500">대상 월</span>
+            <input
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              className="border rounded-md px-2 py-1"
+            />
+          </label>
+          <a
+            href={`/api/daily-export?month=${month}`}
+            className="text-xs border border-slate-300 rounded-md px-3 py-1.5 bg-white h-fit"
+          >
+            엑셀 다운로드
+          </a>
+        </div>
       </div>
 
       {/* 모바일: 핵심 항목만 카드 형태로 */}
