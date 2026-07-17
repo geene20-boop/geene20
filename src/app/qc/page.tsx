@@ -289,6 +289,13 @@ export default function QcPage() {
       </form>
 
       <div className="bg-white rounded-xl border overflow-x-auto">
+        <div className="flex items-center justify-between px-3 pt-3">
+          <h2 className="text-sm font-semibold text-slate-700">최근 측정 기록</h2>
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 파일 다운로드 링크(페이지 이동 아님) */}
+          <a href="/api/qc/export" className="text-xs border border-slate-300 rounded-md px-3 py-1.5">
+            엑셀 다운로드 (전체)
+          </a>
+        </div>
         <table className="w-full text-sm">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
