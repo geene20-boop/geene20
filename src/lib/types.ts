@@ -79,3 +79,25 @@ export function inferShift(time: string): Shift {
   const hour = Number(time.split(":")[0]);
   return hour >= 8 && hour < 20 ? "주" : "야";
 }
+
+export type Plant = "1공장" | "2공장";
+export type VoltageType = "저압" | "고압";
+
+export const PLANT_OPTIONS: Plant[] = ["1공장", "2공장"];
+
+export const PLANT_VOLTAGE: Record<Plant, VoltageType> = {
+  "1공장": "저압",
+  "2공장": "고압",
+};
+
+export interface ElectricityUsage {
+  id: number;
+  date: string;
+  plant: Plant;
+  voltage_type: VoltageType;
+  usage_kwh: number | null;
+  source: "manual" | "api";
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}

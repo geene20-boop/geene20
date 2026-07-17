@@ -100,6 +100,21 @@ export function getDb(): Database.Database {
       session_secret TEXT NOT NULL,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS electricity_usage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,               -- YYYY-MM-DD
+      plant TEXT NOT NULL,              -- '1공장' | '2공장'
+      voltage_type TEXT NOT NULL,       -- '저압' | '고압'
+      usage_kwh REAL,                   -- 일일 사용량(kWh)
+      source TEXT NOT NULL DEFAULT 'manual', -- 'manual' | 'api'
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(date, plant)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_electricity_date ON electricity_usage(date);
   `);
 
   // 기존에 만들어진 DB에도 새 컬럼이 안전하게 추가되도록 마이그레이션

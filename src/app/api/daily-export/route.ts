@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMergedRows } from "@/lib/analytics";
 import { buildXlsxBuffer, xlsxResponseHeaders } from "@/lib/exportXlsx";
+import { getDb } from "@/lib/db";
+import { ElectricityUsage } from "@/lib/types";
 
 function daysInMonth(month: string): string[] {
   const [y, m] = month.split("-").map(Number);
@@ -23,10 +25,22 @@ export async function GET(req: NextRequest) {
     byDate.get(r.date)!.push(r);
   }
 
+  const db = getDb();
+  const electricityRows = db
+    .prepare("SELECT * FROM electricity_usage WHERE date BETWEEN ? AND ?")
+    .all(from, to) as ElectricityUsage[];
+  const electricityByDate = new Map<string, { "1공장": number | null; "2공장": number | null }>();
+  for (const e of electricityRows) {
+    const entry = electricityByDate.get(e.date) ?? { "1공장": null, "2공장": null };
+    entry[e.plant] = e.usage_kwh;
+    electricityByDate.set(e.date, entry);
+  }
+
   const sheetRows: Record<string, unknown>[] = [];
   for (const date of daysInMonth(month)) {
     const dayRows = (byDate.get(date) ?? []).sort((a) => (a.shift === "주" ? -1 : 1));
     const dayGasTotal = dayRows.reduce((s, r) => s + (r.production?.gas_usage_shift ?? 0), 0);
+    const elec = electricityByDate.get(date);
     for (const r of dayRows) {
       const p = r.production;
       sheetRows.push({
@@ -56,6 +70,15 @@ export async function GET(req: NextRequest) {
         "가동시간당가스(㎥/h)": r.gasPerHour != null ? +r.gasPerHour.toFixed(1) : "",
         수분: r.moisture != null ? +r.moisture.toFixed(2) : "",
         경도: r.hardness != null ? +r.hardness.toFixed(2) : "",
+        "1공장 저압(kWh, 일계)": elec?.["1공장"] ?? "",
+        "2공장 고압(kWh, 일계)": elec?.["2공장"] ?? "",
+      });
+    }
+    if (dayRows.length === 0 && elec) {
+      sheetRows.push({
+        날짜: date,
+        "1공장 저압(kWh, 일계)": elec["1공장"] ?? "",
+        "2공장 고압(kWh, 일계)": elec["2공장"] ?? "",
       });
     }
   }
