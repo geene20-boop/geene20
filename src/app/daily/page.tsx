@@ -122,7 +122,50 @@ export default function DailyDashboardPage() {
         </label>
       </div>
 
-      <div className="bg-white rounded-xl border overflow-x-auto">
+      {/* 모바일: 핵심 항목만 카드 형태로 */}
+      <div className="flex flex-col gap-3 md:hidden">
+        {days.map((date) => {
+          const dayRows = byDate.get(date) ?? [];
+          if (dayRows.length === 0) return null;
+          return dayRows.map((r) => {
+            const p = r.production;
+            return (
+              <div key={`${date}-${r.shift}-mobile`} className="bg-white rounded-xl border p-4 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-800">
+                    {date} · {r.shift}조
+                  </span>
+                  {p?.worker && <span className="text-xs text-slate-500">{p.worker}</span>}
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                  <span className="text-slate-500">생산품목</span>
+                  <span className="text-right text-emerald-700 font-medium">{p?.product ?? "-"}</span>
+                  <span className="text-slate-500">조립제</span>
+                  <span className="text-right text-violet-700 font-medium">{p?.granulation_agent ?? "-"}</span>
+                  <span className="text-slate-500">포장량(ton)</span>
+                  <span className="text-right text-sky-700 font-medium">{fmt(p?.daily_pack_amount, 0)}</span>
+                  <span className="text-slate-500">실가동시간(h)</span>
+                  <span className="text-right">{fmt(p?.line_hours_total)}</span>
+                  <span className="text-slate-500">조별사용량(㎥)</span>
+                  <span className="text-right">{fmt(p?.gas_usage_shift)}</span>
+                  <span className="text-slate-500">가동시간당 가스(㎥/h)</span>
+                  <span className="text-right text-amber-700 font-medium">{fmt(r.gasPerHour)}</span>
+                  <span className="text-slate-500">수분 / 경도</span>
+                  <span className="text-right">
+                    {fmt(r.moisture, 2)} / {fmt(r.hardness, 2)}
+                  </span>
+                </div>
+              </div>
+            );
+          });
+        })}
+        {!loading && rows.length === 0 && (
+          <p className="text-center text-slate-400 py-8">데이터가 없습니다.</p>
+        )}
+      </div>
+
+      {/* 데스크톱: 전체 항목 표 */}
+      <div className="hidden md:block bg-white rounded-xl border overflow-x-auto">
         <table className="text-xs border-collapse min-w-[1900px]">
           <thead className="sticky top-0 bg-slate-50 z-10">
             <tr>

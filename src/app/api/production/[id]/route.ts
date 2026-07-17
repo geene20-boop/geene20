@@ -83,6 +83,13 @@ export async function PUT(
   if (body.carryOverride) {
     carryoverDryer = body.carryover_dryer ?? null;
     carryoverRto = body.carryover_rto ?? null;
+    if (existing.carryover_dryer !== carryoverDryer || existing.carryover_rto !== carryoverRto) {
+      const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+      const auditNote = `[${stamp} 관리자가 전일재고 수정: 건조로 ${existing.carryover_dryer ?? "-"}→${carryoverDryer ?? "-"}, RTO ${existing.carryover_rto ?? "-"}→${carryoverRto ?? "-"}]`;
+      const baseNote = body.note !== undefined ? body.note : existing.note;
+      body.note = [baseNote, auditNote].filter(Boolean).join("\n");
+      merged.note = body.note;
+    }
   } else if (body.carryover_dryer !== undefined || body.carryover_rto !== undefined) {
     // 관리자 세션 없이 전일재고량 자체를 바꾸려는 시도는 무시하고 기존 값을 유지
     carryoverDryer = existing.carryover_dryer;

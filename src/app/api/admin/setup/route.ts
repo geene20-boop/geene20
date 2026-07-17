@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   }
 
   setAdminPassword(String(password));
-  const token = createSessionToken();
+  const token = createSessionToken("admin");
   const res = NextResponse.json({ ok: true });
   res.cookies.set(ADMIN_SESSION_COOKIE, token, {
     httpOnly: true,

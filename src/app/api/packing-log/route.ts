@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSetting } from "@/lib/db";
+import { getSetting, setSetting } from "@/lib/db";
 import { fetchPackingLogCsv, parsePackingLogCsv, summarizePackingLog } from "@/lib/packingLog";
 
 export const PACKING_LOG_CSV_URL_KEY = "packing_log_csv_url";
+export const PACKING_LOG_LAST_SYNC_KEY = "packing_log_last_sync";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -20,8 +21,13 @@ export async function GET(req: NextRequest) {
     const csvText = await fetchPackingLogCsv(csvUrl);
     const rows = parsePackingLogCsv(csvText);
     const summary = summarizePackingLog(rows, date);
-    return NextResponse.json({ configured: true, ...summary });
+    const now = new Date().toISOString();
+    setSetting(PACKING_LOG_LAST_SYNC_KEY, now);
+    return NextResponse.json({ configured: true, lastSync: now, ...summary });
   } catch (e) {
-    return NextResponse.json({ configured: true, error: String(e) }, { status: 502 });
+    return NextResponse.json(
+      { configured: true, lastSync: getSetting(PACKING_LOG_LAST_SYNC_KEY), error: String(e) },
+      { status: 502 }
+    );
   }
 }
