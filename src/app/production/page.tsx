@@ -5,6 +5,9 @@ import { apiDelete, apiGet, apiPost } from "@/lib/apiClient";
 import { ProductionLog } from "@/lib/types";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 
+export const PRODUCT_OPTIONS = ["규산", "석회고토", "칼슘유황"];
+export const GRANULATION_AGENT_OPTIONS = ["당밀계열", "전분계열", "CMC계열"];
+
 type FormState = {
   date: string;
   shift: "주" | "야";
@@ -140,6 +143,37 @@ function Field({
   );
 }
 
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  const allOptions = value && !options.includes(value) ? [value, ...options] : options;
+  return (
+    <label className="flex flex-col gap-1 text-sm">
+      <span className="text-slate-600">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="border rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-slate-400"
+      >
+        <option value="">선택 안 함</option>
+        {allOptions.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <fieldset className="border rounded-lg p-4">
@@ -205,11 +239,6 @@ export default function ProductionPage() {
     if (dryerReal == null && rtoReal == null) return null;
     return (dryerReal ?? 0) + (rtoReal ?? 0);
   }, [dryerReal, rtoReal]);
-
-  const agentOptions = useMemo(
-    () => [...new Set(logs.map((l) => l.granulation_agent).filter((v): v is string => !!v))],
-    [logs]
-  );
 
   async function loadLogs() {
     const rows = await apiGet<ProductionLog[]>("/api/production");
@@ -451,7 +480,7 @@ export default function ProductionPage() {
               />
             </div>
           </label>
-          <Field label="생산품목" type="text" value={form.product} onChange={(v) => set("product", v)} />
+          <SelectField label="생산품목" value={form.product} onChange={(v) => set("product", v)} options={PRODUCT_OPTIONS} />
           <div className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">
               일일포장량(ton)
@@ -501,22 +530,12 @@ export default function ProductionPage() {
         </Section>
 
         <Section title="조립제 투입 조건 (Hz)">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">조립제 이름</span>
-            <input
-              type="text"
-              list="agent-options"
-              value={form.granulation_agent}
-              onChange={(e) => set("granulation_agent", e.target.value)}
-              placeholder="검색 또는 입력"
-              className="border rounded-md px-2 py-1.5"
-            />
-            <datalist id="agent-options">
-              {agentOptions.map((a) => (
-                <option key={a} value={a} />
-              ))}
-            </datalist>
-          </label>
+          <SelectField
+            label="조립제"
+            value={form.granulation_agent}
+            onChange={(v) => set("granulation_agent", v)}
+            options={GRANULATION_AGENT_OPTIONS}
+          />
           <Field
             label="분당 사용량"
             value={form.granulation_usage_per_min}
