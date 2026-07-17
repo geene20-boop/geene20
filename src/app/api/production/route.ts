@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
+import { isAdminRequest } from "@/lib/auth";
 import { ProductionLog } from "@/lib/types";
+import {
+  computeFeedTotal,
+  computeGasUsage,
+  computeLineHoursTotal,
+  getPreviousProductionLog,
+} from "@/lib/productionCalc";
 
-const COLUMNS = [
-  "date",
-  "shift",
+const PASSTHROUGH_COLUMNS = [
   "product",
   "daily_pack_amount",
   "dryer_temp_a",
@@ -14,18 +19,19 @@ const COLUMNS = [
   "feed_fine_powder",
   "feed_mixer",
   "feed_molder",
-  "feed_total",
   "brix",
   "line_hours_a",
   "line_hours_b",
-  "line_hours_total",
+  "downtime_hours",
   "lng_dryer",
   "lng_rto",
-  "gas_usage_shift",
   "gas_usage_total",
   "moisture_manual",
   "hardness_manual",
   "note",
+  "worker",
+  "granulation_agent",
+  "granulation_usage_per_min",
 ] as const;
 
 export async function GET(req: NextRequest) {
@@ -47,17 +53,74 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "date, shift는 필수입니다." }, { status: 400 });
   }
 
-  const cols = COLUMNS.filter((c) => body[c] !== undefined);
-  const placeholders = cols.map(() => "?").join(", ");
-  const values = cols.map((c) => body[c] ?? null);
+  if (body.carryOverride && !isAdminRequest(req)) {
+    return NextResponse.json(
+      { error: "전일재고량 수정은 관리자 로그인이 필요합니다." },
+      { status: 403 }
+    );
+  }
+
+  const existing = db
+    .prepare("SELECT id FROM production_log WHERE date = ? AND shift = ?")
+    .get(body.date, body.shift) as { id: number } | undefined;
+
+  const feedTotal = computeFeedTotal(body.feed_mixer ?? null, body.feed_molder ?? null);
+  const lineHoursTotal = computeLineHoursTotal(
+    body.line_hours_a ?? null,
+    body.line_hours_b ?? null,
+    body.downtime_hours ?? null
+  );
+
+  let carryoverDryer: number | null;
+  let carryoverRto: number | null;
+  if (body.carryOverride) {
+    carryoverDryer = body.carryover_dryer ?? null;
+    carryoverRto = body.carryover_rto ?? null;
+  } else {
+    const prev = getPreviousProductionLog(body.date, body.shift, existing?.id);
+    carryoverDryer = prev?.lng_dryer ?? null;
+    carryoverRto = prev?.lng_rto ?? null;
+  }
+
+  const gasUsageShift = computeGasUsage({
+    lngDryer: body.lng_dryer ?? null,
+    lngRto: body.lng_rto ?? null,
+    carryoverDryer,
+    carryoverRto,
+    fallbackGasUsageShift: body.gas_usage_shift ?? null,
+  });
+
+  const cols = [
+    "date",
+    "shift",
+    ...PASSTHROUGH_COLUMNS.filter((c) => body[c] !== undefined),
+    "feed_total",
+    "line_hours_total",
+    "gas_usage_shift",
+    "carryover_dryer",
+    "carryover_rto",
+  ];
+  const values: Record<string, unknown> = {
+    date: body.date,
+    shift: body.shift,
+    feed_total: feedTotal,
+    line_hours_total: lineHoursTotal,
+    gas_usage_shift: gasUsageShift,
+    carryover_dryer: carryoverDryer,
+    carryover_rto: carryoverRto,
+  };
+  for (const c of PASSTHROUGH_COLUMNS) {
+    if (body[c] !== undefined) values[c] = body[c];
+  }
 
   try {
+    const placeholders = cols.map((c) => `@${c}`).join(", ");
     const stmt = db.prepare(
       `INSERT INTO production_log (${cols.join(", ")}) VALUES (${placeholders})
        ON CONFLICT(date, shift) DO UPDATE SET
        ${cols.map((c) => `${c} = excluded.${c}`).join(", ")}, updated_at = datetime('now')`
     );
-    const info = stmt.run(...values);
+    const info = stmt.run(values);
     const row = db
       .prepare("SELECT * FROM production_log WHERE date = ? AND shift = ?")
       .get(body.date, body.shift);

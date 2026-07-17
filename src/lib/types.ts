@@ -25,6 +25,12 @@ export interface ProductionLog {
   moisture_manual: number | null;
   hardness_manual: number | null;
   note: string | null;
+  worker: string | null;
+  granulation_agent: string | null;
+  granulation_usage_per_min: number | null;
+  downtime_hours: number | null;
+  carryover_dryer: number | null;
+  carryover_rto: number | null;
   created_at: string;
   updated_at: string;
 }

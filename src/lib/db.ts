@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 
 const DATA_DIR = process.env.DB_DIR ?? path.join(process.cwd(), "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -43,6 +44,12 @@ export function getDb(): Database.Database {
       moisture_manual REAL,             -- 수분량(수기입력, 없으면 QC평균 사용)
       hardness_manual REAL,             -- 경도(수기입력, 없으면 QC평균 사용)
       note TEXT,
+      worker TEXT,                      -- 작업자 이름
+      granulation_agent TEXT,           -- 조립제 이름
+      granulation_usage_per_min REAL,   -- 조립제 분당 사용량
+      downtime_hours REAL,              -- 비가동시간 (A+B 가동시간에서 차감)
+      carryover_dryer REAL,             -- 전일재고량 - 건조로 누계 (관리자 수정 가능)
+      carryover_rto REAL,               -- 전일재고량 - RTO 누계 (관리자 수정 가능)
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(date, shift)
@@ -86,7 +93,32 @@ export function getDb(): Database.Database {
       value TEXT,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS admin_auth (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      password_hash TEXT,
+      session_secret TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
+
+  // 기존에 만들어진 DB에도 새 컬럼이 안전하게 추가되도록 마이그레이션
+  const existingCols = new Set(
+    (db.prepare("PRAGMA table_info(production_log)").all() as { name: string }[]).map((c) => c.name)
+  );
+  const migrations: [string, string][] = [
+    ["worker", "TEXT"],
+    ["granulation_agent", "TEXT"],
+    ["granulation_usage_per_min", "REAL"],
+    ["downtime_hours", "REAL"],
+    ["carryover_dryer", "REAL"],
+    ["carryover_rto", "REAL"],
+  ];
+  for (const [col, type] of migrations) {
+    if (!existingCols.has(col)) {
+      db.exec(`ALTER TABLE production_log ADD COLUMN ${col} ${type}`);
+    }
+  }
 
   const specCount = db.prepare("SELECT COUNT(*) as c FROM spec_limit").get() as { c: number };
   if (specCount.c === 0) {
@@ -96,6 +128,13 @@ export function getDb(): Database.Database {
     insert.run("hardness", 4, 12);
     insert.run("moisture", 1.5, 4);
     insert.run("gas_per_hour", 200, 450);
+  }
+
+  const authRow = db.prepare("SELECT id FROM admin_auth WHERE id = 1").get();
+  if (!authRow) {
+    db.prepare("INSERT INTO admin_auth (id, password_hash, session_secret) VALUES (1, NULL, ?)").run(
+      crypto.randomBytes(32).toString("hex")
+    );
   }
 
   global.__db = db;
