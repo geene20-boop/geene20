@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/monthly", label: "월간 시트" },
   { href: "/production", label: "생산일지 입력" },
   { href: "/qc", label: "QC측정 입력" },
+  { href: "/electricity", label: "전력사용량" },
   { href: "/import", label: "데이터 가져오기" },
   { href: "/admin", label: "관리자 설정" },
 ];

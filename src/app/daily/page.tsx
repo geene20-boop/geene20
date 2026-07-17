@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/apiClient";
 import { MergedShiftRow } from "@/lib/analytics";
+import { ElectricityUsage } from "@/lib/types";
 
 function currentMonth() {
   return new Date().toISOString().slice(0, 7);
@@ -44,7 +45,7 @@ function Td({
 }: {
   children: React.ReactNode;
   className?: string;
-  highlight?: "product" | "agent" | "pack" | "line" | "lng" | "gasRate";
+  highlight?: "product" | "agent" | "pack" | "line" | "lng" | "gasRate" | "elec";
 }) {
   const highlightClass: Record<string, string> = {
     product: "bg-emerald-50 text-emerald-700 font-medium",
@@ -53,6 +54,7 @@ function Td({
     line: "bg-amber-50 text-amber-700",
     lng: "bg-amber-50/60",
     gasRate: "bg-amber-100 text-amber-800 font-medium",
+    elec: "bg-indigo-50 text-indigo-700 font-medium",
   };
   return (
     <td
@@ -68,6 +70,7 @@ function Td({
 export default function DailyDashboardPage() {
   const [month, setMonth] = useState(currentMonth());
   const [rows, setRows] = useState<MergedShiftRow[]>([]);
+  const [electricity, setElectricity] = useState<ElectricityUsage[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -77,8 +80,14 @@ export default function DailyDashboardPage() {
       try {
         const from = `${month}-01`;
         const to = daysInMonth(month).slice(-1)[0] ?? `${month}-28`;
-        const data = await apiGet<{ rows: MergedShiftRow[] }>(`/api/dashboard?from=${from}&to=${to}`);
-        if (!cancelled) setRows(data.rows);
+        const [data, elec] = await Promise.all([
+          apiGet<{ rows: MergedShiftRow[] }>(`/api/dashboard?from=${from}&to=${to}`),
+          apiGet<ElectricityUsage[]>(`/api/electricity?from=${from}&to=${to}`),
+        ]);
+        if (!cancelled) {
+          setRows(data.rows);
+          setElectricity(elec);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -98,6 +107,16 @@ export default function DailyDashboardPage() {
     for (const list of map.values()) list.sort((a) => (a.shift === "주" ? -1 : 1));
     return map;
   }, [rows]);
+
+  const electricityByDate = useMemo(() => {
+    const map = new Map<string, { "1공장": number | null; "2공장": number | null }>();
+    for (const e of electricity) {
+      const entry = map.get(e.date) ?? { "1공장": null, "2공장": null };
+      entry[e.plant] = e.usage_kwh;
+      map.set(e.date, entry);
+    }
+    return map;
+  }, [electricity]);
 
   const days = useMemo(() => daysInMonth(month), [month]);
 
@@ -135,7 +154,8 @@ export default function DailyDashboardPage() {
         {days.map((date) => {
           const dayRows = byDate.get(date) ?? [];
           if (dayRows.length === 0) return null;
-          return dayRows.map((r) => {
+          const elec = electricityByDate.get(date);
+          return dayRows.map((r, i) => {
             const p = r.production;
             return (
               <div key={`${date}-${r.shift}-mobile`} className="bg-white rounded-xl border p-4 flex flex-col gap-2">
@@ -162,6 +182,14 @@ export default function DailyDashboardPage() {
                   <span className="text-right">
                     {fmt(r.moisture, 2)} / {fmt(r.hardness, 2)}
                   </span>
+                  {i === 0 && (elec?.["1공장"] != null || elec?.["2공장"] != null) && (
+                    <>
+                      <span className="text-slate-500">전력사용량(일계, 저압/고압)</span>
+                      <span className="text-right text-indigo-700 font-medium">
+                        {fmt(elec?.["1공장"], 0)} / {fmt(elec?.["2공장"], 0)} kWh
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -197,6 +225,9 @@ export default function DailyDashboardPage() {
               <Th colSpan={2} className="text-center bg-slate-100">
                 제품 품질확인
               </Th>
+              <Th colSpan={2} className="text-center bg-slate-100">
+                전력사용량 (kWh, 일계)
+              </Th>
             </tr>
             <tr>
               <Th className="text-left sticky left-0 bg-slate-50 z-20"></Th>
@@ -225,19 +256,25 @@ export default function DailyDashboardPage() {
               <Th></Th>
               <Th>수분량</Th>
               <Th>경도</Th>
+              <Th>1공장(저압)</Th>
+              <Th>2공장(고압)</Th>
             </tr>
           </thead>
           <tbody>
             {days.map((date) => {
               const dayRows = byDate.get(date) ?? [];
               const dayGasTotal = dayRows.reduce((s, r) => s + (r.production?.gas_usage_shift ?? 0), 0);
+              const elec = electricityByDate.get(date);
               if (dayRows.length === 0) {
+                const hasElec = elec?.["1공장"] != null || elec?.["2공장"] != null;
                 return (
                   <tr key={date} className="border-b border-slate-100 text-slate-300">
                     <td className="px-2 py-1 sticky left-0 bg-white">{date}</td>
                     <td colSpan={25} className="px-2 py-1">
                       기록 없음
                     </td>
+                    <Td highlight={hasElec ? "elec" : undefined}>{fmt(elec?.["1공장"], 0)}</Td>
+                    <Td highlight={hasElec ? "elec" : undefined}>{fmt(elec?.["2공장"], 0)}</Td>
                   </tr>
                 );
               }
@@ -277,13 +314,15 @@ export default function DailyDashboardPage() {
                     <Td highlight="gasRate">{fmt(r.gasPerHour)}</Td>
                     <Td>{fmt(r.moisture, 2)}</Td>
                     <Td>{fmt(r.hardness, 2)}</Td>
+                    <Td highlight="elec">{i === 0 ? fmt(elec?.["1공장"], 0) : ""}</Td>
+                    <Td highlight="elec">{i === 0 ? fmt(elec?.["2공장"], 0) : ""}</Td>
                   </tr>
                 );
               });
             })}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={26} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={28} className="px-3 py-8 text-center text-slate-400">
                   데이터가 없습니다.
                 </td>
               </tr>
@@ -308,6 +347,10 @@ export default function DailyDashboardPage() {
         <span className="flex items-center gap-1">
           <span className="w-3 h-3 rounded-sm bg-amber-100 border border-amber-300 inline-block" /> 가동시간당
           가스사용량
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-3 h-3 rounded-sm bg-indigo-50 border border-indigo-200 inline-block" /> 전력사용량
+          (1공장 저압 / 2공장 고압)
         </span>
       </div>
     </div>
