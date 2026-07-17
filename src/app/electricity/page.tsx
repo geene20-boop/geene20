@@ -28,6 +28,7 @@ function n(v: string): number | null {
 
 export default function ElectricityPage() {
   const [form, setForm] = useState<FormState>(emptyForm());
+  const [editingKey, setEditingKey] = useState<{ date: string; plant: Plant } | null>(null);
   const [rows, setRows] = useState<ElectricityUsage[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -58,7 +59,8 @@ export default function ElectricityPage() {
         note: form.note || null,
       });
       setMessage("저장되었습니다.");
-      setForm({ ...emptyForm(), date: form.date });
+      setForm(emptyForm());
+      setEditingKey(null);
       loadRows();
     } catch (err) {
       setMessage(`오류: ${(err as Error).message}`);
@@ -74,6 +76,13 @@ export default function ElectricityPage() {
       usage_kwh: r.usage_kwh != null ? String(r.usage_kwh) : "",
       note: r.note ?? "",
     });
+    setEditingKey({ date: r.date, plant: r.plant });
+    setMessage(null);
+  }
+
+  function onCancelEdit() {
+    setForm(emptyForm());
+    setEditingKey(null);
     setMessage(null);
   }
 
@@ -98,6 +107,17 @@ export default function ElectricityPage() {
       </div>
 
       <form onSubmit={onSubmit} className="flex flex-col gap-4 bg-white rounded-xl border p-5">
+        {editingKey && (
+          <div className="flex items-center justify-between text-xs bg-sky-50 border border-sky-200 text-sky-800 rounded-md px-3 py-2">
+            <span>
+              {editingKey.date} · {editingKey.plant} 기록을 수정 중입니다. (날짜·공장은 변경할 수
+              없습니다)
+            </span>
+            <button type="button" onClick={onCancelEdit} className="underline">
+              취소
+            </button>
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">날짜</span>
@@ -105,7 +125,8 @@ export default function ElectricityPage() {
               type="date"
               value={form.date}
               onChange={(e) => set("date", e.target.value)}
-              className="border rounded-md px-2 py-1.5"
+              disabled={!!editingKey}
+              className="border rounded-md px-2 py-1.5 disabled:bg-slate-100 disabled:text-slate-400"
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
@@ -113,7 +134,8 @@ export default function ElectricityPage() {
             <select
               value={form.plant}
               onChange={(e) => set("plant", e.target.value as Plant)}
-              className="border rounded-md px-2 py-1.5"
+              disabled={!!editingKey}
+              className="border rounded-md px-2 py-1.5 disabled:bg-slate-100 disabled:text-slate-400"
             >
               {PLANT_OPTIONS.map((p) => (
                 <option key={p} value={p}>
@@ -154,7 +176,7 @@ export default function ElectricityPage() {
             disabled={saving}
             className="bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
-            {saving ? "저장 중..." : "저장"}
+            {saving ? "저장 중..." : editingKey ? "수정 저장" : "저장"}
           </button>
           {message && <span className="text-sm text-slate-600">{message}</span>}
         </div>
