@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type ImportResult = { inserted: number; updated: number; skipped: number; errors: string[] };
 
@@ -72,6 +72,104 @@ function UploadCard({
   );
 }
 
+function PackingLogSettingCard() {
+  const [url, setUrl] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const res = await fetch("/api/settings");
+      const data = await res.json();
+      if (data.packing_log_csv_url) setUrl(data.packing_log_csv_url);
+    })();
+  }, []);
+
+  async function onSave() {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "packing_log_csv_url", value: url.trim() }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      setMessage("저장되었습니다.");
+    } catch (e) {
+      setMessage(`오류: ${(e as Error).message}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onTest() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const res = await fetch(`/api/packing-log?date=${today}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "가져오기에 실패했습니다.");
+      if (!data.configured) {
+        setTestResult("먼저 URL을 저장해주세요.");
+      } else if (data.error) {
+        setTestResult(`오류: ${data.error}`);
+      } else {
+        setTestResult(
+          `오늘(${today}) 톤 단위 포장량 합계: ${data.tonQty}톤` +
+            (data.bagPackCount > 0
+              ? ` / 포 단위 포장 ${data.bagPackCount}건(${data.bagPackQty}포, 톤 환산 안 됨)`
+              : "")
+        );
+      }
+    } catch (e) {
+      setTestResult(`오류: ${(e as Error).message}`);
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border p-5 flex flex-col gap-3">
+      <div>
+        <h2 className="font-semibold text-slate-800">포장일지(구글시트) 연동 설정</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          포장일지 구글시트를 [파일 → 공유 → 웹에 게시 → CSV]로 게시한 뒤, 생성된 링크를 붙여넣으세요.
+          저장하면 생산일지 입력 화면에서 해당 날짜의 포장량을 자동으로 참고할 수 있습니다.
+        </p>
+      </div>
+      <input
+        type="text"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv"
+        className="border rounded-md px-2 py-1.5 text-sm"
+      />
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onSave}
+          disabled={saving || !url.trim()}
+          className="bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
+        >
+          {saving ? "저장 중..." : "저장"}
+        </button>
+        <button
+          onClick={onTest}
+          disabled={testing}
+          className="border border-slate-300 rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
+        >
+          {testing ? "확인 중..." : "지금 테스트 (오늘 날짜 기준)"}
+        </button>
+        {message && <span className="text-sm text-slate-600">{message}</span>}
+      </div>
+      {testResult && <div className="text-sm text-slate-600 bg-slate-50 rounded-md p-3">{testResult}</div>}
+    </div>
+  );
+}
+
 export default function ImportPage() {
   return (
     <div className="flex flex-col gap-6">
@@ -95,6 +193,8 @@ export default function ImportPage() {
           kind="qc"
         />
       </div>
+
+      <PackingLogSettingCard />
     </div>
   );
 }
