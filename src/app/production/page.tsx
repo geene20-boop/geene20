@@ -103,6 +103,12 @@ export default function ProductionPage() {
     moisture: null,
     brix: null,
   });
+  const [packingRef, setPackingRef] = useState<{
+    configured: boolean;
+    tonQty: number | null;
+    bagPackQty: number;
+    bagPackCount: number;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -148,6 +154,30 @@ export default function ProductionPage() {
       cancelled = true;
     };
   }, [form.date, form.shift]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPackingRef() {
+      if (!form.date) return;
+      const res = await fetch(`/api/packing-log?date=${form.date}`);
+      const data = await res.json();
+      if (cancelled) return;
+      if (!data.configured) {
+        setPackingRef(null);
+        return;
+      }
+      setPackingRef({
+        configured: true,
+        tonQty: typeof data.tonQty === "number" ? data.tonQty : null,
+        bagPackQty: data.bagPackQty ?? 0,
+        bagPackCount: data.bagPackCount ?? 0,
+      });
+    }
+    loadPackingRef();
+    return () => {
+      cancelled = true;
+    };
+  }, [form.date]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -203,8 +233,9 @@ export default function ProductionPage() {
       <div>
         <h1 className="text-xl font-bold">생산일지 입력</h1>
         <p className="text-sm text-slate-500 mt-1">
-          교대(주/야)별 설비가동정보를 입력합니다. 해당 날짜·조의 QC 측정 평균값이 있으면 자동으로
-          참고값이 표시됩니다.
+          교대(주/야)별 설비가동정보를 입력합니다. 해당 날짜·조의 QC 측정 평균값과 포장일지
+          포장량이 있으면 자동으로 참고값이 표시됩니다. (포장일지 연동은 데이터 가져오기 화면에서
+          설정)
         </p>
       </div>
 
@@ -223,7 +254,36 @@ export default function ProductionPage() {
             </select>
           </label>
           <Field label="생산품목" type="text" value={form.product} onChange={(v) => set("product", v)} />
-          <Field label="일일포장량(ton)" value={form.daily_pack_amount} onChange={(v) => set("daily_pack_amount", v)} />
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-600">
+              일일포장량(ton)
+              {packingRef?.tonQty != null && ` (포장일지 참고: ${packingRef.tonQty}톤)`}
+            </span>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                step="any"
+                value={form.daily_pack_amount}
+                onChange={(e) => set("daily_pack_amount", e.target.value)}
+                className="border rounded-md px-2 py-1.5 flex-1 focus:outline-none focus:ring-2 focus:ring-slate-400"
+              />
+              {packingRef?.tonQty != null && (
+                <button
+                  type="button"
+                  onClick={() => set("daily_pack_amount", String(packingRef.tonQty))}
+                  className="text-xs border border-slate-300 rounded-md px-2 whitespace-nowrap"
+                >
+                  가져오기
+                </button>
+              )}
+            </div>
+            {packingRef && packingRef.bagPackCount > 0 && (
+              <span className="text-[11px] text-amber-600">
+                포 단위 포장 {packingRef.bagPackCount}건({packingRef.bagPackQty}포)은 톤 환산이 안 되어
+                제외됨
+              </span>
+            )}
+          </div>
         </div>
 
         <Section title="건조로 셋팅 온도 (℃)">
