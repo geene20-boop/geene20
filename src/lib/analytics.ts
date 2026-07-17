@@ -144,6 +144,106 @@ export function getMergedRows(fromDate: string, toDate: string): MergedShiftRow[
   return rows;
 }
 
+function granulationUsageTotal(p: ProductionLog | null): number | null {
+  if (!p || p.granulation_usage_per_min == null || p.line_hours_total == null) return null;
+  return p.granulation_usage_per_min * p.line_hours_total * 60;
+}
+
+export interface DailySheetShift {
+  shift: "주" | "야";
+  worker: string | null;
+  downtimeHours: number | null;
+  lineHoursTotal: number | null;
+  granulationAgent: string | null;
+  granulationUsageTotal: number | null;
+  gasUsageShift: number | null;
+  packAmount: number | null;
+}
+
+export interface DailySheetRow {
+  date: string;
+  shifts: DailySheetShift[];
+  dayTotal: {
+    downtimeHours: number;
+    lineHoursTotal: number;
+    granulationUsageTotal: number;
+    gasUsageShift: number;
+    packAmount: number;
+  };
+  deltaFromPrevDay: {
+    granulationUsageTotal: number | null;
+    gasUsageShift: number | null;
+  };
+}
+
+function daysInMonth(month: string): string[] {
+  const [y, m] = month.split("-").map(Number);
+  const count = new Date(y, m, 0).getDate();
+  return Array.from({ length: count }, (_, i) => `${month}-${String(i + 1).padStart(2, "0")}`);
+}
+
+function addDays(date: string, delta: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+export function getMonthlyDailySheet(month: string): DailySheetRow[] {
+  const from = addDays(`${month}-01`, -1);
+  const to = daysInMonth(month).slice(-1)[0] ?? `${month}-28`;
+  const rows = getMergedRows(from, to);
+
+  const byDate = new Map<string, MergedShiftRow[]>();
+  for (const r of rows) {
+    if (!byDate.has(r.date)) byDate.set(r.date, []);
+    byDate.get(r.date)!.push(r);
+  }
+
+  const dayTotalFor = (date: string) => {
+    const dayRows = byDate.get(date) ?? [];
+    return {
+      downtimeHours: dayRows.reduce((s, r) => s + (r.production?.downtime_hours ?? 0), 0),
+      lineHoursTotal: dayRows.reduce((s, r) => s + (r.production?.line_hours_total ?? 0), 0),
+      granulationUsageTotal: dayRows.reduce((s, r) => s + (granulationUsageTotal(r.production) ?? 0), 0),
+      gasUsageShift: dayRows.reduce((s, r) => s + (r.production?.gas_usage_shift ?? 0), 0),
+      packAmount: dayRows.reduce((s, r) => s + (r.production?.daily_pack_amount ?? 0), 0),
+    };
+  };
+
+  const result: DailySheetRow[] = [];
+  for (const date of daysInMonth(month)) {
+    const dayRows = (byDate.get(date) ?? []).sort((a) => (a.shift === "주" ? -1 : 1));
+    const shifts: DailySheetShift[] = dayRows.map((r) => ({
+      shift: r.shift,
+      worker: r.production?.worker ?? null,
+      downtimeHours: r.production?.downtime_hours ?? null,
+      lineHoursTotal: r.production?.line_hours_total ?? null,
+      granulationAgent: r.production?.granulation_agent ?? null,
+      granulationUsageTotal: granulationUsageTotal(r.production),
+      gasUsageShift: r.production?.gas_usage_shift ?? null,
+      packAmount: r.production?.daily_pack_amount ?? null,
+    }));
+
+    const dayTotal = dayTotalFor(date);
+    const prevTotal = dayTotalFor(addDays(date, -1));
+    const hasPrevData = (byDate.get(addDays(date, -1)) ?? []).length > 0;
+
+    result.push({
+      date,
+      shifts,
+      dayTotal,
+      deltaFromPrevDay: {
+        granulationUsageTotal: hasPrevData
+          ? dayTotal.granulationUsageTotal - prevTotal.granulationUsageTotal
+          : null,
+        gasUsageShift: hasPrevData ? dayTotal.gasUsageShift - prevTotal.gasUsageShift : null,
+      },
+    });
+  }
+
+  return result;
+}
+
 export interface MonthlySummary {
   month: string; // YYYY-MM
   totalPackAmount: number;

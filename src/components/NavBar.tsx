@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const LINKS = [
   { href: "/dashboard", label: "통합 대시보드" },
+  { href: "/monthly", label: "월간 시트" },
   { href: "/production", label: "생산일지 입력" },
   { href: "/qc", label: "QC측정 입력" },
   { href: "/import", label: "데이터 가져오기" },
