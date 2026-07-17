@@ -205,6 +205,10 @@ export default function ProductionPage() {
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [carryoverUnlocked, setCarryoverUnlocked] = useState(false);
 
+  const [dirty, setDirty] = useState(false);
+  const [draftAvailable, setDraftAvailable] = useState<FormState | null>(null);
+  const draftKey = `production_draft_${form.date}_${form.shift}`;
+
   useEffect(() => {
     admin.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -250,84 +254,80 @@ export default function ProductionPage() {
     loadLogs();
   }, []);
 
-  // 날짜/조가 바뀌면 기존 기록이 있는지 조회해서 있으면 불러오고, 없으면 새 입력 상태로 초기화
+  // 날짜/조가 바뀌면 화면에 필요한 참고정보(기존기록/전일재고/QC평균/포장일지)를
+  // 단일 API 호출로 한 번에 받아온다
   useEffect(() => {
     let cancelled = false;
-    async function loadForDate() {
-      const rows = await apiGet<ProductionLog[]>(`/api/production?from=${form.date}&to=${form.date}`);
+    async function loadContext() {
+      const ctx = await apiGet<{
+        existing: ProductionLog | null;
+        carryoverPreview: { dryer: number | null; rto: number | null } | null;
+        qcRef: { hardness: number | null; moisture: number | null; brix: number | null };
+        packingRef: { configured: boolean; tonQty: number | null; bagPackQty: number; bagPackCount: number };
+      }>(`/api/production/context?date=${form.date}&shift=${form.shift}`);
       if (cancelled) return;
-      const existing = rows.find((r) => r.shift === form.shift);
+
       setCarryoverUnlocked(false);
-      if (existing) {
-        setCurrentId(existing.id);
-        setForm((f) => ({ ...fromLog(existing), date: f.date, shift: f.shift }));
+      setQcRef(ctx.qcRef);
+      setPackingRef(ctx.packingRef.configured ? ctx.packingRef : null);
+
+      if (ctx.existing) {
+        setCurrentId(ctx.existing.id);
+        setForm((f) => ({ ...fromLog(ctx.existing as ProductionLog), date: f.date, shift: f.shift }));
       } else {
         setCurrentId(null);
-        setForm((f) => ({ ...emptyForm, date: f.date, shift: f.shift }));
-        const preview = await apiGet<{ dryer: number | null; rto: number | null }>(
-          `/api/production/carryover-preview?date=${form.date}&shift=${form.shift}`
-        );
-        if (cancelled) return;
         setForm((f) => ({
-          ...f,
-          carryover_dryer: toFormValue(preview.dryer),
-          carryover_rto: toFormValue(preview.rto),
+          ...emptyForm,
+          date: f.date,
+          shift: f.shift,
+          carryover_dryer: toFormValue(ctx.carryoverPreview?.dryer),
+          carryover_rto: toFormValue(ctx.carryoverPreview?.rto),
         }));
       }
-    }
-    loadForDate();
-    return () => {
-      cancelled = true;
-    };
-  }, [form.date, form.shift]);
+      setDirty(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadQcRef() {
-      if (!form.date || !form.shift) return;
-      const { rows } = await apiGet<{ rows: { date: string; shift: string; qcHardnessAvg: number | null; qcMoistureAvg: number | null; qcBrixAvg: number | null }[] }>(
-        `/api/dashboard?from=${form.date}&to=${form.date}`
-      );
-      if (cancelled) return;
-      const match = rows.find((r) => r.date === form.date && r.shift === form.shift);
-      setQcRef({
-        hardness: match?.qcHardnessAvg ?? null,
-        moisture: match?.qcMoistureAvg ?? null,
-        brix: match?.qcBrixAvg ?? null,
-      });
-    }
-    loadQcRef();
-    return () => {
-      cancelled = true;
-    };
-  }, [form.date, form.shift]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function loadPackingRef() {
-      if (!form.date) return;
-      const res = await fetch(`/api/packing-log?date=${form.date}`);
-      const data = await res.json();
-      if (cancelled) return;
-      if (!data.configured) {
-        setPackingRef(null);
-        return;
+      try {
+        const saved = localStorage.getItem(`production_draft_${form.date}_${form.shift}`);
+        setDraftAvailable(saved ? (JSON.parse(saved) as FormState) : null);
+      } catch {
+        setDraftAvailable(null);
       }
-      setPackingRef({
-        configured: true,
-        tonQty: typeof data.tonQty === "number" ? data.tonQty : null,
-        bagPackQty: data.bagPackQty ?? 0,
-        bagPackCount: data.bagPackCount ?? 0,
-      });
     }
-    loadPackingRef();
+    loadContext();
     return () => {
       cancelled = true;
     };
-  }, [form.date]);
+  }, [form.date, form.shift]);
+
+  // 입력 중인 내용을 잠깐 멈춘 사이(0.8초) 브라우저에 임시 저장 - 저장 안 하고 나가도 복구 가능
+  useEffect(() => {
+    if (!dirty) return;
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(form));
+      } catch {
+        // localStorage 사용 불가 시 조용히 무시
+      }
+    }, 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form, dirty]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+    setDirty(true);
+  }
+
+  function restoreDraft() {
+    if (!draftAvailable) return;
+    setForm(draftAvailable);
+    setDraftAvailable(null);
+    setDirty(true);
+  }
+
+  function discardDraft() {
+    localStorage.removeItem(draftKey);
+    setDraftAvailable(null);
   }
 
   function requestCarryoverEdit() {
@@ -378,6 +378,8 @@ export default function ProductionPage() {
       setCurrentId(saved.id);
       setForm((f) => ({ ...fromLog(saved), date: f.date, shift: f.shift }));
       setCarryoverUnlocked(false);
+      setDirty(false);
+      localStorage.removeItem(draftKey);
       loadLogs();
     } catch (err) {
       setMessage(`오류: ${(err as Error).message}`);
@@ -516,6 +518,17 @@ export default function ProductionPage() {
           <p className="text-xs text-sky-600 bg-sky-50 border border-sky-200 rounded-md px-3 py-1.5 w-fit">
             이 날짜/조는 기존에 저장된 기록을 불러왔습니다 (ID {currentId}). 저장하면 덮어씁니다.
           </p>
+        )}
+        {draftAvailable && (
+          <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 flex items-center gap-3 w-fit">
+            <span>저장하지 않고 나갔던 임시 입력 내용이 있습니다.</span>
+            <button type="button" onClick={restoreDraft} className="underline font-medium">
+              불러오기
+            </button>
+            <button type="button" onClick={discardDraft} className="underline text-slate-500">
+              삭제
+            </button>
+          </div>
         )}
 
         <Section title="건조로 셋팅 온도 (℃)">

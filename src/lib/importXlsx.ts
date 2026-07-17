@@ -45,6 +45,12 @@ export interface ImportResult {
   updated: number;
   skipped: number;
   errors: string[];
+  skippedDetails: string[];
+  structureError?: string;
+}
+
+function emptyResult(): ImportResult {
+  return { inserted: 0, updated: 0, skipped: 0, errors: [], skippedDetails: [] };
 }
 
 // 설비가동정보 (파일1) 형식 파싱: 날짜/주야 2행 1세트, row 5(index4)부터 데이터 시작
@@ -52,6 +58,15 @@ export function importProductionLog(buf: Buffer): ImportResult {
   const wb = XLSX.read(buf, { type: "buffer", cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+
+  const header = rows[1] ?? [];
+  if (str(header[0]) !== "날짜" || str(header[1]) !== "주/야") {
+    return {
+      ...emptyResult(),
+      structureError:
+        "이 파일은 예상한 설비가동정보 형식이 아닙니다 (2행에 '날짜', '주/야' 헤더가 있어야 합니다). 원본 엑셀 양식이 바뀌었는지 확인해주세요.",
+    };
+  }
 
   const db = getDb();
   const upsert = db.prepare(`
@@ -90,7 +105,7 @@ export function importProductionLog(buf: Buffer): ImportResult {
       updated_at = datetime('now')
   `);
 
-  const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: [] };
+  const result: ImportResult = emptyResult();
   let lastDate: string | null = null;
 
   for (let i = 4; i < rows.length; i++) {
@@ -102,6 +117,7 @@ export function importProductionLog(buf: Buffer): ImportResult {
     const dateStr: string | null = excelDateToStr(row[0]) ?? lastDate;
     if (!dateStr) {
       result.skipped++;
+      result.skippedDetails.push(`${i + 1}행: 날짜를 인식할 수 없어 건너뜀`);
       continue;
     }
     lastDate = dateStr;
@@ -152,6 +168,15 @@ export function importQcTests(buf: Buffer): ImportResult {
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
 
+  const header = rows[3] ?? [];
+  if (str(header[0]) !== "No." || str(header[1]) !== "세부내역") {
+    return {
+      ...emptyResult(),
+      structureError:
+        "이 파일은 예상한 비료시료 강도테스트 형식이 아닙니다 (4행에 'No.', '세부내역' 헤더가 있어야 합니다). 원본 엑셀 양식이 바뀌었는지 확인해주세요.",
+    };
+  }
+
   const db = getDb();
   const insert = db.prepare(`
     INSERT INTO qc_test (
@@ -171,7 +196,7 @@ export function importQcTests(buf: Buffer): ImportResult {
     "SELECT id FROM qc_test WHERE date = ? AND time IS ? AND sample_no IS ?"
   );
 
-  const result: ImportResult = { inserted: 0, updated: 0, skipped: 0, errors: [] };
+  const result: ImportResult = emptyResult();
 
   for (let r = 4; r + 4 < rows.length; r += 5) {
     const metaRow = rows[r];
@@ -185,6 +210,7 @@ export function importQcTests(buf: Buffer): ImportResult {
     const time = excelTimeToStr(metaRow[9]);
     if (!date) {
       result.skipped++;
+      result.skippedDetails.push(`${r + 1}행(시료 No.${str(metaRow[0]) ?? "?"}): 날짜가 비어있어 건너뜀`);
       continue;
     }
     const shift = time ? inferShift(time) : "주";
@@ -193,6 +219,7 @@ export function importQcTests(buf: Buffer): ImportResult {
       const dup = existingCheck.get(date, time, num(metaRow[0]));
       if (dup) {
         result.skipped++;
+        result.skippedDetails.push(`${r + 1}행(시료 No.${str(metaRow[0]) ?? "?"}): 이미 가져온 기록과 중복되어 건너뜀`);
         continue;
       }
 

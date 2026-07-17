@@ -73,9 +73,25 @@ export async function POST(req: NextRequest) {
 
   let carryoverDryer: number | null;
   let carryoverRto: number | null;
+  let auditNote: string | null = null;
   if (body.carryOverride) {
+    const existingFull = existing
+      ? (db
+          .prepare("SELECT carryover_dryer, carryover_rto, note FROM production_log WHERE id = ?")
+          .get(existing.id) as { carryover_dryer: number | null; carryover_rto: number | null; note: string | null })
+      : null;
     carryoverDryer = body.carryover_dryer ?? null;
     carryoverRto = body.carryover_rto ?? null;
+    if (
+      !existingFull ||
+      existingFull.carryover_dryer !== carryoverDryer ||
+      existingFull.carryover_rto !== carryoverRto
+    ) {
+      const stamp = new Date().toISOString().slice(0, 16).replace("T", " ");
+      auditNote = `[${stamp} 관리자가 전일재고 수정: 건조로 ${existingFull?.carryover_dryer ?? "-"}→${carryoverDryer ?? "-"}, RTO ${existingFull?.carryover_rto ?? "-"}→${carryoverRto ?? "-"}]`;
+      const baseNote = body.note !== undefined ? body.note : existingFull?.note;
+      body.note = [baseNote, auditNote].filter(Boolean).join("\n");
+    }
   } else {
     const prev = getPreviousProductionLog(body.date, body.shift, existing?.id);
     carryoverDryer = prev?.lng_dryer ?? null;

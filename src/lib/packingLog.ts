@@ -83,8 +83,26 @@ export function summarizePackingLog(rows: PackingLogRow[], date: string): Packin
   };
 }
 
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5분 - 같은 시트를 반복 요청하지 않도록 짧게 캐싱
+
+declare global {
+  var __packingLogCache: Map<string, { text: string; fetchedAt: number }> | undefined;
+}
+
+function cache(): Map<string, { text: string; fetchedAt: number }> {
+  if (!global.__packingLogCache) global.__packingLogCache = new Map();
+  return global.__packingLogCache;
+}
+
 export async function fetchPackingLogCsv(url: string): Promise<string> {
+  const cached = cache().get(url);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return cached.text;
+  }
+
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`포장일지 시트를 가져오지 못했습니다 (HTTP ${res.status})`);
-  return res.text();
+  const text = await res.text();
+  cache().set(url, { text, fetchedAt: Date.now() });
+  return text;
 }

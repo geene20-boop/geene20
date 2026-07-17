@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/production", label: "생산일지 입력" },
   { href: "/qc", label: "QC측정 입력" },
   { href: "/import", label: "데이터 가져오기" },
+  { href: "/admin", label: "관리자 설정" },
 ];
 
 export default function NavBar() {

@@ -2,7 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type ImportResult = { inserted: number; updated: number; skipped: number; errors: string[] };
+type ImportResult = {
+  inserted: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+  skippedDetails?: string[];
+  structureError?: string;
+};
 
 function UploadCard({
   title,
@@ -57,13 +64,28 @@ function UploadCard({
       >
         {busy ? "가져오는 중..." : "엑셀 파일 가져오기"}
       </button>
-      {result && (
+      {result?.structureError && (
+        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md p-3">
+          {result.structureError}
+        </div>
+      )}
+      {result && !result.structureError && (
         <div className="text-sm text-slate-600 bg-slate-50 rounded-md p-3">
           신규 {result.inserted}건, 갱신 {result.updated}건, 건너뜀 {result.skipped}건
           {result.errors.length > 0 && (
             <div className="text-red-500 mt-1">
               오류 {result.errors.length}건: {result.errors.slice(0, 3).join(" / ")}
             </div>
+          )}
+          {result.skippedDetails && result.skippedDetails.length > 0 && (
+            <details className="mt-1">
+              <summary className="cursor-pointer text-slate-500">건너뛴 항목 상세 보기</summary>
+              <ul className="mt-1 list-disc list-inside text-slate-500">
+                {result.skippedDetails.slice(0, 20).map((d, i) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            </details>
           )}
         </div>
       )}
@@ -72,8 +94,16 @@ function UploadCard({
   );
 }
 
+function syncStatusOf(iso: string): { label: string; stale: boolean } {
+  const ms = Date.now() - new Date(iso).getTime();
+  const hours = ms / 1000 / 60 / 60;
+  const label = hours < 1 ? "1시간 이내" : hours < 24 ? `${Math.floor(hours)}시간 전` : `${Math.floor(hours / 24)}일 전`;
+  return { label, stale: hours > 24 };
+}
+
 function PackingLogSettingCard() {
   const [url, setUrl] = useState("");
+  const [syncStatus, setSyncStatus] = useState<{ label: string; stale: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
@@ -84,6 +114,7 @@ function PackingLogSettingCard() {
       const res = await fetch("/api/settings");
       const data = await res.json();
       if (data.packing_log_csv_url) setUrl(data.packing_log_csv_url);
+      if (data.packing_log_last_sync) setSyncStatus(syncStatusOf(data.packing_log_last_sync));
     })();
   }, []);
 
@@ -113,6 +144,7 @@ function PackingLogSettingCard() {
       const res = await fetch(`/api/packing-log?date=${today}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "가져오기에 실패했습니다.");
+      if (data.lastSync) setSyncStatus(syncStatusOf(data.lastSync));
       if (!data.configured) {
         setTestResult("먼저 URL을 저장해주세요.");
       } else if (data.error) {
@@ -140,6 +172,18 @@ function PackingLogSettingCard() {
           포장일지 구글시트를 [파일 → 공유 → 웹에 게시 → CSV]로 게시한 뒤, 생성된 링크를 붙여넣으세요.
           저장하면 생산일지 입력 화면에서 해당 날짜의 포장량을 자동으로 참고할 수 있습니다.
         </p>
+        {url && (
+          <p className="text-xs mt-2">
+            마지막 성공 갱신:{" "}
+            {syncStatus ? (
+              <span className={syncStatus.stale ? "text-amber-600" : "text-emerald-600"}>
+                {syncStatus.label}
+              </span>
+            ) : (
+              <span className="text-amber-600">아직 없음 (한 번도 성공한 적 없음)</span>
+            )}
+          </p>
+        )}
       </div>
       <input
         type="text"
