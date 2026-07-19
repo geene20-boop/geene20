@@ -1,5 +1,12 @@
 import { getDb } from "@/lib/db";
-import { ProductionLog, QcTest, qcAvg } from "@/lib/types";
+import {
+  ProductionLog,
+  QcTest,
+  qcAvg,
+  ElectricityUsage,
+  MonthlyUtility,
+  UtilityMonthRow,
+} from "@/lib/types";
 
 export interface MergedShiftRow {
   date: string;
@@ -280,4 +287,241 @@ export function getMonthlySummary(month: string): MonthlySummary {
     alertCount: allAlerts.length,
     criticalCount: allAlerts.filter((a) => a.level === "critical").length,
   };
+}
+
+// ---------- 월별 유틸리티 통합 시트 ----------
+
+function ratio(numer: number | null, denom: number | null): number | null {
+  if (numer == null || denom == null || denom === 0) return null;
+  return numer / denom;
+}
+
+function sumOrNull(...vals: (number | null)[]): number | null {
+  const present = vals.filter((v): v is number => v != null);
+  if (present.length === 0) return null;
+  return present.reduce((a, b) => a + b, 0);
+}
+
+/** fromMonth, toMonth (YYYY-MM) 사이의 월 목록을 반환 (양끝 포함) */
+export function monthsInRange(fromMonth: string, toMonth: string): string[] {
+  const [fy, fm] = fromMonth.split("-").map(Number);
+  const [ty, tm] = toMonth.split("-").map(Number);
+  const result: string[] = [];
+  let y = fy;
+  let m = fm;
+  // 안전장치: 최대 120개월(10년)
+  for (let i = 0; i < 120; i++) {
+    result.push(`${y}-${String(m).padStart(2, "0")}`);
+    if (y === ty && m === tm) break;
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return result;
+}
+
+interface MonthRawAgg {
+  elec1Kwh: number | null;
+  elec2Kwh: number | null;
+  lngM3: number | null;
+  productionTon: number | null;
+  productionByProduct: Record<string, number>;
+  elecByProduct: Record<string, number>;
+  lngByProduct: Record<string, number>;
+}
+
+/** 한 달의 일별 데이터를 집계 (전력 공장별, LNG, 비종별 생산량/전력/가스 배분) */
+function aggregateMonthDaily(month: string): MonthRawAgg {
+  const db = getDb();
+  const from = `${month}-01`;
+  const to = `${month}-31`;
+
+  const prod = db
+    .prepare("SELECT * FROM production_log WHERE date BETWEEN ? AND ?")
+    .all(from, to) as ProductionLog[];
+  const elec = db
+    .prepare("SELECT * FROM electricity_usage WHERE date BETWEEN ? AND ?")
+    .all(from, to) as ElectricityUsage[];
+
+  // 전력: 공장별 합산
+  let elec1 = 0;
+  let elec2 = 0;
+  let elecCount = 0;
+  const elecByDate = new Map<string, number>();
+  for (const e of elec) {
+    if (e.usage_kwh == null) continue;
+    elecCount++;
+    if (e.plant === "1공장") elec1 += e.usage_kwh;
+    else if (e.plant === "2공장") elec2 += e.usage_kwh;
+    elecByDate.set(e.date, (elecByDate.get(e.date) ?? 0) + e.usage_kwh);
+  }
+
+  // 생산량: 비종별 + 총합, 그리고 날짜별 생산 비종 목록
+  const productionByProduct: Record<string, number> = {};
+  let productionTon = 0;
+  let prodCount = 0;
+  const productsByDate = new Map<string, Set<string>>();
+  const lngByProduct: Record<string, number> = {};
+  let lngTotal = 0;
+  let lngCount = 0;
+  for (const p of prod) {
+    if (p.daily_pack_amount != null) {
+      productionTon += p.daily_pack_amount;
+      prodCount++;
+    }
+    const prd = p.product ?? "미지정";
+    if (p.daily_pack_amount != null) {
+      productionByProduct[prd] = (productionByProduct[prd] ?? 0) + p.daily_pack_amount;
+    }
+    if (!productsByDate.has(p.date)) productsByDate.set(p.date, new Set());
+    if (p.product) productsByDate.get(p.date)!.add(p.product);
+    // LNG(가스): 조별 사용량을 그 조의 비종에 귀속
+    if (p.gas_usage_shift != null) {
+      lngTotal += p.gas_usage_shift;
+      lngCount++;
+      lngByProduct[prd] = (lngByProduct[prd] ?? 0) + p.gas_usage_shift;
+    }
+  }
+
+  // 전력을 그날 생산한 비종에 배분 (여러 비종이면 균등 분할)
+  const elecByProduct: Record<string, number> = {};
+  for (const [date, kwh] of elecByDate) {
+    const products = productsByDate.get(date);
+    if (!products || products.size === 0) {
+      elecByProduct["미지정"] = (elecByProduct["미지정"] ?? 0) + kwh;
+    } else {
+      const share = kwh / products.size;
+      for (const prd of products) {
+        elecByProduct[prd] = (elecByProduct[prd] ?? 0) + share;
+      }
+    }
+  }
+
+  return {
+    elec1Kwh: elecCount > 0 ? elec1 : null,
+    elec2Kwh: elecCount > 0 ? elec2 : null,
+    lngM3: lngCount > 0 ? lngTotal : null,
+    productionTon: prodCount > 0 ? productionTon : null,
+    productionByProduct,
+    elecByProduct,
+    lngByProduct,
+  };
+}
+
+/** 월별 유틸리티 통합 시트: 전력·LNG·경유 사용량/금액/단가, 비종별, 톤당 지표 */
+export function getUtilityMonthlySheet(months: string[]): UtilityMonthRow[] {
+  const db = getDb();
+  const utilByMonth = new Map<string, MonthlyUtility>();
+  if (months.length > 0) {
+    const rows = db
+      .prepare(
+        `SELECT * FROM monthly_utility WHERE month IN (${months.map(() => "?").join(",")})`
+      )
+      .all(...months) as MonthlyUtility[];
+    for (const r of rows) utilByMonth.set(r.month, r);
+  }
+
+  return months.map((month) => {
+    const agg = aggregateMonthDaily(month);
+    const u = utilByMonth.get(month);
+
+    // 사용량: 월별 보정값 우선, 없으면 일별 합산
+    const elec1Kwh = u?.elec1_kwh ?? agg.elec1Kwh;
+    const elec2Kwh = u?.elec2_kwh ?? agg.elec2Kwh;
+    const elecTotalKwh = sumOrNull(elec1Kwh, elec2Kwh);
+    const elec1Won = u?.elec1_won ?? null;
+    const elec2Won = u?.elec2_won ?? null;
+    const elecTotalWon = sumOrNull(elec1Won, elec2Won);
+
+    const lngM3 = u?.lng_m3 ?? agg.lngM3;
+    const lngWon = u?.lng_won ?? null;
+
+    const dieselLiter = u?.diesel_liter ?? null;
+    const dieselWon = u?.diesel_won ?? null;
+
+    const productionTon = u?.production_ton ?? agg.productionTon;
+
+    const utilityWonTotal = sumOrNull(elecTotalWon, lngWon, dieselWon);
+
+    return {
+      month,
+      elec1Kwh,
+      elec1Won,
+      elec2Kwh,
+      elec2Won,
+      elecTotalKwh,
+      elecTotalWon,
+      elecUnitPrice: ratio(elecTotalWon, elecTotalKwh),
+      lngM3,
+      lngWon,
+      lngUnitPrice: ratio(lngWon, lngM3),
+      dieselLiter,
+      dieselWon,
+      dieselUnitPrice: ratio(dieselWon, dieselLiter),
+      productionTon,
+      productionByProduct: agg.productionByProduct,
+      elecPerTon: ratio(elecTotalKwh, productionTon),
+      lngPerTon: ratio(lngM3, productionTon),
+      dieselPerTon: ratio(dieselLiter, productionTon),
+      utilityWonTotal,
+      utilityWonPerTon: ratio(utilityWonTotal, productionTon),
+      elecByProduct: agg.elecByProduct,
+      lngByProduct: agg.lngByProduct,
+    };
+  });
+}
+
+/** 전년동월 대비: 각 월과 12개월 전 월을 짝지어 증감 계산 */
+export interface YoYRow {
+  month: string; // 이번 달 YYYY-MM
+  current: UtilityMonthRow;
+  prevYear: UtilityMonthRow | null;
+  elecKwhDelta: number | null;
+  elecKwhPct: number | null;
+  lngM3Delta: number | null;
+  lngM3Pct: number | null;
+  dieselDelta: number | null;
+  dieselPct: number | null;
+}
+
+function shiftMonth(month: string, deltaMonths: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const idx = y * 12 + (m - 1) + deltaMonths;
+  const ny = Math.floor(idx / 12);
+  const nm = (idx % 12) + 1;
+  return `${ny}-${String(nm).padStart(2, "0")}`;
+}
+
+export function getUtilityYoY(months: string[]): YoYRow[] {
+  const prevMonths = months.map((m) => shiftMonth(m, -12));
+  const allMonths = Array.from(new Set([...months, ...prevMonths]));
+  const sheet = getUtilityMonthlySheet(allMonths);
+  const byMonth = new Map(sheet.map((r) => [r.month, r]));
+
+  const pctDelta = (cur: number | null, prev: number | null): number | null => {
+    if (cur == null || prev == null || prev === 0) return null;
+    return (cur - prev) / prev;
+  };
+  const absDelta = (cur: number | null, prev: number | null): number | null => {
+    if (cur == null || prev == null) return null;
+    return cur - prev;
+  };
+
+  return months.map((month) => {
+    const current = byMonth.get(month)!;
+    const prevYear = byMonth.get(shiftMonth(month, -12)) ?? null;
+    return {
+      month,
+      current,
+      prevYear,
+      elecKwhDelta: absDelta(current.elecTotalKwh, prevYear?.elecTotalKwh ?? null),
+      elecKwhPct: pctDelta(current.elecTotalKwh, prevYear?.elecTotalKwh ?? null),
+      lngM3Delta: absDelta(current.lngM3, prevYear?.lngM3 ?? null),
+      lngM3Pct: pctDelta(current.lngM3, prevYear?.lngM3 ?? null),
+      dieselDelta: absDelta(current.dieselLiter, prevYear?.dieselLiter ?? null),
+      dieselPct: pctDelta(current.dieselLiter, prevYear?.dieselLiter ?? null),
+    };
+  });
 }

@@ -7,6 +7,7 @@ const LINKS = [
   { href: "/dashboard", label: "통합 대시보드" },
   { href: "/daily", label: "일자별 대시보드" },
   { href: "/monthly", label: "월간 시트" },
+  { href: "/utility", label: "월별 유틸리티" },
   { href: "/production", label: "생산일지 입력" },
   { href: "/qc", label: "QC측정 입력" },
   { href: "/electricity", label: "전력사용량" },

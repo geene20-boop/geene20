@@ -101,3 +101,52 @@ export interface ElectricityUsage {
   created_at: string;
   updated_at: string;
 }
+
+export interface MonthlyUtility {
+  month: string; // YYYY-MM
+  elec1_kwh: number | null;
+  elec1_won: number | null;
+  elec2_kwh: number | null;
+  elec2_won: number | null;
+  lng_m3: number | null;
+  lng_won: number | null;
+  diesel_liter: number | null;
+  diesel_won: number | null;
+  production_ton: number | null;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// 월별 유틸리티 통합 시트의 한 달치 계산 결과
+export interface UtilityMonthRow {
+  month: string; // YYYY-MM
+  // 전력
+  elec1Kwh: number | null;
+  elec1Won: number | null;
+  elec2Kwh: number | null;
+  elec2Won: number | null;
+  elecTotalKwh: number | null; // 1공장 + 2공장 사용량 합계
+  elecTotalWon: number | null;
+  elecUnitPrice: number | null; // 원/kWh
+  // LNG
+  lngM3: number | null;
+  lngWon: number | null;
+  lngUnitPrice: number | null;
+  // 경유
+  dieselLiter: number | null;
+  dieselWon: number | null;
+  dieselUnitPrice: number | null;
+  // 생산량 (일별 합산 또는 월별 보정값)
+  productionTon: number | null;
+  productionByProduct: Record<string, number>; // 비종별 생산량
+  // 톤당
+  elecPerTon: number | null;
+  lngPerTon: number | null;
+  dieselPerTon: number | null;
+  utilityWonTotal: number | null; // 전력+LNG+경유 금액 합계
+  utilityWonPerTon: number | null;
+  // 비종별 전력·가스 사용량 배분 (그날 생산한 비종에 귀속)
+  elecByProduct: Record<string, number>;
+  lngByProduct: Record<string, number>;
+}
