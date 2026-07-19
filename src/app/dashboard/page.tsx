@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { apiGet, apiPut } from "@/lib/apiClient";
 import { MergedShiftRow, MonthlySummary } from "@/lib/analytics";
+import { getWorkerComparison } from "@/lib/workerComparison";
 
 function monthAgo(n: number) {
   const d = new Date();
@@ -91,6 +92,8 @@ export default function DashboardPage() {
         .sort((a, b) => (a.date + a.shift < b.date + b.shift ? 1 : -1)),
     [rows]
   );
+
+  const workerComparison = useMemo(() => getWorkerComparison(rows), [rows]);
 
   async function updateSpec(metric: string, field: "min_value" | "max_value", value: string) {
     const current = specs.find((s) => s.metric === metric) ?? { metric, min_value: null, max_value: null };
@@ -283,6 +286,54 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="bg-white rounded-xl border overflow-x-auto">
+        <h2 className="text-sm font-semibold text-slate-700 px-4 pt-4">작업자별 비교</h2>
+        <p className="text-xs text-slate-400 px-4 pt-1">
+          선택한 기간(부터~까지) 내 생산일지 작업자 기준 집계입니다.
+        </p>
+        <table className="w-full text-sm mt-2">
+          <thead className="bg-slate-100 text-slate-600">
+            <tr>
+              <th className="text-left px-3 py-2">작업자</th>
+              <th className="text-right px-3 py-2">근무횟수</th>
+              <th className="text-right px-3 py-2">총포장량</th>
+              <th className="text-right px-3 py-2">총가스사용량</th>
+              <th className="text-right px-3 py-2">평균 가동시간당 가스</th>
+              <th className="text-right px-3 py-2">평균 경도</th>
+              <th className="text-right px-3 py-2">평균 수분</th>
+              <th className="text-right px-3 py-2">알림건수</th>
+            </tr>
+          </thead>
+          <tbody>
+            {workerComparison.map((w) => (
+              <tr key={w.worker} className="border-t">
+                <td className="px-3 py-2 font-medium">{w.worker}</td>
+                <td className="px-3 py-2 text-right">{w.shiftCount}</td>
+                <td className="px-3 py-2 text-right">{w.totalPackAmount.toLocaleString()}</td>
+                <td className="px-3 py-2 text-right">{w.totalGasUsage.toLocaleString()}</td>
+                <td className="px-3 py-2 text-right">
+                  {w.avgGasPerHour != null ? w.avgGasPerHour.toFixed(1) : "-"}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {w.avgHardness != null ? w.avgHardness.toFixed(2) : "-"}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {w.avgMoisture != null ? w.avgMoisture.toFixed(2) : "-"}
+                </td>
+                <td className="px-3 py-2 text-right">{w.alertCount}</td>
+              </tr>
+            ))}
+            {workerComparison.length === 0 && !loading && (
+              <tr>
+                <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
+                  선택한 기간에 데이터가 없습니다.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

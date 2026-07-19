@@ -84,6 +84,31 @@ export default function MonthlyPage() {
     };
   }, [month]);
 
+  const monthAgg = useMemo(() => {
+    const daysWithData = rows.filter((r) => r.shifts.length > 0);
+    const n = daysWithData.length;
+    const sum = (pick: (r: DailySheetRow) => number) =>
+      daysWithData.reduce((s, r) => s + pick(r), 0);
+    const total = {
+      downtimeHours: sum((r) => r.dayTotal.downtimeHours),
+      lineHoursTotal: sum((r) => r.dayTotal.lineHoursTotal),
+      granulationUsageTotal: sum((r) => r.dayTotal.granulationUsageTotal),
+      gasUsageShift: sum((r) => r.dayTotal.gasUsageShift),
+      packAmount: sum((r) => r.dayTotal.packAmount),
+    };
+    const average =
+      n > 0
+        ? {
+            downtimeHours: total.downtimeHours / n,
+            lineHoursTotal: total.lineHoursTotal / n,
+            granulationUsageTotal: total.granulationUsageTotal / n,
+            gasUsageShift: total.gasUsageShift / n,
+            packAmount: total.packAmount / n,
+          }
+        : null;
+    return { total, average, dayCount: n };
+  }, [rows]);
+
   const chartData = useMemo(
     () => ({
       downtime: rows.map((r) => ({ label: r.date.slice(8), value: r.dayTotal.downtimeHours || null })),
@@ -205,6 +230,32 @@ export default function MonthlyPage() {
                   데이터가 없습니다.
                 </td>
               </tr>
+            )}
+            {monthAgg.dayCount > 0 && (
+              <>
+                <tr className="bg-indigo-50 font-bold border-t-2 border-indigo-200">
+                  <td className="px-3 py-2" colSpan={3}>
+                    월계 (데이터 있는 {monthAgg.dayCount}일 합계)
+                  </td>
+                  <td className="px-3 py-2 text-right">{fmt(monthAgg.total.downtimeHours)}</td>
+                  <td className="px-3 py-2 text-right">{fmt(monthAgg.total.lineHoursTotal)}</td>
+                  <td className="px-3 py-2"></td>
+                  <td className="px-3 py-2 text-right">{fmt(monthAgg.total.granulationUsageTotal)}</td>
+                  <td className="px-3 py-2 text-right">{fmt(monthAgg.total.gasUsageShift)}</td>
+                  <td className="px-3 py-2 text-right">{fmt(monthAgg.total.packAmount, 0)}</td>
+                </tr>
+                <tr className="bg-indigo-50 font-bold">
+                  <td className="px-3 py-2" colSpan={3}>
+                    월평균 (일 {monthAgg.dayCount}일 기준)
+                  </td>
+                  <td className="px-3 py-2 text-right">{fmt(monthAgg.average?.downtimeHours)}</td>
+                  <td className="px-3 py-2 text-right">{fmt(monthAgg.average?.lineHoursTotal)}</td>
+                  <td className="px-3 py-2"></td>
+                  <td className="px-3 py-2 text-right">{fmt(monthAgg.average?.granulationUsageTotal)}</td>
+                  <td className="px-3 py-2 text-right">{fmt(monthAgg.average?.gasUsageShift)}</td>
+                  <td className="px-3 py-2 text-right">{fmt(monthAgg.average?.packAmount, 0)}</td>
+                </tr>
+              </>
             )}
           </tbody>
         </table>

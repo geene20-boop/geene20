@@ -362,7 +362,8 @@ function aggregateMonthDaily(month: string): MonthRawAgg {
   const productionByProduct: Record<string, number> = {};
   let productionTon = 0;
   let prodCount = 0;
-  const productsByDate = new Map<string, Set<string>>();
+  // 날짜별 비종별 가동시간 합계 (전력을 가동시간 비례로 배분하기 위함)
+  const productHoursByDate = new Map<string, Map<string, number>>();
   const lngByProduct: Record<string, number> = {};
   let lngTotal = 0;
   let lngCount = 0;
@@ -375,8 +376,11 @@ function aggregateMonthDaily(month: string): MonthRawAgg {
     if (p.daily_pack_amount != null) {
       productionByProduct[prd] = (productionByProduct[prd] ?? 0) + p.daily_pack_amount;
     }
-    if (!productsByDate.has(p.date)) productsByDate.set(p.date, new Set());
-    if (p.product) productsByDate.get(p.date)!.add(p.product);
+    if (p.product) {
+      if (!productHoursByDate.has(p.date)) productHoursByDate.set(p.date, new Map());
+      const hoursMap = productHoursByDate.get(p.date)!;
+      hoursMap.set(p.product, (hoursMap.get(p.product) ?? 0) + (p.line_hours_total ?? 0));
+    }
     // LNG(가스): 조별 사용량을 그 조의 비종에 귀속
     if (p.gas_usage_shift != null) {
       lngTotal += p.gas_usage_shift;
@@ -385,15 +389,23 @@ function aggregateMonthDaily(month: string): MonthRawAgg {
     }
   }
 
-  // 전력을 그날 생산한 비종에 배분 (여러 비종이면 균등 분할)
+  // 전력을 그날 생산한 비종에 배분: 가동시간 비례(하루 중 비종이 바뀐 경우 정확한 배분),
+  // 가동시간 데이터가 없으면 비종 개수 균등 분할로 대체
   const elecByProduct: Record<string, number> = {};
   for (const [date, kwh] of elecByDate) {
-    const products = productsByDate.get(date);
-    if (!products || products.size === 0) {
+    const hoursMap = productHoursByDate.get(date);
+    if (!hoursMap || hoursMap.size === 0) {
       elecByProduct["미지정"] = (elecByProduct["미지정"] ?? 0) + kwh;
+      continue;
+    }
+    const totalHours = [...hoursMap.values()].reduce((a, b) => a + b, 0);
+    if (totalHours > 0) {
+      for (const [prd, hours] of hoursMap) {
+        elecByProduct[prd] = (elecByProduct[prd] ?? 0) + kwh * (hours / totalHours);
+      }
     } else {
-      const share = kwh / products.size;
-      for (const prd of products) {
+      const share = kwh / hoursMap.size;
+      for (const prd of hoursMap.keys()) {
         elecByProduct[prd] = (elecByProduct[prd] ?? 0) + share;
       }
     }
