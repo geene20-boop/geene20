@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { importMonthlyUtility } from "@/lib/importXlsx";
+import { isAdminRequest } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  if (!isAdminRequest(req)) {
+    return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 403 });
+  }
   const formData = await req.formData();
   const file = formData.get("file");
   if (!(file instanceof Blob)) {
