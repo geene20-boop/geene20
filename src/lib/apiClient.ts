@@ -36,8 +36,14 @@ export async function apiPut<T>(url: string, body: unknown): Promise<T> {
   return res.json();
 }
 
-export async function apiDelete(url: string): Promise<void> {
-  const res = await fetch(url, { method: "DELETE" });
+export async function apiDelete(url: string, body?: unknown): Promise<void> {
+  const res = await fetch(url, {
+    method: "DELETE",
+    ...(body !== undefined && {
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  });
   if (handleUnauthorized(res)) throw new Error("로그인이 만료되어 다시 로그인합니다.");
   if (!res.ok) throw new Error(await res.text());
 }

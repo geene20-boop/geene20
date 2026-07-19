@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { QcTest, inferShift } from "@/lib/types";
+import { logAudit, requireActor } from "@/lib/audit";
 
 const COLUMNS = [
   "sample_no",
@@ -46,14 +47,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "shift 또는 time이 필요합니다." }, { status: 400 });
   }
 
-  const cols = COLUMNS.filter((c) => body[c] !== undefined);
+  const actor = requireActor(body);
+  if (!actor) {
+    return NextResponse.json({ error: "입력자명을 입력해주세요." }, { status: 400 });
+  }
+
+  const cols = [...COLUMNS.filter((c) => body[c] !== undefined), "entered_by", "updated_by"];
   const placeholders = cols.map(() => "?").join(", ");
-  const values = cols.map((c) => body[c] ?? null);
+  const values = cols.map((c) =>
+    c === "entered_by" || c === "updated_by" ? actor : (body[c] ?? null)
+  );
 
   try {
     const stmt = db.prepare(`INSERT INTO qc_test (${cols.join(", ")}) VALUES (${placeholders})`);
     const info = stmt.run(...values);
     const row = db.prepare("SELECT * FROM qc_test WHERE id = ?").get(info.lastInsertRowid);
+    logAudit(
+      "qc_test",
+      `${body.date} ${body.shift}조${body.sample_no ? " No." + body.sample_no : ""}`,
+      "create",
+      actor
+    );
     return NextResponse.json(row, { status: 201 });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

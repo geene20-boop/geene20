@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { apiDelete, apiGet, apiPost } from "@/lib/apiClient";
 import { QcTest, inferShift } from "@/lib/types";
+import { useEnteredBy } from "@/lib/useEnteredBy";
+import EnteredByField from "@/components/EnteredByField";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const nowHHMM = () => new Date().toISOString().slice(11, 16);
@@ -48,6 +50,8 @@ export default function QcPage() {
   const [tests, setTests] = useState<QcTest[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const { enteredBy, setEnteredBy } = useEnteredBy();
+  const [nameError, setNameError] = useState(false);
 
   const values = form.values.map(n).filter((v): v is number => v != null);
   const sum = values.reduce((a, b) => a + b, 0);
@@ -77,6 +81,11 @@ export default function QcPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!enteredBy.trim()) {
+      setNameError(true);
+      return;
+    }
+    setNameError(false);
     setSaving(true);
     setMessage(null);
     try {
@@ -93,6 +102,7 @@ export default function QcPage() {
         hopper: n(form.hopper),
         moisture: n(form.moisture),
         worker: form.worker || null,
+        entered_by: enteredBy.trim(),
       };
       form.values.forEach((v, i) => {
         body[`v${i + 1}`] = n(v);
@@ -109,8 +119,12 @@ export default function QcPage() {
   }
 
   async function onDelete(id: number) {
+    if (!enteredBy.trim()) {
+      alert("삭제하려면 먼저 입력자명을 입력해주세요.");
+      return;
+    }
     if (!confirm("이 측정 기록을 삭제할까요?")) return;
-    await apiDelete(`/api/qc/${id}`);
+    await apiDelete(`/api/qc/${id}`, { entered_by: enteredBy.trim() });
     loadTests();
   }
 
@@ -126,6 +140,7 @@ export default function QcPage() {
 
       <form onSubmit={onSubmit} className="flex flex-col gap-4 bg-white rounded-xl border p-5">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <EnteredByField value={enteredBy} onChange={setEnteredBy} error={nameError} />
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">시료 No.</span>
             <input
@@ -306,6 +321,7 @@ export default function QcPage() {
               <th className="text-right px-3 py-2">평균경도</th>
               <th className="text-right px-3 py-2">수분</th>
               <th className="text-left px-3 py-2">작업자</th>
+              <th className="text-left px-3 py-2">입력자/수정자</th>
               <th className="px-3 py-2"></th>
             </tr>
           </thead>
@@ -324,6 +340,10 @@ export default function QcPage() {
                   <td className="px-3 py-2 text-right">{avg != null ? avg.toFixed(2) : "-"}</td>
                   <td className="px-3 py-2 text-right">{t.moisture ?? "-"}</td>
                   <td className="px-3 py-2">{t.worker ?? "-"}</td>
+                  <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
+                    {t.entered_by ?? "-"}
+                    {t.updated_by && t.updated_by !== t.entered_by ? ` → ${t.updated_by}` : ""}
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <button onClick={() => onDelete(t.id)} className="text-red-500 hover:underline">
                       삭제
@@ -334,7 +354,7 @@ export default function QcPage() {
             })}
             {tests.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={9} className="px-3 py-8 text-center text-slate-400">
                   아직 입력된 측정 기록이 없습니다.
                 </td>
               </tr>
