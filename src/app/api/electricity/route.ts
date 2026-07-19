@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { ElectricityUsage, Plant, PLANT_VOLTAGE } from "@/lib/types";
+import { logAudit, requireActor } from "@/lib/audit";
 
 export async function GET(req: NextRequest) {
   const db = getDb();
@@ -25,22 +26,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "plant는 '1공장' 또는 '2공장'이어야 합니다." }, { status: 400 });
   }
 
+  const actor = requireActor(body);
+  if (!actor) {
+    return NextResponse.json({ error: "입력자명을 입력해주세요." }, { status: 400 });
+  }
+
   const voltageType = PLANT_VOLTAGE[plant];
   const usageKwh = typeof body.usage_kwh === "number" ? body.usage_kwh : null;
   const note = body.note ?? null;
 
+  const existing = db
+    .prepare("SELECT id FROM electricity_usage WHERE date = ? AND plant = ?")
+    .get(body.date, plant);
+
   db.prepare(
-    `INSERT INTO electricity_usage (date, plant, voltage_type, usage_kwh, source, note)
-     VALUES (?, ?, ?, ?, 'manual', ?)
+    `INSERT INTO electricity_usage (date, plant, voltage_type, usage_kwh, source, note, entered_by, updated_by)
+     VALUES (?, ?, ?, ?, 'manual', ?, ?, ?)
      ON CONFLICT(date, plant) DO UPDATE SET
        usage_kwh = excluded.usage_kwh,
        voltage_type = excluded.voltage_type,
        note = excluded.note,
+       updated_by = excluded.updated_by,
+       entered_by = COALESCE(electricity_usage.entered_by, excluded.entered_by),
        updated_at = datetime('now')`
-  ).run(body.date, plant, voltageType, usageKwh, note);
+  ).run(body.date, plant, voltageType, usageKwh, note, actor, actor);
 
   const row = db
     .prepare("SELECT * FROM electricity_usage WHERE date = ? AND plant = ?")
     .get(body.date, plant);
+  logAudit(
+    "electricity_usage",
+    `${body.date} ${plant}`,
+    existing ? "update" : "create",
+    actor,
+    usageKwh != null ? `${usageKwh}kWh` : undefined
+  );
   return NextResponse.json(row, { status: 201 });
 }

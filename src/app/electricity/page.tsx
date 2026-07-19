@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { apiDelete, apiGet, apiPost } from "@/lib/apiClient";
 import { ElectricityUsage, Plant, PLANT_OPTIONS, PLANT_VOLTAGE } from "@/lib/types";
+import { useEnteredBy } from "@/lib/useEnteredBy";
+import EnteredByField from "@/components/EnteredByField";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -40,6 +42,8 @@ export default function ElectricityPage() {
   const [rangeFrom, setRangeFrom] = useState(monthStart());
   const [rangeTo, setRangeTo] = useState(today());
   const [totals, setTotals] = useState<Totals | null>(null);
+  const { enteredBy, setEnteredBy } = useEnteredBy();
+  const [nameError, setNameError] = useState(false);
 
   async function loadRows() {
     const data = await apiGet<ElectricityUsage[]>("/api/electricity");
@@ -65,6 +69,11 @@ export default function ElectricityPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!enteredBy.trim()) {
+      setNameError(true);
+      return;
+    }
+    setNameError(false);
     setSaving(true);
     setMessage(null);
     try {
@@ -73,6 +82,7 @@ export default function ElectricityPage() {
         plant: form.plant,
         usage_kwh: n(form.usage_kwh),
         note: form.note || null,
+        entered_by: enteredBy.trim(),
       });
       setMessage("저장되었습니다.");
       setForm(emptyForm());
@@ -104,8 +114,12 @@ export default function ElectricityPage() {
   }
 
   async function onDelete(id: number) {
+    if (!enteredBy.trim()) {
+      alert("삭제하려면 먼저 입력자명을 입력해주세요.");
+      return;
+    }
     if (!confirm("이 전력사용량 기록을 삭제할까요?")) return;
-    await apiDelete(`/api/electricity/${id}`);
+    await apiDelete(`/api/electricity/${id}`, { entered_by: enteredBy.trim() });
     loadRows();
     loadSummary(rangeFrom, rangeTo);
   }
@@ -200,6 +214,7 @@ export default function ElectricityPage() {
           </div>
         )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <EnteredByField value={enteredBy} onChange={setEnteredBy} error={nameError} />
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">날짜</span>
             <input
@@ -280,6 +295,7 @@ export default function ElectricityPage() {
               <th className="text-right px-3 py-2">사용량(kWh)</th>
               <th className="text-left px-3 py-2">입력방식</th>
               <th className="text-left px-3 py-2">비고</th>
+              <th className="text-left px-3 py-2">입력자/수정자</th>
               <th className="px-3 py-2"></th>
             </tr>
           </thead>
@@ -294,6 +310,10 @@ export default function ElectricityPage() {
                 </td>
                 <td className="px-3 py-2">{r.source === "api" ? "자동(API)" : "수동입력"}</td>
                 <td className="px-3 py-2">{r.note ?? "-"}</td>
+                <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
+                  {r.entered_by ?? "-"}
+                  {r.updated_by && r.updated_by !== r.entered_by ? ` → ${r.updated_by}` : ""}
+                </td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
                   <button onClick={() => onEdit(r)} className="text-sky-600 hover:underline mr-3">
                     수정
@@ -306,7 +326,7 @@ export default function ElectricityPage() {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
                   아직 입력된 전력사용량 기록이 없습니다.
                 </td>
               </tr>

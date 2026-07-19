@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost } from "@/lib/apiClient";
 import { ProductionLog } from "@/lib/types";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
+import { useEnteredBy } from "@/lib/useEnteredBy";
+import EnteredByField from "@/components/EnteredByField";
 
 export const PRODUCT_OPTIONS = ["규산", "석회고토", "칼슘유황"];
 export const GRANULATION_AGENT_OPTIONS = ["당밀계열", "전분계열", "CMC계열"];
@@ -200,6 +202,8 @@ export default function ProductionPage() {
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const { enteredBy, setEnteredBy } = useEnteredBy();
+  const [nameError, setNameError] = useState(false);
 
   const admin = useAdminSession();
   const [showAdminModal, setShowAdminModal] = useState(false);
@@ -340,6 +344,11 @@ export default function ProductionPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!enteredBy.trim()) {
+      setNameError(true);
+      return;
+    }
+    setNameError(false);
     setSaving(true);
     setMessage(null);
     try {
@@ -349,6 +358,7 @@ export default function ProductionPage() {
         product: form.product || null,
         daily_pack_amount: n(form.daily_pack_amount),
         worker: form.worker || null,
+        entered_by: enteredBy.trim(),
         dryer_temp_a: n(form.dryer_temp_a),
         dryer_temp_b: n(form.dryer_temp_b),
         feed_hopper_a: n(form.feed_hopper_a),
@@ -389,8 +399,12 @@ export default function ProductionPage() {
   }
 
   async function onDelete(id: number) {
+    if (!enteredBy.trim()) {
+      alert("삭제하려면 먼저 입력자명을 입력해주세요.");
+      return;
+    }
     if (!confirm("이 생산일지 항목을 삭제할까요?")) return;
-    await apiDelete(`/api/production/${id}`);
+    await apiDelete(`/api/production/${id}`, { entered_by: enteredBy.trim() });
     loadLogs();
     if (id === currentId) {
       setCurrentId(null);
@@ -437,6 +451,7 @@ export default function ProductionPage() {
 
       <form onSubmit={onSubmit} className="flex flex-col gap-4 bg-white rounded-xl border p-5">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <EnteredByField value={enteredBy} onChange={setEnteredBy} error={nameError} />
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">날짜</span>
             <div className="flex gap-1">
@@ -710,6 +725,7 @@ export default function ProductionPage() {
               <th className="text-right px-3 py-2">가스사용(㎥)</th>
               <th className="text-right px-3 py-2">경도</th>
               <th className="text-right px-3 py-2">수분</th>
+              <th className="text-left px-3 py-2">입력자/수정자</th>
               <th className="px-3 py-2"></th>
             </tr>
           </thead>
@@ -734,6 +750,10 @@ export default function ProductionPage() {
                 </td>
                 <td className="px-3 py-2 text-right">{row.hardness_manual ?? "-"}</td>
                 <td className="px-3 py-2 text-right">{row.moisture_manual ?? "-"}</td>
+                <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
+                  {row.entered_by ?? "-"}
+                  {row.updated_by && row.updated_by !== row.entered_by ? ` → ${row.updated_by}` : ""}
+                </td>
                 <td className="px-3 py-2 text-right">
                   <button
                     onClick={(e) => {
@@ -749,7 +769,7 @@ export default function ProductionPage() {
             ))}
             {logs.length === 0 && (
               <tr>
-                <td colSpan={11} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={12} className="px-3 py-8 text-center text-slate-400">
                   아직 입력된 생산일지가 없습니다.
                 </td>
               </tr>

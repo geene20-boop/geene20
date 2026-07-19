@@ -134,25 +134,55 @@ export function getDb(): Database.Database {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- 입력/수정 이력 통합 로그. 각 데이터 화면에서 저장할 때마다 한 줄씩 남는다.
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      table_name TEXT NOT NULL,        -- 'production_log' | 'qc_test' | 'electricity_usage' | 'monthly_utility'
+      record_key TEXT NOT NULL,        -- 사람이 알아볼 수 있는 식별자 (예: "2026-07-19 주", "2026-07 1공장")
+      action TEXT NOT NULL,            -- 'create' | 'update' | 'delete'
+      actor TEXT NOT NULL,             -- 입력/수정한 사람 이름
+      summary TEXT,                    -- 무엇이 바뀌었는지 간단한 설명
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
   `);
 
   // 기존에 만들어진 DB에도 새 컬럼이 안전하게 추가되도록 마이그레이션
-  const existingCols = new Set(
-    (db.prepare("PRAGMA table_info(production_log)").all() as { name: string }[]).map((c) => c.name)
-  );
-  const migrations: [string, string][] = [
+  function migrateColumns(table: string, migrations: [string, string][]) {
+    const cols = new Set(
+      (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name)
+    );
+    for (const [col, type] of migrations) {
+      if (!cols.has(col)) {
+        db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+      }
+    }
+  }
+
+  migrateColumns("production_log", [
     ["worker", "TEXT"],
     ["granulation_agent", "TEXT"],
     ["granulation_usage_per_min", "REAL"],
     ["downtime_hours", "REAL"],
     ["carryover_dryer", "REAL"],
     ["carryover_rto", "REAL"],
-  ];
-  for (const [col, type] of migrations) {
-    if (!existingCols.has(col)) {
-      db.exec(`ALTER TABLE production_log ADD COLUMN ${col} ${type}`);
-    }
-  }
+    ["entered_by", "TEXT"],
+    ["updated_by", "TEXT"],
+  ]);
+  migrateColumns("qc_test", [
+    ["entered_by", "TEXT"],
+    ["updated_by", "TEXT"],
+  ]);
+  migrateColumns("electricity_usage", [
+    ["entered_by", "TEXT"],
+    ["updated_by", "TEXT"],
+  ]);
+  migrateColumns("monthly_utility", [
+    ["entered_by", "TEXT"],
+    ["updated_by", "TEXT"],
+  ]);
 
   const specCount = db.prepare("SELECT COUNT(*) as c FROM spec_limit").get() as { c: number };
   if (specCount.c === 0) {

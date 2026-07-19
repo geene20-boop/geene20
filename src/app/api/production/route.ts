@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminRequest } from "@/lib/auth";
 import { ProductionLog } from "@/lib/types";
+import { logAudit, requireActor } from "@/lib/audit";
 import {
   computeFeedTotal,
   computeGasUsage,
@@ -51,6 +52,11 @@ export async function POST(req: NextRequest) {
 
   if (!body.date || !body.shift) {
     return NextResponse.json({ error: "date, shift는 필수입니다." }, { status: 400 });
+  }
+
+  const actor = requireActor(body);
+  if (!actor) {
+    return NextResponse.json({ error: "입력자명을 입력해주세요." }, { status: 400 });
   }
 
   if (body.carryOverride && !isAdminRequest(req)) {
@@ -115,6 +121,8 @@ export async function POST(req: NextRequest) {
     "gas_usage_shift",
     "carryover_dryer",
     "carryover_rto",
+    "entered_by",
+    "updated_by",
   ];
   const values: Record<string, unknown> = {
     date: body.date,
@@ -124,6 +132,8 @@ export async function POST(req: NextRequest) {
     gas_usage_shift: gasUsageShift,
     carryover_dryer: carryoverDryer,
     carryover_rto: carryoverRto,
+    entered_by: actor,
+    updated_by: actor,
   };
   for (const c of PASSTHROUGH_COLUMNS) {
     if (body[c] !== undefined) values[c] = body[c];
@@ -134,12 +144,25 @@ export async function POST(req: NextRequest) {
     const stmt = db.prepare(
       `INSERT INTO production_log (${cols.join(", ")}) VALUES (${placeholders})
        ON CONFLICT(date, shift) DO UPDATE SET
-       ${cols.map((c) => `${c} = excluded.${c}`).join(", ")}, updated_at = datetime('now')`
+       ${cols
+         .filter((c) => c !== "entered_by")
+         .map((c) => `${c} = excluded.${c}`)
+         .join(", ")},
+       entered_by = COALESCE(production_log.entered_by, excluded.entered_by),
+       updated_at = datetime('now')`
     );
     const info = stmt.run(values);
     const row = db
       .prepare("SELECT * FROM production_log WHERE date = ? AND shift = ?")
       .get(body.date, body.shift);
+    logAudit(
+      "production_log",
+      `${body.date} ${body.shift}조`,
+      existing ? "update" : "create",
+      actor,
+      `${body.product ?? ""} ${body.daily_pack_amount != null ? body.daily_pack_amount + "ton" : ""}`.trim() ||
+        undefined
+    );
     return NextResponse.json(row, { status: info.changes ? 201 : 200 });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

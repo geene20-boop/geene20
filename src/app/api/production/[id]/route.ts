@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminRequest } from "@/lib/auth";
 import { ProductionLog } from "@/lib/types";
+import { logAudit, requireActor } from "@/lib/audit";
 import {
   computeFeedTotal,
   computeGasUsage,
@@ -10,12 +11,23 @@ import {
 } from "@/lib/productionCalc";
 
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
   const db = getDb();
+  const body = await req.json().catch(() => ({}));
+  const actor = requireActor(body);
+  if (!actor) {
+    return NextResponse.json({ error: "입력자명을 입력해주세요." }, { status: 400 });
+  }
+  const existing = db.prepare("SELECT date, shift FROM production_log WHERE id = ?").get(id) as
+    | { date: string; shift: string }
+    | undefined;
   db.prepare("DELETE FROM production_log WHERE id = ?").run(id);
+  if (existing) {
+    logAudit("production_log", `${existing.date} ${existing.shift}조`, "delete", actor);
+  }
   return NextResponse.json({ ok: true });
 }
 
@@ -51,6 +63,11 @@ export async function PUT(
   const { id } = await params;
   const db = getDb();
   const body = await req.json();
+
+  const actor = requireActor(body);
+  if (!actor) {
+    return NextResponse.json({ error: "입력자명을 입력해주세요." }, { status: 400 });
+  }
 
   if (body.carryOverride && !isAdminRequest(req)) {
     return NextResponse.json(
@@ -115,6 +132,7 @@ export async function PUT(
     "gas_usage_shift",
     "carryover_dryer",
     "carryover_rto",
+    "updated_by",
   ];
   const values: Record<string, unknown> = {
     feed_total: feedTotal,
@@ -122,12 +140,25 @@ export async function PUT(
     gas_usage_shift: gasUsageShift,
     carryover_dryer: carryoverDryer,
     carryover_rto: carryoverRto,
+    updated_by: actor,
   };
   for (const c of PASSTHROUGH_COLUMNS) values[c] = merged[c] ?? null;
+  // 이전 데이터에 최초 입력자가 없었다면 이번 수정자로 채워둔다.
+  if (!existing.entered_by) values.entered_by = actor;
 
-  const setClause = cols.map((c) => `${c} = @${c}`).join(", ");
+  const setClause = [...cols, ...(values.entered_by !== undefined ? ["entered_by"] : [])]
+    .map((c) => `${c} = @${c}`)
+    .join(", ");
   db.prepare(`UPDATE production_log SET ${setClause}, updated_at = datetime('now') WHERE id = @id`).run(
     { ...values, id }
+  );
+  logAudit(
+    "production_log",
+    `${existing.date} ${existing.shift}조`,
+    "update",
+    actor,
+    `${merged.product ?? ""} ${merged.daily_pack_amount != null ? merged.daily_pack_amount + "ton" : ""}`.trim() ||
+      undefined
   );
   const row = db.prepare("SELECT * FROM production_log WHERE id = ?").get(id);
   return NextResponse.json(row);

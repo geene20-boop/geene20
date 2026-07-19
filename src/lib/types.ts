@@ -31,6 +31,8 @@ export interface ProductionLog {
   downtime_hours: number | null;
   carryover_dryer: number | null;
   carryover_rto: number | null;
+  entered_by: string | null;
+  updated_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -53,6 +55,8 @@ export interface QcTest {
   hopper: number | null;
   moisture: number | null;
   worker: string | null;
+  entered_by: string | null;
+  updated_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -98,6 +102,8 @@ export interface ElectricityUsage {
   usage_kwh: number | null;
   source: "manual" | "api";
   note: string | null;
+  entered_by: string | null;
+  updated_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -114,6 +120,8 @@ export interface MonthlyUtility {
   diesel_won: number | null;
   production_ton: number | null;
   note: string | null;
+  entered_by: string | null;
+  updated_by: string | null;
   created_at: string;
   updated_at: string;
 }

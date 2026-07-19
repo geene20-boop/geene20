@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { getDb } from "@/lib/db";
 import { inferShift } from "@/lib/types";
+import { logAudit } from "@/lib/audit";
 
 function excelDateToStr(v: unknown): string | null {
   if (v instanceof Date) {
@@ -281,7 +282,7 @@ function matchColumn(header: string, include: string[], exclude: string[] = []):
   return include.every((k) => header.includes(k)) && exclude.every((k) => !header.includes(k));
 }
 
-export function importMonthlyUtility(buf: Buffer): ImportResult {
+export function importMonthlyUtility(buf: Buffer, actor: string): ImportResult {
   const wb = XLSX.read(buf, { type: "buffer", cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
@@ -333,8 +334,8 @@ export function importMonthlyUtility(buf: Buffer): ImportResult {
   const db = getDb();
   const upsert = db.prepare(`
     INSERT INTO monthly_utility
-      (month, elec1_kwh, elec1_won, elec2_kwh, elec2_won, lng_m3, lng_won, diesel_liter, diesel_won, production_ton, note)
-    VALUES (@month, @elec1_kwh, @elec1_won, @elec2_kwh, @elec2_won, @lng_m3, @lng_won, @diesel_liter, @diesel_won, @production_ton, @note)
+      (month, elec1_kwh, elec1_won, elec2_kwh, elec2_won, lng_m3, lng_won, diesel_liter, diesel_won, production_ton, note, entered_by, updated_by)
+    VALUES (@month, @elec1_kwh, @elec1_won, @elec2_kwh, @elec2_won, @lng_m3, @lng_won, @diesel_liter, @diesel_won, @production_ton, @note, @actor, @actor)
     ON CONFLICT(month) DO UPDATE SET
       elec1_kwh = COALESCE(excluded.elec1_kwh, monthly_utility.elec1_kwh),
       elec1_won = COALESCE(excluded.elec1_won, monthly_utility.elec1_won),
@@ -346,6 +347,8 @@ export function importMonthlyUtility(buf: Buffer): ImportResult {
       diesel_won = COALESCE(excluded.diesel_won, monthly_utility.diesel_won),
       production_ton = COALESCE(excluded.production_ton, monthly_utility.production_ton),
       note = COALESCE(excluded.note, monthly_utility.note),
+      updated_by = excluded.updated_by,
+      entered_by = COALESCE(monthly_utility.entered_by, excluded.entered_by),
       updated_at = datetime('now')
   `);
 
@@ -376,9 +379,20 @@ export function importMonthlyUtility(buf: Buffer): ImportResult {
       diesel_won: cellNum(row, col.diesel_won),
       production_ton: cellNum(row, col.production_ton),
       note: col.note >= 0 ? str(row[col.note]) : null,
+      actor,
     };
     const info = upsert.run(record);
     if (info.changes > 0) result.inserted++;
+  }
+
+  if (result.inserted > 0) {
+    logAudit(
+      "monthly_utility",
+      "엑셀 업로드",
+      "update",
+      actor,
+      `${result.inserted}개월 반영 (엑셀 업로드)`
+    );
   }
 
   return result;

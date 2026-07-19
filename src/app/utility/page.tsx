@@ -19,6 +19,8 @@ import { apiGet, apiPost } from "@/lib/apiClient";
 import { UtilityMonthRow, MonthlyUtility, ElectricityUsage } from "@/lib/types";
 import type { MergedShiftRow } from "@/lib/analytics";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
+import { useEnteredBy } from "@/lib/useEnteredBy";
+import EnteredByField from "@/components/EnteredByField";
 
 interface YoYRow {
   month: string;
@@ -123,6 +125,8 @@ export default function UtilityPage() {
   const [mForm, setMForm] = useState<MonthlyForm>(emptyMonthlyForm());
   const [savingMonth, setSavingMonth] = useState(false);
   const [monthMsg, setMonthMsg] = useState<string | null>(null);
+  const { enteredBy, setEnteredBy } = useEnteredBy();
+  const [nameError, setNameError] = useState(false);
 
   // 일자별 증감 차트용 선택 월
   const [dailyMonth, setDailyMonth] = useState(thisMonth());
@@ -220,10 +224,15 @@ export default function UtilityPage() {
 
   async function saveMonth(e: React.FormEvent) {
     e.preventDefault();
+    if (!enteredBy.trim()) {
+      setNameError(true);
+      return;
+    }
+    setNameError(false);
     setSavingMonth(true);
     setMonthMsg(null);
     try {
-      await apiPost("/api/monthly-utility", mForm);
+      await apiPost("/api/monthly-utility", { ...mForm, entered_by: enteredBy.trim() });
       setMonthMsg("저장되었습니다.");
       loadSheet(fromMonth, toMonth);
     } catch (err) {
@@ -253,9 +262,15 @@ export default function UtilityPage() {
   async function onImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!enteredBy.trim()) {
+      setNameError(true);
+      e.target.value = "";
+      return;
+    }
     setImportMsg("업로드 중...");
     const fd = new FormData();
     fd.append("file", file);
+    fd.append("entered_by", enteredBy.trim());
     try {
       const res = await fetch("/api/monthly-utility/import", { method: "POST", body: fd });
       const json = await res.json();
@@ -579,6 +594,7 @@ export default function UtilityPage() {
           onSubmit={saveMonth}
           className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${!admin.loggedIn ? "opacity-50 pointer-events-none" : ""}`}
         >
+          <EnteredByField value={enteredBy} onChange={setEnteredBy} error={nameError} />
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-slate-600">월</span>
             <input type="month" value={mForm.month} onChange={(e) => setMF("month", e.target.value)} className="border rounded-md px-2 py-1.5" required />
@@ -672,6 +688,7 @@ function MonthlyList({
             <th className="text-right px-2 py-1.5">LNG금액</th>
             <th className="text-right px-2 py-1.5">경유(ℓ)</th>
             <th className="text-right px-2 py-1.5">경유금액</th>
+            <th className="text-left px-2 py-1.5">입력자/수정자</th>
             <th className="px-2 py-1.5"></th>
           </tr>
         </thead>
@@ -683,6 +700,10 @@ function MonthlyList({
               <td className="text-right px-2 py-1.5">{fmt(m.lng_won)}</td>
               <td className="text-right px-2 py-1.5">{fmt(m.diesel_liter)}</td>
               <td className="text-right px-2 py-1.5">{fmt(m.diesel_won)}</td>
+              <td className="text-left px-2 py-1.5 text-slate-500 whitespace-nowrap">
+                {m.entered_by ?? "-"}
+                {m.updated_by && m.updated_by !== m.entered_by ? ` → ${m.updated_by}` : ""}
+              </td>
               <td className="text-right px-2 py-1.5">
                 {canEdit ? (
                   <button onClick={() => onEdit(m)} className="text-sky-600 hover:underline">수정</button>
