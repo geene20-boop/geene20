@@ -57,6 +57,20 @@ const fmt = (v: number | null | undefined, digits = 0): string =>
   v == null ? "-" : v.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: 0 });
 const fmtPct = (v: number | null): string => (v == null ? "-" : `${(v * 100).toFixed(1)}%`);
 
+// 큰 금액 입력 시 오타 방지용 힌트: "31,922,900원 (약 3,192만원)"
+function AmountHint({ value }: { value: string }) {
+  const num = Number(value);
+  if (!value.trim() || Number.isNaN(num) || num === 0) return null;
+  let summary = "";
+  if (Math.abs(num) >= 100_000_000) summary = ` (약 ${(num / 100_000_000).toFixed(1)}억원)`;
+  else if (Math.abs(num) >= 10_000) summary = ` (약 ${Math.round(num / 10_000).toLocaleString()}만원)`;
+  return (
+    <span className="text-[11px] text-emerald-600">
+      {num.toLocaleString()}원{summary}
+    </span>
+  );
+}
+
 function Delta({ value, digits = 0 }: { value: number | null; digits?: number }) {
   if (value == null) return <span className="text-slate-300">-</span>;
   const up = value > 0;
@@ -111,11 +125,16 @@ export default function UtilityPage() {
   const [dailyMonth, setDailyMonth] = useState(thisMonth());
   const [dailyRows, setDailyRows] = useState<{ date: string; elec: number | null; gas: number | null }[]>([]);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const loadSheet = useCallback(async (from: string, to: string) => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await apiGet<SheetResponse>(`/api/utility-sheet?from=${from}&to=${to}`);
       setData(res);
+    } catch (err) {
+      setLoadError(`데이터를 불러오지 못했습니다: ${(err as Error).message}`);
     } finally {
       setLoading(false);
     }
@@ -283,6 +302,14 @@ export default function UtilityPage() {
       </div>
 
       {loading && <p className="text-sm text-slate-400">불러오는 중...</p>}
+      {loadError && (
+        <div className="flex items-center justify-between gap-3 text-sm bg-red-50 border border-red-200 text-red-700 rounded-md px-3 py-2">
+          <span>{loadError}</span>
+          <button onClick={() => loadSheet(fromMonth, toMonth)} className="underline whitespace-nowrap">
+            다시 시도
+          </button>
+        </div>
+      )}
 
       {/* 월별 통합 표 */}
       <div className="bg-white rounded-xl border overflow-x-auto">
@@ -522,6 +549,7 @@ export default function UtilityPage() {
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-slate-600">1공장 금액(원)</span>
             <input type="number" step="any" value={mForm.elec1_won} onChange={(e) => setMF("elec1_won", e.target.value)} className="border rounded-md px-2 py-1.5" />
+            <AmountHint value={mForm.elec1_won} />
           </label>
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-slate-600">2공장 사용량(kWh)</span>
@@ -530,6 +558,7 @@ export default function UtilityPage() {
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-slate-600">2공장 금액(원)</span>
             <input type="number" step="any" value={mForm.elec2_won} onChange={(e) => setMF("elec2_won", e.target.value)} className="border rounded-md px-2 py-1.5" />
+            <AmountHint value={mForm.elec2_won} />
           </label>
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-slate-600">LNG 사용량(㎥)</span>
@@ -538,6 +567,7 @@ export default function UtilityPage() {
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-slate-600">LNG 금액(원)</span>
             <input type="number" step="any" value={mForm.lng_won} onChange={(e) => setMF("lng_won", e.target.value)} className="border rounded-md px-2 py-1.5" />
+            <AmountHint value={mForm.lng_won} />
           </label>
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-slate-600">경유 사용량(ℓ)</span>
@@ -546,6 +576,7 @@ export default function UtilityPage() {
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-slate-600">경유 금액(원)</span>
             <input type="number" step="any" value={mForm.diesel_won} onChange={(e) => setMF("diesel_won", e.target.value)} className="border rounded-md px-2 py-1.5" />
+            <AmountHint value={mForm.diesel_won} />
           </label>
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-slate-600">생산량 보정(ton)</span>
