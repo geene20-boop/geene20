@@ -18,6 +18,7 @@ import {
 import { apiGet, apiPost } from "@/lib/apiClient";
 import { UtilityMonthRow, MonthlyUtility, ElectricityUsage } from "@/lib/types";
 import type { MergedShiftRow } from "@/lib/analytics";
+import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 
 interface YoYRow {
   month: string;
@@ -116,7 +117,9 @@ export default function UtilityPage() {
   const [data, setData] = useState<SheetResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // 월별 입력
+  // 월별 입력 (금액·경유는 재무 데이터라 관리자만 편집 가능)
+  const admin = useAdminSession();
+  const [showAdminModal, setShowAdminModal] = useState(false);
   const [mForm, setMForm] = useState<MonthlyForm>(emptyMonthlyForm());
   const [savingMonth, setSavingMonth] = useState(false);
   const [monthMsg, setMonthMsg] = useState<string | null>(null);
@@ -171,6 +174,7 @@ export default function UtilityPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadSheet(fromMonth, toMonth);
     loadDaily(dailyMonth);
+    admin.refresh();
     // 최초 1회만 실행 (기간 변경은 조회 버튼으로)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -522,7 +526,7 @@ export default function UtilityPage() {
         </div>
       </div>
 
-      {/* 월별 유틸리티 입력 + 엑셀 업로드 */}
+      {/* 월별 유틸리티 입력 + 엑셀 업로드 (재무 데이터라 관리자만 편집 가능) */}
       <div className="bg-white rounded-xl border p-5 flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-sm font-semibold text-slate-700">월별 금액·경유 입력 (청구서 기준)</h2>
@@ -530,14 +534,51 @@ export default function UtilityPage() {
             <a href="/api/utility-template" className="text-xs border border-slate-300 rounded-md px-3 py-1.5">
               엑셀 양식 받기
             </a>
-            <label className="text-xs border border-slate-300 rounded-md px-3 py-1.5 cursor-pointer">
-              엑셀 업로드
-              <input type="file" accept=".xlsx,.xls" onChange={onImport} className="hidden" />
-            </label>
+            {admin.loggedIn ? (
+              <label className="text-xs border border-slate-300 rounded-md px-3 py-1.5 cursor-pointer">
+                엑셀 업로드
+                <input type="file" accept=".xlsx,.xls" onChange={onImport} className="hidden" />
+              </label>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowAdminModal(true)}
+                className="text-xs border border-slate-300 rounded-md px-3 py-1.5 text-slate-400"
+              >
+                엑셀 업로드 (관리자 전용)
+              </button>
+            )}
           </div>
         </div>
         {importMsg && <p className="text-xs text-slate-600">{importMsg}</p>}
-        <form onSubmit={saveMonth} className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {!admin.loggedIn && (
+          <div className="flex items-center justify-between gap-3 text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-md px-3 py-2">
+            <span>
+              금액·경유 등 재무 데이터는 관리자만 입력/수정할 수 있습니다. 조회는 누구나 볼 수
+              있습니다.
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowAdminModal(true)}
+              className="underline whitespace-nowrap"
+            >
+              관리자 로그인
+            </button>
+          </div>
+        )}
+        {showAdminModal && (
+          <AdminLoginModal
+            onClose={() => setShowAdminModal(false)}
+            onSuccess={() => {
+              admin.setLoggedIn(true);
+              setShowAdminModal(false);
+            }}
+          />
+        )}
+        <form
+          onSubmit={saveMonth}
+          className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${!admin.loggedIn ? "opacity-50 pointer-events-none" : ""}`}
+        >
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-slate-600">월</span>
             <input type="month" value={mForm.month} onChange={(e) => setMF("month", e.target.value)} className="border rounded-md px-2 py-1.5" required />
@@ -594,14 +635,22 @@ export default function UtilityPage() {
           </div>
         </form>
 
-        {/* 저장된 월별 값 목록 (편집용) */}
-        <MonthlyList onEdit={editMonth} refreshKey={sheet.length} />
+        {/* 저장된 월별 값 목록 (편집은 관리자만) */}
+        <MonthlyList onEdit={editMonth} refreshKey={sheet.length} canEdit={admin.loggedIn} />
       </div>
     </div>
   );
 }
 
-function MonthlyList({ onEdit, refreshKey }: { onEdit: (m: MonthlyUtility) => void; refreshKey: number }) {
+function MonthlyList({
+  onEdit,
+  refreshKey,
+  canEdit,
+}: {
+  onEdit: (m: MonthlyUtility) => void;
+  refreshKey: number;
+  canEdit: boolean;
+}) {
   const [rows, setRows] = useState<MonthlyUtility[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -635,7 +684,11 @@ function MonthlyList({ onEdit, refreshKey }: { onEdit: (m: MonthlyUtility) => vo
               <td className="text-right px-2 py-1.5">{fmt(m.diesel_liter)}</td>
               <td className="text-right px-2 py-1.5">{fmt(m.diesel_won)}</td>
               <td className="text-right px-2 py-1.5">
-                <button onClick={() => onEdit(m)} className="text-sky-600 hover:underline">수정</button>
+                {canEdit ? (
+                  <button onClick={() => onEdit(m)} className="text-sky-600 hover:underline">수정</button>
+                ) : (
+                  <span className="text-slate-300">-</span>
+                )}
               </td>
             </tr>
           ))}

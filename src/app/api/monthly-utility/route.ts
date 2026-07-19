@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { MonthlyUtility } from "@/lib/types";
+import { isAdminRequest } from "@/lib/auth";
 
 const NUM_FIELDS = [
   "elec1_kwh",
@@ -32,6 +33,9 @@ function numOrNull(v: unknown): number | null {
 }
 
 export async function POST(req: NextRequest) {
+  if (!isAdminRequest(req)) {
+    return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 403 });
+  }
   const db = getDb();
   const body = await req.json();
   const month = String(body.month ?? "");
