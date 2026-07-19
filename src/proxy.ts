@@ -4,6 +4,7 @@ import { hasSitePassword, isSiteRequest } from "@/lib/auth";
 
 // 로그인/세션 확인 자체는 인증 여부와 무관하게 항상 호출 가능해야 함
 const PUBLIC_API_PATHS = new Set([
+  "/api/health",
   "/api/site/login",
   "/api/site/logout",
   "/api/site/session",
