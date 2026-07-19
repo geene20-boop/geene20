@@ -115,6 +115,25 @@ export function getDb(): Database.Database {
     );
 
     CREATE INDEX IF NOT EXISTS idx_electricity_date ON electricity_usage(date);
+
+    -- 월별 유틸리티 청구/사용 데이터 (전력·LNG 금액, 경유 사용량·금액).
+    -- 사용량(kWh, ㎥)·생산량(ton)은 일별 데이터에서 자동 합산되지만, 과거 이력이나
+    -- 청구 금액처럼 일별로 잡히지 않는 값은 여기에 직접 저장/보정한다.
+    CREATE TABLE IF NOT EXISTS monthly_utility (
+      month TEXT PRIMARY KEY,            -- YYYY-MM
+      elec1_kwh REAL,                   -- 1공장 전력 사용량(kWh)
+      elec1_won REAL,                   -- 1공장 전력 금액(원)
+      elec2_kwh REAL,                   -- 2공장 전력 사용량(kWh)
+      elec2_won REAL,                   -- 2공장 전력 금액(원)
+      lng_m3 REAL,                      -- LNG 사용량(㎥)
+      lng_won REAL,                     -- LNG 금액(원)
+      diesel_liter REAL,               -- 경유 사용량(ℓ)
+      diesel_won REAL,                  -- 경유 금액(원)
+      production_ton REAL,             -- 생산량(ton) 보정값(비우면 일별 합산 사용)
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // 기존에 만들어진 DB에도 새 컬럼이 안전하게 추가되도록 마이그레이션

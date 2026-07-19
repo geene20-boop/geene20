@@ -26,6 +26,10 @@ function n(v: string): number | null {
   return Number.isNaN(num) ? null : num;
 }
 
+const monthStart = () => today().slice(0, 8) + "01";
+
+type Totals = { plant1: number; plant2: number; total: number; plant1Days: number; plant2Days: number };
+
 export default function ElectricityPage() {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [editingKey, setEditingKey] = useState<{ date: string; plant: Plant } | null>(null);
@@ -33,14 +37,26 @@ export default function ElectricityPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  const [rangeFrom, setRangeFrom] = useState(monthStart());
+  const [rangeTo, setRangeTo] = useState(today());
+  const [totals, setTotals] = useState<Totals | null>(null);
+
   async function loadRows() {
     const data = await apiGet<ElectricityUsage[]>("/api/electricity");
     setRows(data);
   }
 
+  async function loadSummary(from: string, to: string) {
+    const data = await apiGet<{ totals: Totals }>(
+      `/api/electricity/summary?from=${from}&to=${to}`
+    );
+    setTotals(data.totals);
+  }
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadRows();
+    loadSummary(monthStart(), today());
   }, []);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -62,6 +78,7 @@ export default function ElectricityPage() {
       setForm(emptyForm());
       setEditingKey(null);
       loadRows();
+      loadSummary(rangeFrom, rangeTo);
     } catch (err) {
       setMessage(`오류: ${(err as Error).message}`);
     } finally {
@@ -90,7 +107,10 @@ export default function ElectricityPage() {
     if (!confirm("이 전력사용량 기록을 삭제할까요?")) return;
     await apiDelete(`/api/electricity/${id}`);
     loadRows();
+    loadSummary(rangeFrom, rangeTo);
   }
+
+  const fmtKwh = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 1 });
 
   return (
     <div className="flex flex-col gap-6">
@@ -104,6 +124,67 @@ export default function ElectricityPage() {
           현재는 수동 입력 방식입니다. 한전 Open P-Meter API 승인을 받으시면, API 키를 전달해
           주시는 대로 매일 자동으로 값을 가져와 채워주는 기능을 추가로 연동해 드릴 수 있습니다.
         </div>
+      </div>
+
+      {/* 기간별 조회 + 1공장/2공장/합계 (req1) */}
+      <div className="bg-white rounded-xl border p-5 flex flex-col gap-4">
+        <div className="flex items-end gap-3 flex-wrap">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-600">시작일</span>
+            <input
+              type="date"
+              value={rangeFrom}
+              onChange={(e) => setRangeFrom(e.target.value)}
+              className="border rounded-md px-2 py-1.5"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-600">종료일</span>
+            <input
+              type="date"
+              value={rangeTo}
+              onChange={(e) => setRangeTo(e.target.value)}
+              className="border rounded-md px-2 py-1.5"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => loadSummary(rangeFrom, rangeTo)}
+            className="bg-slate-900 text-white rounded-md px-4 py-1.5 text-sm font-medium h-fit"
+          >
+            기간 합계 조회
+          </button>
+        </div>
+        {totals && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-lg border border-sky-200 bg-sky-50 p-4">
+              <div className="text-xs text-sky-700">1공장 (저압) 합계</div>
+              <div className="text-2xl font-bold text-sky-800 tabular-nums">
+                {fmtKwh(totals.plant1)}
+                <span className="text-sm font-normal ml-1">kWh</span>
+              </div>
+              <div className="text-xs text-slate-400 mt-1">{totals.plant1Days}일 입력됨</div>
+            </div>
+            <div className="rounded-lg border border-violet-200 bg-violet-50 p-4">
+              <div className="text-xs text-violet-700">2공장 (고압) 합계</div>
+              <div className="text-2xl font-bold text-violet-800 tabular-nums">
+                {fmtKwh(totals.plant2)}
+                <span className="text-sm font-normal ml-1">kWh</span>
+              </div>
+              <div className="text-xs text-slate-400 mt-1">{totals.plant2Days}일 입력됨</div>
+            </div>
+            <div className="rounded-lg border border-indigo-300 bg-indigo-100 p-4">
+              <div className="text-xs text-indigo-700 font-medium">전체 합계 (1+2공장)</div>
+              <div className="text-2xl font-bold text-indigo-900 tabular-nums">
+                {fmtKwh(totals.total)}
+                <span className="text-sm font-normal ml-1">kWh</span>
+              </div>
+              <div className="text-xs text-slate-500 mt-1">
+                {rangeFrom} ~ {rangeTo}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <form onSubmit={onSubmit} className="flex flex-col gap-4 bg-white rounded-xl border p-5">
