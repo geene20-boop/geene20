@@ -25,6 +25,9 @@ export async function POST(req: NextRequest) {
   if (!body.date || !body.productKey || typeof body.qty !== "number") {
     return NextResponse.json({ error: "date, productKey, qty는 필수입니다." }, { status: 400 });
   }
+  if (body.qty <= 0) {
+    return NextResponse.json({ error: "qty는 0보다 커야 합니다." }, { status: 400 });
+  }
 
   const actor = requireActor(req, body);
   if (!actor) {
