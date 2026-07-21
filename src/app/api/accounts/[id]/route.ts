@@ -18,8 +18,8 @@ export async function PUT(
   }
   if (body.newPassword) {
     const newPassword = String(body.newPassword);
-    if (newPassword.length < 4) {
-      return NextResponse.json({ error: "비밀번호는 4자 이상이어야 합니다." }, { status: 400 });
+    if (newPassword.length < 8) {
+      return NextResponse.json({ error: "비밀번호는 8자 이상이어야 합니다." }, { status: 400 });
     }
     try {
       resetAccountPassword(Number(id), newPassword);
