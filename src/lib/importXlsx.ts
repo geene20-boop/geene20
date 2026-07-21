@@ -397,3 +397,65 @@ export function importMonthlyUtility(buf: Buffer, actor: string): ImportResult {
 
   return result;
 }
+
+// 포장일지(구글시트) "현재고" 탭을 CSV/엑셀로 내보낸 파일 1회성 마이그레이션.
+// key가 이미 packing_item에 있으면 재고 수량만 갱신, 없으면 새 품목으로 추가한다.
+export function importPackingStock(buf: Buffer, actor: string): ImportResult {
+  const wb = XLSX.read(buf, { type: "buffer", cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: null }) as Record<string, unknown>[];
+
+  const result = emptyResult();
+  if (rows.length === 0 || !("key" in rows[0])) {
+    result.structureError =
+      "형식을 인식하지 못했습니다. 첫 행에 kind, key, category, sub, unit, bagKg, bagMatKey, stock 열이 있어야 합니다.";
+    return result;
+  }
+
+  const db = getDb();
+  const findItem = db.prepare("SELECT key FROM packing_item WHERE key = ?");
+  const updateStock = db.prepare("UPDATE packing_item SET stock = ? WHERE key = ?");
+  const insertItem = db.prepare(
+    `INSERT INTO packing_item (key, kind, category, sub, unit, bag_kg, bag_mat_key, stock)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+
+  for (const row of rows) {
+    const key = str(row.key);
+    const stock = num(row.stock);
+    if (!key || stock == null) {
+      result.skipped++;
+      result.skippedDetails.push(`key 또는 stock 값이 없는 행: ${JSON.stringify(row)}`);
+      continue;
+    }
+
+    if (findItem.get(key)) {
+      updateStock.run(stock, key);
+      result.updated++;
+    } else {
+      insertItem.run(
+        key,
+        str(row.kind) ?? "aux",
+        str(row.category),
+        str(row.sub),
+        str(row.unit),
+        num(row.bagKg),
+        str(row.bagMatKey),
+        stock
+      );
+      result.inserted++;
+    }
+  }
+
+  if (result.inserted > 0 || result.updated > 0) {
+    logAudit(
+      "packing_item",
+      "재고 마이그레이션",
+      "update",
+      actor,
+      `신규 ${result.inserted}건, 갱신 ${result.updated}건 (엑셀 업로드)`
+    );
+  }
+
+  return result;
+}
