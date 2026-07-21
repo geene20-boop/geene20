@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   if (!body.date || !body.key || typeof body.qty !== "number") {
     return NextResponse.json({ error: "date, key, qty(증감값)는 필수입니다." }, { status: 400 });
   }
-  const actor = requireActor(body);
+  const actor = requireActor(req, body);
   if (!actor) {
     return NextResponse.json({ error: "입력자명을 입력해주세요." }, { status: 400 });
   }

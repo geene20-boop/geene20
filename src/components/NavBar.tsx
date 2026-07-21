@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useSiteSession } from "@/lib/useSiteSession";
 
 interface NavItem {
   href: string;
@@ -65,26 +66,14 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 function AccountBadge() {
-  const [session, setSession] = useState<{
-    loggedIn: boolean;
-    displayName: string | null;
-    role: string | null;
-  } | null>(null);
-
-  useEffect(() => {
-    fetch("/api/site/session")
-      .then((r) => r.json())
-      .then((d) =>
-        setSession({ loggedIn: !!d.loggedIn, displayName: d.displayName, role: d.role })
-      );
-  }, []);
+  const session = useSiteSession();
 
   async function logout() {
     await fetch("/api/site/logout", { method: "POST" });
     window.location.reload();
   }
 
-  if (!session?.loggedIn) return null;
+  if (!session.loggedIn) return null;
 
   return (
     <div className="ml-auto hidden md:flex items-center gap-2 text-xs text-slate-500">

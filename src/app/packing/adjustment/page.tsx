@@ -7,6 +7,7 @@ import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 import { itemLabel } from "@/lib/packingClient";
+import { useSiteSession } from "@/lib/useSiteSession";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const daysAgo = (n: number) => {
@@ -26,6 +27,15 @@ function AdjustmentForm() {
   const [message, setMessage] = useState<string | null>(null);
   const { enteredBy, setEnteredBy } = useEnteredBy();
   const [nameError, setNameError] = useState(false);
+  const session = useSiteSession();
+
+  useEffect(() => {
+    if (session.loggedIn && session.displayName) {
+       
+      setEnteredBy(session.displayName);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.loggedIn, session.displayName]);
 
   async function loadItems() {
     setItems(await apiGet<PackingItem[]>("/api/packing-item"));
@@ -84,7 +94,12 @@ function AdjustmentForm() {
 
       <form onSubmit={submit} className="flex flex-col gap-4 bg-white rounded-xl border p-5">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <EnteredByField value={enteredBy} onChange={setEnteredBy} error={nameError} />
+          <EnteredByField
+            value={enteredBy}
+            onChange={setEnteredBy}
+            error={nameError}
+            lockedValue={session.loggedIn ? session.displayName : null}
+          />
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">날짜</span>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border rounded-md px-2 py-1.5" />

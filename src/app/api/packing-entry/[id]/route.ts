@@ -29,7 +29,7 @@ export async function PUT(
   }
   const { id } = await params;
   const body = await req.json();
-  const actor = requireActor(body);
+  const actor = requireActor(req, body);
   if (!actor) {
     return NextResponse.json({ error: "입력자명을 입력해주세요." }, { status: 400 });
   }
@@ -107,7 +107,7 @@ export async function DELETE(
   }
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
-  const actor = requireActor(body);
+  const actor = requireActor(req, body);
   if (!actor) {
     return NextResponse.json({ error: "입력자명을 입력해주세요." }, { status: 400 });
   }

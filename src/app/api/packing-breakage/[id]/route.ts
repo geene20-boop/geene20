@@ -17,7 +17,7 @@ export async function PUT(
   if (typeof body.qty !== "number") {
     return NextResponse.json({ error: "qty는 필수입니다." }, { status: 400 });
   }
-  const actor = requireActor(body);
+  const actor = requireActor(req, body);
   if (!actor) {
     return NextResponse.json({ error: "입력자명을 입력해주세요." }, { status: 400 });
   }
@@ -61,7 +61,7 @@ export async function DELETE(
   }
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
-  const actor = requireActor(body);
+  const actor = requireActor(req, body);
   if (!actor) {
     return NextResponse.json({ error: "입력자명을 입력해주세요." }, { status: 400 });
   }

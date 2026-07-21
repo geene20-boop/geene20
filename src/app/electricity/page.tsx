@@ -5,6 +5,7 @@ import { apiDelete, apiGet, apiPost } from "@/lib/apiClient";
 import { ElectricityUsage, Plant, PLANT_OPTIONS, PLANT_VOLTAGE } from "@/lib/types";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
+import { useSiteSession } from "@/lib/useSiteSession";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -44,6 +45,15 @@ export default function ElectricityPage() {
   const [totals, setTotals] = useState<Totals | null>(null);
   const { enteredBy, setEnteredBy } = useEnteredBy();
   const [nameError, setNameError] = useState(false);
+  const session = useSiteSession();
+
+  useEffect(() => {
+    if (session.loggedIn && session.displayName) {
+       
+      setEnteredBy(session.displayName);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.loggedIn, session.displayName]);
 
   async function loadRows() {
     const data = await apiGet<ElectricityUsage[]>("/api/electricity");
@@ -201,7 +211,18 @@ export default function ElectricityPage() {
         )}
       </div>
 
-      <form onSubmit={onSubmit} className="flex flex-col gap-4 bg-white rounded-xl border p-5">
+      {!session.canWrite && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-md px-3 py-2">
+          조회 전용 계정입니다. 입력·수정은 editor 권한이 필요합니다.
+        </div>
+      )}
+
+      <form
+        onSubmit={onSubmit}
+        className={`flex flex-col gap-4 bg-white rounded-xl border p-5 ${
+          !session.canWrite ? "opacity-50 pointer-events-none" : ""
+        }`}
+      >
         {editingKey && (
           <div className="flex items-center justify-between text-xs bg-sky-50 border border-sky-200 text-sky-800 rounded-md px-3 py-2">
             <span>
@@ -214,7 +235,12 @@ export default function ElectricityPage() {
           </div>
         )}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <EnteredByField value={enteredBy} onChange={setEnteredBy} error={nameError} />
+          <EnteredByField
+            value={enteredBy}
+            onChange={setEnteredBy}
+            error={nameError}
+            lockedValue={session.loggedIn ? session.displayName : null}
+          />
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">날짜</span>
             <input
