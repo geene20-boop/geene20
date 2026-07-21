@@ -201,6 +201,10 @@ export default function ProductionPage() {
     bagPackQty: number;
     bagPackCount: number;
   } | null>(null);
+  const [carryoverPreview, setCarryoverPreview] = useState<{ dryer: number | null; rto: number | null }>({
+    dryer: null,
+    rto: null,
+  });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const { enteredBy, setEnteredBy } = useEnteredBy();
@@ -253,6 +257,20 @@ export default function ProductionPage() {
     return rto != null && carry != null ? rto - carry : null;
   }, [form.lng_rto, form.carryover_rto]);
 
+  // 전날(직전 교대)의 실제 누계값과 이 기록에 저장된 전일재고가 다른지 확인.
+  // 직전 교대 기록 자체가 없으면(즉 이 조가 가장 첫 기록이면) 비교하지 않는다.
+  const dryerCarryMismatch = useMemo(() => {
+    if (carryoverPreview.dryer == null) return false;
+    const carry = n(form.carryover_dryer);
+    return carry != null && carry !== carryoverPreview.dryer;
+  }, [carryoverPreview.dryer, form.carryover_dryer]);
+
+  const rtoCarryMismatch = useMemo(() => {
+    if (carryoverPreview.rto == null) return false;
+    const carry = n(form.carryover_rto);
+    return carry != null && carry !== carryoverPreview.rto;
+  }, [carryoverPreview.rto, form.carryover_rto]);
+
   const gasUsageShift = useMemo(() => {
     if (dryerReal == null && rtoReal == null) return null;
     return (dryerReal ?? 0) + (rtoReal ?? 0);
@@ -275,7 +293,7 @@ export default function ProductionPage() {
     async function loadContext() {
       const ctx = await apiGet<{
         existing: ProductionLog | null;
-        carryoverPreview: { dryer: number | null; rto: number | null } | null;
+        carryoverPreview: { dryer: number | null; rto: number | null };
         qcRef: { hardness: number | null; moisture: number | null; brix: number | null };
         packingRef: { configured: boolean; tonQty: number | null; bagPackQty: number; bagPackCount: number };
       }>(`/api/production/context?date=${form.date}&shift=${form.shift}`);
@@ -284,6 +302,7 @@ export default function ProductionPage() {
       setCarryoverUnlocked(false);
       setQcRef(ctx.qcRef);
       setPackingRef(ctx.packingRef.configured ? ctx.packingRef : null);
+      setCarryoverPreview(ctx.carryoverPreview);
 
       if (ctx.existing) {
         setCurrentId(ctx.existing.id);
@@ -632,7 +651,9 @@ export default function ProductionPage() {
             <div />
 
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-slate-600 flex items-center gap-1">
+              <span
+                className={`flex items-center gap-1 ${dryerCarryMismatch ? "text-red-600 font-medium" : "text-slate-600"}`}
+              >
                 전일재고 - 건조로 누계
                 {!carryoverUnlocked && (
                   <button type="button" onClick={requestCarryoverEdit} className="text-[11px] underline text-sky-600">
@@ -646,11 +667,20 @@ export default function ProductionPage() {
                 value={form.carryover_dryer}
                 disabled={!carryoverUnlocked}
                 onChange={(e) => set("carryover_dryer", e.target.value)}
-                className="border rounded-md px-2 py-1.5 disabled:bg-slate-50 disabled:text-slate-500"
+                className={`border rounded-md px-2 py-1.5 disabled:bg-slate-50 ${
+                  dryerCarryMismatch ? "text-red-600 font-medium" : "disabled:text-slate-500"
+                }`}
               />
+              {dryerCarryMismatch && (
+                <span className="text-[11px] text-red-500">
+                  전날 실제 건조로 누계({carryoverPreview.dryer})와 다릅니다.
+                </span>
+              )}
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-slate-600 flex items-center gap-1">
+              <span
+                className={`flex items-center gap-1 ${rtoCarryMismatch ? "text-red-600 font-medium" : "text-slate-600"}`}
+              >
                 전일재고 - RTO 누계
                 {!carryoverUnlocked && (
                   <button type="button" onClick={requestCarryoverEdit} className="text-[11px] underline text-sky-600">
@@ -664,8 +694,15 @@ export default function ProductionPage() {
                 value={form.carryover_rto}
                 disabled={!carryoverUnlocked}
                 onChange={(e) => set("carryover_rto", e.target.value)}
-                className="border rounded-md px-2 py-1.5 disabled:bg-slate-50 disabled:text-slate-500"
+                className={`border rounded-md px-2 py-1.5 disabled:bg-slate-50 ${
+                  rtoCarryMismatch ? "text-red-600 font-medium" : "disabled:text-slate-500"
+                }`}
               />
+              {rtoCarryMismatch && (
+                <span className="text-[11px] text-red-500">
+                  전날 실제 RTO 누계({carryoverPreview.rto})와 다릅니다.
+                </span>
+              )}
             </label>
             <div className="flex flex-col gap-1 text-sm">
               <span className="text-slate-600">건조로 실사용량 (자동)</span>
