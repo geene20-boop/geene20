@@ -16,7 +16,9 @@ export function getDb(): Database.Database {
   if (global.__db) return global.__db;
 
   const db = new Database(DB_PATH);
-  db.pragma("journal_mode = WAL");
+  // WAL은 mmap/파일 잠금을 정교하게 지원하는 로컬 디스크가 필요하다.
+  // Railway 등 네트워크 볼륨에서는 WAL이 네이티브 모듈을 크래시시킬 수 있어 DELETE 저널을 사용한다.
+  db.pragma("journal_mode = DELETE");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS production_log (
