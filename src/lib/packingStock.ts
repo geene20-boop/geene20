@@ -5,6 +5,7 @@ import { PackingItem } from "@/lib/types";
 export interface PackEffectInput {
   productKey: string;
   qty: number;
+  isProduction?: boolean; // true면 생산(pack) 효과 - 생산누계도 함께 증감
   bagMatKey?: string | null;
   bagMatQty?: number | null;
   topsheetKey?: string | null;
@@ -27,9 +28,19 @@ export function adjustStock(db: Database.Database, key: string, delta: number): 
   db.prepare("UPDATE packing_item SET stock = stock + ? WHERE key = ?").run(delta, key);
 }
 
+/** 품목 생산누계를 delta만큼 증감 (생산(pack) 기록 생성/수정/삭제 시에만 호출). */
+function adjustCumulativeProduced(db: Database.Database, key: string, delta: number): void {
+  if (!key || !delta) return;
+  db.prepare("UPDATE packing_item SET cumulative_produced = cumulative_produced + ? WHERE key = ?").run(
+    delta,
+    key
+  );
+}
+
 /** 생산(포장) 입력의 재고 효과: 제품 +qty, 포장지/랩/부자재 -qty. sign=-1이면 반대로(취소용). */
 export function applyPackEffect(db: Database.Database, entry: PackEffectInput, sign: 1 | -1): void {
   adjustStock(db, entry.productKey, sign * entry.qty);
+  if (entry.isProduction) adjustCumulativeProduced(db, entry.productKey, sign * entry.qty);
   if (entry.bagMatKey && entry.bagMatQty) adjustStock(db, entry.bagMatKey, -sign * entry.bagMatQty);
   if (entry.topsheetKey && entry.topsheetQty) adjustStock(db, entry.topsheetKey, -sign * entry.topsheetQty);
   if (entry.wrapKey && entry.wrapQty) adjustStock(db, entry.wrapKey, -sign * entry.wrapQty);

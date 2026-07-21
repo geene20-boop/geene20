@@ -159,7 +159,8 @@ export function getDb(): Database.Database {
       unit TEXT,                        -- '포' | '톤' | '개' 등
       bag_kg REAL,                      -- 포대/톤백 단위 중량(kg)
       bag_mat_key TEXT,                 -- 이 제품 포장 시 소모되는 포장지 품목 key
-      stock REAL NOT NULL DEFAULT 0     -- 현재 재고 수량
+      stock REAL NOT NULL DEFAULT 0,    -- 현재 재고 수량
+      cumulative_produced REAL NOT NULL DEFAULT 0  -- 생산누계(역대 총 생산량, product만 사용)
     );
 
     CREATE TABLE IF NOT EXISTS packing_entry (
@@ -284,6 +285,7 @@ export function getDb(): Database.Database {
     ["updated_by", "TEXT"],
   ]);
   migrateColumns("spec_limit", [["updated_by", "TEXT"]]);
+  migrateColumns("packing_item", [["cumulative_produced", "REAL NOT NULL DEFAULT 0"]]);
 
   const specCount = db.prepare("SELECT COUNT(*) as c FROM spec_limit").get() as { c: number };
   if (specCount.c === 0) {

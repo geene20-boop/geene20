@@ -34,7 +34,14 @@ export default function PackingItemsPage() {
   const admin = useAdminSession();
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [editKey, setEditKey] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ category: "", sub: "", unit: "", bagKg: "", stock: "" });
+  const [editForm, setEditForm] = useState({
+    category: "",
+    sub: "",
+    unit: "",
+    bagKg: "",
+    stock: "",
+    cumulativeProduced: "",
+  });
   const session = useSiteSession();
 
   useEffect(() => {
@@ -95,6 +102,7 @@ export default function PackingItemsPage() {
       unit: item.unit ?? "",
       bagKg: item.bag_kg != null ? String(item.bag_kg) : "",
       stock: String(item.stock),
+      cumulativeProduced: String(item.cumulative_produced),
     });
   }
 
@@ -111,6 +119,7 @@ export default function PackingItemsPage() {
         unit: editForm.unit,
         bagKg: editForm.bagKg ? Number(editForm.bagKg) : undefined,
         stock: Number(editForm.stock),
+        cumulativeProduced: Number(editForm.cumulativeProduced),
       });
       setEditKey(null);
       await loadItems();
@@ -219,6 +228,7 @@ export default function PackingItemsPage() {
               <th className="text-left px-3 py-2">품목명</th>
               <th className="text-left px-3 py-2">단위</th>
               <th className="text-right px-3 py-2">재고</th>
+              <th className="text-right px-3 py-2">생산누계</th>
               {admin.loggedIn && <th className="text-left px-3 py-2">관리</th>}
             </tr>
           </thead>
@@ -245,6 +255,14 @@ export default function PackingItemsPage() {
                         className="border rounded-md px-2 py-1 w-20 text-right"
                       />
                     </td>
+                    <td className="px-3 py-2 text-right">
+                      <input
+                        type="number"
+                        value={editForm.cumulativeProduced}
+                        onChange={(e) => setEditForm((f) => ({ ...f, cumulativeProduced: e.target.value }))}
+                        className="border rounded-md px-2 py-1 w-24 text-right"
+                      />
+                    </td>
                   </>
                 ) : (
                   <>
@@ -252,6 +270,9 @@ export default function PackingItemsPage() {
                     <td className="px-3 py-2">{item.sub ?? itemLabel(item)}</td>
                     <td className="px-3 py-2">{item.unit ?? "-"}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{item.stock}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {item.kind === "product" ? item.cumulative_produced : "-"}
+                    </td>
                   </>
                 )}
                 {admin.loggedIn && (
@@ -283,7 +304,7 @@ export default function PackingItemsPage() {
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={7} className="px-3 py-8 text-center text-slate-400">
                   등록된 품목이 없습니다.
                 </td>
               </tr>

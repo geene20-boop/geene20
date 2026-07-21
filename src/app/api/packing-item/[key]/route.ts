@@ -32,17 +32,19 @@ export async function PUT(
   const unit = body.unit !== undefined && body.unit !== "" ? body.unit : before.unit;
   const bagKg = typeof body.bagKg === "number" ? body.bagKg : before.bag_kg;
   const stock = typeof body.stock === "number" ? body.stock : before.stock;
+  const cumulativeProduced =
+    typeof body.cumulativeProduced === "number" ? body.cumulativeProduced : before.cumulative_produced;
 
   db.prepare(
-    "UPDATE packing_item SET category = ?, sub = ?, unit = ?, bag_kg = ?, stock = ? WHERE key = ?"
-  ).run(category, sub, unit, bagKg, stock, key);
+    "UPDATE packing_item SET category = ?, sub = ?, unit = ?, bag_kg = ?, stock = ?, cumulative_produced = ? WHERE key = ?"
+  ).run(category, sub, unit, bagKg, stock, cumulativeProduced, key);
 
   logAudit(
     "packing_item",
     key,
     "update",
     actor,
-    `이전: ${before.category}/${before.sub}/${before.unit}/${before.stock} → 이후: ${category}/${sub}/${unit}/${stock}`
+    `이전: ${before.category}/${before.sub}/${before.unit}/${before.stock}/${before.cumulative_produced} → 이후: ${category}/${sub}/${unit}/${stock}/${cumulativeProduced}`
   );
 
   const row = db.prepare("SELECT * FROM packing_item WHERE key = ?").get(key);

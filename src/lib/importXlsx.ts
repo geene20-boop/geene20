@@ -31,7 +31,11 @@ function excelTimeToStr(v: unknown): string | null {
 
 function num(v: unknown): number | null {
   if (typeof v === "number" && !Number.isNaN(v)) return v;
-  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
+  if (typeof v === "string") {
+    // "1,234" 같은 천단위 콤마 표기(구글시트/엑셀에서 흔함)도 숫자로 인식
+    const cleaned = v.trim().replace(/,/g, "");
+    if (cleaned !== "" && !Number.isNaN(Number(cleaned))) return Number(cleaned);
+  }
   return null;
 }
 
@@ -428,21 +432,24 @@ export function importPackingStock(buf: Buffer, actor: string): ImportResult {
   const result = emptyResult();
   if (rows.length === 0 || !("key" in rows[0])) {
     result.structureError =
-      "형식을 인식하지 못했습니다. 첫 행에 kind, key, category, sub, unit, bagKg, bagMatKey, stock 열이 있어야 합니다.";
+      "형식을 인식하지 못했습니다. 첫 행에 kind, key, category, sub, unit, bagKg, bagMatKey, stock 열이 있어야 합니다. (생산누계 열은 선택사항입니다: cumulativeProduced 또는 생산누계)";
     return result;
   }
 
   const db = getDb();
   const findItem = db.prepare("SELECT key FROM packing_item WHERE key = ?");
-  const updateStock = db.prepare("UPDATE packing_item SET stock = ? WHERE key = ?");
+  const updateStock = db.prepare(
+    `UPDATE packing_item SET stock = ?, cumulative_produced = COALESCE(?, cumulative_produced) WHERE key = ?`
+  );
   const insertItem = db.prepare(
-    `INSERT INTO packing_item (key, kind, category, sub, unit, bag_kg, bag_mat_key, stock)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO packing_item (key, kind, category, sub, unit, bag_kg, bag_mat_key, stock, cumulative_produced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   for (const row of rows) {
     const key = str(row.key);
     const stock = num(row.stock);
+    const cumulativeProduced = num(row.cumulativeProduced ?? row["생산누계"]);
     if (!key || stock == null) {
       result.skipped++;
       result.skippedDetails.push(`key 또는 stock 값이 없는 행: ${JSON.stringify(row)}`);
@@ -450,7 +457,7 @@ export function importPackingStock(buf: Buffer, actor: string): ImportResult {
     }
 
     if (findItem.get(key)) {
-      updateStock.run(stock, key);
+      updateStock.run(stock, cumulativeProduced, key);
       result.updated++;
     } else {
       insertItem.run(
@@ -461,7 +468,8 @@ export function importPackingStock(buf: Buffer, actor: string): ImportResult {
         str(row.unit),
         num(row.bagKg),
         str(row.bagMatKey),
-        stock
+        stock,
+        cumulativeProduced ?? 0
       );
       result.inserted++;
     }

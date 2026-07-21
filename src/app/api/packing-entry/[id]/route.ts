@@ -47,12 +47,12 @@ export async function PUT(
   try {
     runInTransaction((db) => {
       if (before.type === "pack") {
-        applyPackEffect(db, toEffect(before), -1);
+        applyPackEffect(db, { ...toEffect(before), isProduction: true }, -1);
       } else {
         applyPackEffect(db, { productKey: before.product_key, qty: -before.qty }, -1);
       }
       if (updated.type === "pack") {
-        applyPackEffect(db, toEffect(updated), 1);
+        applyPackEffect(db, { ...toEffect(updated), isProduction: true }, 1);
       } else {
         applyPackEffect(db, { productKey: updated.product_key, qty: -updated.qty }, 1);
       }
@@ -122,7 +122,7 @@ export async function DELETE(
 
   runInTransaction((db) => {
     if (before.type === "pack") {
-      applyPackEffect(db, toEffect(before), -1);
+      applyPackEffect(db, { ...toEffect(before), isProduction: true }, -1);
     } else {
       applyPackEffect(db, { productKey: before.product_key, qty: -before.qty }, -1);
     }

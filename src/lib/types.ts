@@ -172,6 +172,7 @@ export interface PackingItem {
   bag_kg: number | null;
   bag_mat_key: string | null;
   stock: number;
+  cumulative_produced: number;
 }
 
 export type PackingEntryType = "pack" | "ship";
