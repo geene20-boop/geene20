@@ -29,16 +29,32 @@ function UploadCard({
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const session = useSiteSession();
+  const { enteredBy, setEnteredBy } = useEnteredBy();
+  const [nameError, setNameError] = useState(false);
+
+  useEffect(() => {
+    if (session.loggedIn && session.displayName) {
+
+      setEnteredBy(session.displayName);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.loggedIn, session.displayName]);
 
   async function onUpload() {
     const file = inputRef.current?.files?.[0];
     if (!file) return;
+    if (!enteredBy.trim()) {
+      setNameError(true);
+      return;
+    }
+    setNameError(false);
     setBusy(true);
     setError(null);
     setResult(null);
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("entered_by", enteredBy);
       const res = await fetch(`/api/import?kind=${kind}`, { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "가져오기에 실패했습니다.");
@@ -59,6 +75,14 @@ function UploadCard({
       <div>
         <h2 className="font-semibold text-slate-800">{title}</h2>
         <p className="text-sm text-slate-500 mt-1">{description}</p>
+      </div>
+      <div className="max-w-xs">
+        <EnteredByField
+          value={enteredBy}
+          onChange={setEnteredBy}
+          error={nameError}
+          lockedValue={session.loggedIn ? session.displayName : null}
+        />
       </div>
       <input
         ref={inputRef}

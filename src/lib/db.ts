@@ -281,6 +281,7 @@ export function getDb(): Database.Database {
     ["entered_by", "TEXT"],
     ["updated_by", "TEXT"],
   ]);
+  migrateColumns("spec_limit", [["updated_by", "TEXT"]]);
 
   const specCount = db.prepare("SELECT COUNT(*) as c FROM spec_limit").get() as { c: number };
   if (specCount.c === 0) {
