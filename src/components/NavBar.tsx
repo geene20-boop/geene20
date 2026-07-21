@@ -37,6 +37,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "제품포장",
     items: [
       { href: "/packing", label: "재고현황" },
+      { href: "/packing/production-summary", label: "생산누계" },
       { href: "/packing/entry", label: "생산/출하 입력" },
       { href: "/packing/restock", label: "입고" },
       { href: "/packing/breakage", label: "파손" },

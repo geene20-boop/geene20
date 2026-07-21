@@ -21,11 +21,10 @@ export async function GET(req: NextRequest) {
     .prepare("SELECT * FROM production_log WHERE date = ? AND shift = ?")
     .get(date, shift) as ProductionLog | undefined;
 
-  let carryoverPreview: { dryer: number | null; rto: number | null } | null = null;
-  if (!existing) {
-    const prev = getPreviousProductionLog(date, shift);
-    carryoverPreview = { dryer: prev?.lng_dryer ?? null, rto: prev?.lng_rto ?? null };
-  }
+  // 직전 교대의 실제 누계값. 새 입력의 기본값으로 쓰이는 동시에, 기존 기록을 열었을 때
+  // 그 기록에 저장된 전일재고가 직전 교대의 실제 값과 어긋나지 않는지 확인하는 데도 쓰인다.
+  const prev = getPreviousProductionLog(date, shift);
+  const carryoverPreview = { dryer: prev?.lng_dryer ?? null, rto: prev?.lng_rto ?? null };
 
   const mergedRows = getMergedRows(date, date);
   const match = mergedRows.find((r) => r.date === date && r.shift === shift);
