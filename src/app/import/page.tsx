@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useEnteredBy } from "@/lib/useEnteredBy";
+import EnteredByField from "@/components/EnteredByField";
+import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 
 type ImportResult = {
   inserted: number;
@@ -214,6 +217,87 @@ function PackingLogSettingCard() {
   );
 }
 
+function PackingStockImportCard() {
+  const admin = useAdminSession();
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const { enteredBy, setEnteredBy } = useEnteredBy();
+  const [nameError, setNameError] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    admin.refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!enteredBy.trim()) {
+      setNameError(true);
+      e.target.value = "";
+      return;
+    }
+    setMessage("업로드 중...");
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("entered_by", enteredBy.trim());
+    try {
+      const res = await fetch("/api/packing-item/import", { method: "POST", body: fd });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "업로드 실패");
+      if (json.structureError) {
+        setMessage(`형식 오류: ${json.structureError}`);
+      } else {
+        setMessage(`반영 완료: 신규 ${json.inserted}건, 갱신 ${json.updated}건, 건너뜀 ${json.skipped}건`);
+      }
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border p-5 flex flex-col gap-3">
+      <div>
+        <h2 className="font-semibold text-slate-800">포장일지 재고 1회성 가져오기</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          기존 구글시트 &quot;현재고&quot; 탭을 엑셀/CSV로 내보내서 업로드하면 현재 재고 수량이
+          이 앱에 반영됩니다. 최초 1회만 실행하면 되고, 이후 입고·생산·파손·반품 기록은 이 앱에서
+          새로 쌓입니다. 다시 업로드해도 같은 품목은 재고 수량만 최신값으로 덮어씁니다.
+        </p>
+      </div>
+      {admin.loggedIn ? (
+        <div className="flex flex-col gap-2">
+          <EnteredByField value={enteredBy} onChange={setEnteredBy} error={nameError} />
+          <label className="text-sm border border-slate-300 rounded-md px-3 py-1.5 cursor-pointer w-fit bg-white">
+            엑셀/CSV 업로드
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={onUpload} className="hidden" />
+          </label>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowAdminModal(true)}
+          className="text-sm border border-slate-300 rounded-md px-3 py-1.5 w-fit text-slate-400"
+        >
+          엑셀/CSV 업로드 (관리자 전용)
+        </button>
+      )}
+      {message && <p className="text-sm text-slate-600">{message}</p>}
+      {showAdminModal && (
+        <AdminLoginModal
+          onClose={() => setShowAdminModal(false)}
+          onSuccess={() => {
+            admin.refresh();
+            setShowAdminModal(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function ImportPage() {
   return (
     <div className="flex flex-col gap-6">
@@ -239,6 +323,7 @@ export default function ImportPage() {
       </div>
 
       <PackingLogSettingCard />
+      <PackingStockImportCard />
     </div>
   );
 }

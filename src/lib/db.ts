@@ -138,7 +138,7 @@ export function getDb(): Database.Database {
     -- 입력/수정 이력 통합 로그. 각 데이터 화면에서 저장할 때마다 한 줄씩 남는다.
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      table_name TEXT NOT NULL,        -- 'production_log' | 'qc_test' | 'electricity_usage' | 'monthly_utility'
+      table_name TEXT NOT NULL,        -- 'production_log' | 'qc_test' | 'electricity_usage' | 'monthly_utility' | 'packing_*'
       record_key TEXT NOT NULL,        -- 사람이 알아볼 수 있는 식별자 (예: "2026-07-19 주", "2026-07 1공장")
       action TEXT NOT NULL,            -- 'create' | 'update' | 'delete'
       actor TEXT NOT NULL,             -- 입력/수정한 사람 이름
@@ -147,6 +147,92 @@ export function getDb(): Database.Database {
     );
 
     CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
+
+    -- ---------- 제품포장(재고관리) ----------
+    CREATE TABLE IF NOT EXISTS packing_item (
+      key TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,               -- 'product' | 'bagmat' | 'aux'
+      category TEXT,                    -- 대분류 (예: 석회고토, 입상규산) - product만 사용
+      sub TEXT,                         -- 세부 항목명
+      unit TEXT,                        -- '포' | '톤' | '개' 등
+      bag_kg REAL,                      -- 포대/톤백 단위 중량(kg)
+      bag_mat_key TEXT,                 -- 이 제품 포장 시 소모되는 포장지 품목 key
+      stock REAL NOT NULL DEFAULT 0     -- 현재 재고 수량
+    );
+
+    CREATE TABLE IF NOT EXISTS packing_entry (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      type TEXT NOT NULL,               -- 'pack' | 'ship'
+      product_key TEXT NOT NULL,
+      qty REAL NOT NULL,
+      unit TEXT,
+      topsheet_key TEXT, topsheet_qty REAL,
+      wrap_key TEXT, wrap_qty REAL,
+      bag_mat_key TEXT, bag_mat_qty REAL,
+      aux_use_key TEXT, aux_use_qty REAL,
+      worker TEXT,                      -- 작업자 (production_log.worker와 동일 개념)
+      entered_by TEXT,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_packing_entry_date ON packing_entry(date);
+
+    CREATE TABLE IF NOT EXISTS packing_restock (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      kind TEXT,
+      key TEXT NOT NULL,
+      qty REAL NOT NULL,
+      worker TEXT,
+      entered_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_packing_restock_date ON packing_restock(date);
+
+    CREATE TABLE IF NOT EXISTS packing_breakage (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      kind TEXT,
+      key TEXT NOT NULL,
+      qty REAL NOT NULL,
+      worker TEXT,
+      entered_by TEXT,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_packing_breakage_date ON packing_breakage(date);
+
+    CREATE TABLE IF NOT EXISTS packing_return (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      kind TEXT,
+      key TEXT NOT NULL,
+      qty REAL NOT NULL,
+      worker TEXT,
+      entered_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_packing_return_date ON packing_return(date);
+
+    CREATE TABLE IF NOT EXISTS packing_adjustment (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      kind TEXT,
+      key TEXT NOT NULL,
+      qty REAL NOT NULL,                -- 부호 있는 증감값
+      reason TEXT,
+      entered_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_packing_adjustment_date ON packing_adjustment(date);
   `);
 
   // 기존에 만들어진 DB에도 새 컬럼이 안전하게 추가되도록 마이그레이션
@@ -192,6 +278,47 @@ export function getDb(): Database.Database {
     insert.run("hardness", 4, 12);
     insert.run("moisture", 1.5, 4);
     insert.run("gas_per_hour", 200, 450);
+  }
+
+  const packingItemCount = db.prepare("SELECT COUNT(*) as c FROM packing_item").get() as {
+    c: number;
+  };
+  if (packingItemCount.c === 0) {
+    const insertItem = db.prepare(
+      "INSERT INTO packing_item (kind, key, category, sub, unit, bag_kg, bag_mat_key, stock) VALUES (?, ?, ?, ?, ?, ?, ?, 0)"
+    );
+    const initialItems: [string, string, string, string, string, number, string][] = [
+      ["product", "sekhoego_musang", "석회고토", "무상분", "포", 20, "bm_sekhoego_musang"],
+      ["product", "sekhoego_yusang", "석회고토", "유상분", "포", 20, "bm_sekhoego_yusang"],
+      ["product", "sekhoego_saeng", "석회고토", "생생나라(유기농)", "포", 20, "bm_sekhoego_saeng"],
+      ["product", "gyusan_musang", "입상규산", "무상분", "포", 20, "bm_gyusan_musang"],
+      ["product", "gyusan_yusang", "입상규산", "유상분", "포", 20, "bm_gyusan_yusang"],
+      ["product", "gyusan_saeng", "입상규산", "생생나라(유기농)", "포", 20, "bm_gyusan_saeng"],
+      ["product", "calcium_yusang", "칼슘유황", "유상(백색)", "포", 20, "bm_calcium"],
+      ["product", "tonbag_sekhoego", "톤백", "석회고토(1T)", "톤", 1000, ""],
+      ["product", "tonbag_gyusan", "톤백", "규산(1T)", "톤", 1000, ""],
+      ["product", "saengsaeng_vita", "생생비타", "기본", "개", 0, ""],
+      ["bagmat", "bm_sekhoego_musang", "", "석회고토 무상분 포장지", "", 0, ""],
+      ["bagmat", "bm_sekhoego_yusang", "", "석회고토 유상분 포장지", "", 0, ""],
+      ["bagmat", "bm_sekhoego_saeng", "", "석회고토 생생나라(유기농) 포장지", "", 0, ""],
+      ["bagmat", "bm_gyusan_musang", "", "입상규산 무상분 포장지", "", 0, ""],
+      ["bagmat", "bm_gyusan_yusang", "", "입상규산 유상분 포장지", "", 0, ""],
+      ["bagmat", "bm_gyusan_saeng", "", "입상규산 생생나라(유기농) 포장지", "", 0, ""],
+      ["bagmat", "bm_calcium", "", "칼슘유황 유상(백색) 포장지", "", 0, ""],
+      ["bagmat", "bm_tonbag_liner", "", "톤백 내피 有", "", 0, ""],
+      ["bagmat", "bm_tonbag_noliner", "", "톤백 내피 無", "", 0, ""],
+      ["aux", "topsheet_black", "", "탑시트(흑)", "", 0, ""],
+      ["aux", "topsheet_white", "", "탑시트(백)", "", 0, ""],
+      ["aux", "wrap_black", "", "스트레치필름(흑) [랩핑]", "", 0, ""],
+      ["aux", "wrap_clear", "", "스트레치필름(투) [랩핑]", "", 0, ""],
+      ["aux", "plt_wood", "", "목재PLT", "", 0, ""],
+      ["aux", "plt_fumigation", "", "수출용 훈증PLT", "", 0, ""],
+      ["aux", "plastic_10l", "", "10리터통", "", 0, ""],
+      ["aux", "bib", "", "BIB", "", 0, ""],
+    ];
+    for (const [kind, key, category, sub, unit, bagKg, bagMatKey] of initialItems) {
+      insertItem.run(kind, key, category, sub, unit, bagKg, bagMatKey);
+    }
   }
 
   const authRow = db.prepare("SELECT id FROM admin_auth WHERE id = 1").get();

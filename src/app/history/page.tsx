@@ -19,6 +19,12 @@ const TABLE_OPTIONS: { value: AuditTable | ""; label: string }[] = [
   { value: "qc_test", label: "QC측정" },
   { value: "electricity_usage", label: "전력사용량" },
   { value: "monthly_utility", label: "월별 유틸리티" },
+  { value: "packing_item", label: "포장 품목관리" },
+  { value: "packing_entry", label: "포장 생산/출하" },
+  { value: "packing_restock", label: "포장 입고" },
+  { value: "packing_breakage", label: "포장 파손" },
+  { value: "packing_adjustment", label: "포장 재고조정" },
+  { value: "packing_return", label: "포장 반품" },
 ];
 
 const ACTION_BADGE: Record<string, string> = {

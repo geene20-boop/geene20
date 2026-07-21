@@ -158,3 +158,88 @@ export interface UtilityMonthRow {
   elecByProduct: Record<string, number>;
   lngByProduct: Record<string, number>;
 }
+
+// ---------- 제품포장(재고관리) ----------
+
+export type PackingKind = "product" | "bagmat" | "aux";
+
+export interface PackingItem {
+  key: string;
+  kind: PackingKind;
+  category: string | null;
+  sub: string | null;
+  unit: string | null;
+  bag_kg: number | null;
+  bag_mat_key: string | null;
+  stock: number;
+}
+
+export type PackingEntryType = "pack" | "ship";
+
+export interface PackingEntry {
+  id: string;
+  date: string;
+  type: PackingEntryType;
+  product_key: string;
+  qty: number;
+  unit: string | null;
+  topsheet_key: string | null;
+  topsheet_qty: number | null;
+  wrap_key: string | null;
+  wrap_qty: number | null;
+  bag_mat_key: string | null;
+  bag_mat_qty: number | null;
+  aux_use_key: string | null;
+  aux_use_qty: number | null;
+  worker: string | null;
+  entered_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PackingRestock {
+  id: string;
+  date: string;
+  kind: string | null;
+  key: string;
+  qty: number;
+  worker: string | null;
+  entered_by: string | null;
+  created_at: string;
+}
+
+export interface PackingBreakage {
+  id: string;
+  date: string;
+  kind: string | null;
+  key: string;
+  qty: number;
+  worker: string | null;
+  entered_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PackingReturn {
+  id: string;
+  date: string;
+  kind: string | null;
+  key: string;
+  qty: number;
+  worker: string | null;
+  entered_by: string | null;
+  created_at: string;
+}
+
+export interface PackingAdjustment {
+  id: string;
+  date: string;
+  kind: string | null;
+  key: string;
+  qty: number; // 부호 있는 증감값
+  reason: string | null;
+  entered_by: string | null;
+  created_at: string;
+}
