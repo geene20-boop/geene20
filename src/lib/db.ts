@@ -233,6 +233,18 @@ export function getDb(): Database.Database {
     );
 
     CREATE INDEX IF NOT EXISTS idx_packing_adjustment_date ON packing_adjustment(date);
+
+    -- 개인별 계정 (아이디/비밀번호 + 조회/입력 권한). 관리자 비밀번호(admin_auth)와는 별개.
+    CREATE TABLE IF NOT EXISTS user_account (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      display_name TEXT,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL,               -- 'viewer' | 'editor'
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // 기존에 만들어진 DB에도 새 컬럼이 안전하게 추가되도록 마이그레이션

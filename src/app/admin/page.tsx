@@ -3,16 +3,29 @@
 import { useEffect, useState } from "react";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 
-function SitePasswordCard() {
-  const [configured, setConfigured] = useState(false);
+type AccountRole = "viewer" | "editor";
+
+interface AccountRow {
+  id: number;
+  username: string;
+  display_name: string | null;
+  role: AccountRole;
+  active: number;
+}
+
+function AccountManagementCard() {
+  const [accounts, setAccounts] = useState<AccountRow[]>([]);
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
+  const [role, setRole] = useState<AccountRole>("editor");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function refresh() {
-    const res = await fetch("/api/site/session");
-    const data = await res.json();
-    setConfigured(!!data.configured);
+    const res = await fetch("/api/accounts");
+    if (!res.ok) return;
+    setAccounts(await res.json());
   }
 
   useEffect(() => {
@@ -20,18 +33,21 @@ function SitePasswordCard() {
     refresh();
   }, []);
 
-  async function save() {
+  async function addAccount(e: React.FormEvent) {
+    e.preventDefault();
     setBusy(true);
     setMessage(null);
     try {
-      const res = await fetch("/api/site/setup", {
+      const res = await fetch("/api/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password, role, displayName }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "실패했습니다.");
+      setUsername("");
+      setDisplayName("");
       setPassword("");
-      setMessage("저장되었습니다.");
+      setMessage("계정이 추가되었습니다.");
       refresh();
     } catch (err) {
       setMessage(`오류: ${(err as Error).message}`);
@@ -40,66 +56,143 @@ function SitePasswordCard() {
     }
   }
 
-  async function clear() {
-    if (!confirm("현장 비밀번호를 해제하면 누구나 로그인 없이 앱을 사용할 수 있게 됩니다. 계속할까요?"))
+  async function changeRole(id: number, newRole: AccountRole) {
+    await fetch(`/api/accounts/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: newRole }),
+    });
+    refresh();
+  }
+
+  async function toggleActive(account: AccountRow) {
+    await fetch(`/api/accounts/${account.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: account.active ? false : true }),
+    });
+    refresh();
+  }
+
+  async function resetPassword(id: number) {
+    const newPassword = prompt("새 비밀번호를 입력하세요 (4자 이상)");
+    if (!newPassword) return;
+    const res = await fetch(`/api/accounts/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ newPassword }),
+    });
+    if (!res.ok) {
+      setMessage(`오류: ${(await res.json()).error ?? "실패했습니다."}`);
       return;
-    setBusy(true);
-    setMessage(null);
-    try {
-      const res = await fetch("/api/site/setup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: "" }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error ?? "실패했습니다.");
-      setMessage("현장 비밀번호가 해제되었습니다.");
-      refresh();
-    } catch (err) {
-      setMessage(`오류: ${(err as Error).message}`);
-    } finally {
-      setBusy(false);
     }
+    setMessage("비밀번호가 재설정되었습니다.");
   }
 
   return (
-    <div className="bg-white rounded-xl border p-5 flex flex-col gap-3">
+    <div className="bg-white rounded-xl border p-5 flex flex-col gap-4">
       <div>
-        <h2 className="font-semibold text-slate-800">현장 작업자 접근 비밀번호</h2>
+        <h2 className="font-semibold text-slate-800">계정 관리</h2>
         <p className="text-sm text-slate-500 mt-1">
-          여기서 설정한 비밀번호를 현장 작업자들과 공유하세요. 이 비밀번호를 입력해야 앱의 어떤
-          화면이든 사용할 수 있습니다. (관리자 비밀번호와는 별개입니다)
+          개인별 아이디/비밀번호로 로그인하며, 조회만 가능한 &quot;viewer&quot;와 입력까지 가능한
+          &quot;editor&quot; 중 하나의 권한을 부여합니다. (관리자 비밀번호와는 별개입니다)
         </p>
-        <p className="text-xs mt-2">
-          현재 상태:{" "}
-          {configured ? (
-            <span className="text-emerald-600 font-medium">설정됨</span>
-          ) : (
-            <span className="text-amber-600 font-medium">설정 안 됨 (지금은 누구나 접근 가능)</span>
-          )}
-        </p>
-      </div>
-      <div className="flex gap-2 items-center flex-wrap">
-        <input
-          type="text"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="새 현장 비밀번호"
-          className="border rounded-md px-2 py-1.5 text-sm"
-        />
-        <button
-          onClick={save}
-          disabled={busy || password.length < 4}
-          className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
-        >
-          저장
-        </button>
-        {configured && (
-          <button onClick={clear} disabled={busy} className="border rounded-md px-3 py-1.5 text-sm text-red-600">
-            해제
-          </button>
+        {accounts.length === 0 && (
+          <p className="text-xs mt-2 text-amber-600 font-medium">
+            아직 계정이 없어서 지금은 누구나 로그인 없이 접근 가능합니다. 계정을 하나 이상 만들면
+            그때부터 로그인이 필요해집니다.
+          </p>
         )}
       </div>
+
+      <form onSubmit={addAccount} className="flex gap-2 items-end flex-wrap">
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">아이디</span>
+          <input value={username} onChange={(e) => setUsername(e.target.value)} className="border rounded-md px-2 py-1.5 text-sm" />
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">이름(표시용)</span>
+          <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="border rounded-md px-2 py-1.5 text-sm" />
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">초기 비밀번호</span>
+          <input
+            type="text"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="border rounded-md px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">권한</span>
+          <select value={role} onChange={(e) => setRole(e.target.value as AccountRole)} className="border rounded-md px-2 py-1.5 text-sm">
+            <option value="editor">입력 가능(editor)</option>
+            <option value="viewer">조회만(viewer)</option>
+          </select>
+        </label>
+        <button
+          type="submit"
+          disabled={busy || !username.trim() || password.length < 4}
+          className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
+        >
+          계정 추가
+        </button>
+      </form>
       {message && <p className="text-sm text-slate-600">{message}</p>}
+
+      <table className="w-full text-sm">
+        <thead className="bg-slate-100 text-slate-600">
+          <tr>
+            <th className="text-left px-2 py-1.5">아이디</th>
+            <th className="text-left px-2 py-1.5">이름</th>
+            <th className="text-left px-2 py-1.5">권한</th>
+            <th className="text-left px-2 py-1.5">상태</th>
+            <th className="text-left px-2 py-1.5">관리</th>
+          </tr>
+        </thead>
+        <tbody>
+          {accounts.map((a) => (
+            <tr key={a.id} className="border-t">
+              <td className="px-2 py-1.5">{a.username}</td>
+              <td className="px-2 py-1.5">{a.display_name ?? "-"}</td>
+              <td className="px-2 py-1.5">
+                <select
+                  value={a.role}
+                  onChange={(e) => changeRole(a.id, e.target.value as AccountRole)}
+                  className="border rounded-md px-1.5 py-1 text-xs"
+                >
+                  <option value="editor">입력 가능(editor)</option>
+                  <option value="viewer">조회만(viewer)</option>
+                </select>
+              </td>
+              <td className="px-2 py-1.5">
+                {a.active ? (
+                  <span className="text-emerald-600">활성</span>
+                ) : (
+                  <span className="text-slate-400">비활성</span>
+                )}
+              </td>
+              <td className="px-2 py-1.5">
+                <div className="flex gap-2">
+                  <button onClick={() => resetPassword(a.id)} className="text-xs border rounded-md px-2 py-1 bg-white">
+                    비밀번호 재설정
+                  </button>
+                  <button onClick={() => toggleActive(a)} className="text-xs border rounded-md px-2 py-1 bg-white">
+                    {a.active ? "비활성화" : "활성화"}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+          {accounts.length === 0 && (
+            <tr>
+              <td colSpan={5} className="px-2 py-6 text-center text-slate-400">
+                아직 계정이 없습니다.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -230,14 +323,14 @@ export default function AdminPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">관리자 설정</h1>
-          <p className="text-sm text-slate-500 mt-1">현장 비밀번호 관리, 데이터 백업 등을 설정합니다.</p>
+          <p className="text-sm text-slate-500 mt-1">계정 관리, 데이터 백업 등을 설정합니다.</p>
         </div>
         <button onClick={() => admin.logout()} className="text-xs underline text-slate-500">
           로그아웃
         </button>
       </div>
 
-      <SitePasswordCard />
+      <AccountManagementCard />
       <BackupCard />
     </div>
   );

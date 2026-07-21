@@ -3,20 +3,25 @@ import {
   ADMIN_SESSION_COOKIE,
   SITE_SESSION_COOKIE,
   createSessionToken,
-  hasSitePassword,
+  createUserSessionToken,
+  hasAnyAccount,
   isLoginLocked,
   recordLoginFailure,
   recordLoginSuccess,
+  verifyAccountLogin,
   verifyAdminPassword,
-  verifySitePassword,
 } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
-  if (!hasSitePassword()) {
-    return NextResponse.json({ error: "아직 현장 비밀번호가 설정되지 않았습니다." }, { status: 409 });
+  if (!hasAnyAccount()) {
+    return NextResponse.json({ error: "아직 계정이 생성되지 않았습니다." }, { status: 409 });
   }
 
-  const lockKey = "site";
+  const { username, password } = await req.json();
+  const id = String(username ?? "").trim();
+  const pw = String(password ?? "");
+
+  const lockKey = `site:${id || "unknown"}`;
   const lockedMs = isLoginLocked(lockKey);
   if (lockedMs > 0) {
     return NextResponse.json(
@@ -25,10 +30,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { password } = await req.json();
-  const pw = String(password ?? "");
-
-  // 관리자 비밀번호로도 게이트를 통과할 수 있게 해서, 현장 비밀번호를 몰라도
+  // 관리자 비밀번호로도 게이트를 통과할 수 있게 해서, 개인 계정을 몰라도
   // 관리자가 /admin에서 설정을 관리할 수 있도록 함
   if (verifyAdminPassword(pw)) {
     recordLoginSuccess(lockKey);
@@ -44,14 +46,15 @@ export async function POST(req: NextRequest) {
     return res;
   }
 
-  if (!verifySitePassword(pw)) {
+  const account = id ? verifyAccountLogin(id, pw) : null;
+  if (!account) {
     recordLoginFailure(lockKey);
-    return NextResponse.json({ error: "비밀번호가 올바르지 않습니다." }, { status: 401 });
+    return NextResponse.json({ error: "아이디 또는 비밀번호가 올바르지 않습니다." }, { status: 401 });
   }
   recordLoginSuccess(lockKey);
 
-  const token = createSessionToken("site");
-  const res = NextResponse.json({ ok: true });
+  const token = createUserSessionToken(account.id, account.role);
+  const res = NextResponse.json({ ok: true, role: account.role });
   res.cookies.set(SITE_SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
