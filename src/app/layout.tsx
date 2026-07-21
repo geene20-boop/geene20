@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
 import SiteGate from "@/components/SiteGate";
-import { hasSitePassword, isSiteRequest } from "@/lib/auth";
+import { hasAnyAccount, isSiteRequest } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "HANIL QC — 설비/품질 관리 시스템",
@@ -31,7 +31,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const cookieStore = await cookies();
-  const needsGate = hasSitePassword() && !isSiteRequest({ cookies: cookieStore });
+  const needsGate = hasAnyAccount() && !isSiteRequest({ cookies: cookieStore });
 
   return (
     <html lang="ko" className="h-full antialiased">

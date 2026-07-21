@@ -1,12 +1,20 @@
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
-import { getDb, getSetting, setSetting } from "@/lib/db";
+import { getDb } from "@/lib/db";
 
 export const ADMIN_SESSION_COOKIE = "admin_session";
 export const SITE_SESSION_COOKIE = "site_session";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12시간
 
 type Scope = "admin" | "site";
+export type AccountRole = "viewer" | "editor";
+
+interface TokenPayload {
+  scope: Scope;
+  exp: number;
+  accountId?: number;
+  role?: AccountRole;
+}
 
 interface AuthRow {
   password_hash: string | null;
@@ -51,54 +59,144 @@ export function verifyRecoveryCode(code: string): boolean {
   return crypto.timingSafeEqual(Buffer.from(code), Buffer.from(expected));
 }
 
-// ---------- 현장(작업자) 공용 비밀번호 ----------
+// ---------- 개인별 계정 (아이디/비밀번호 + 조회/입력 권한) ----------
 
-const SITE_PASSWORD_KEY = "site_password_hash";
-
-export function hasSitePassword(): boolean {
-  return getSetting(SITE_PASSWORD_KEY) != null;
+export interface UserAccount {
+  id: number;
+  username: string;
+  display_name: string | null;
+  role: AccountRole;
+  active: number;
+  created_at: string;
+  updated_at: string;
 }
 
-export function setSitePassword(password: string): void {
-  setSetting(SITE_PASSWORD_KEY, bcrypt.hashSync(password, 10));
+const ACCOUNT_COLUMNS = "id, username, display_name, role, active, created_at, updated_at";
+
+export function hasAnyAccount(): boolean {
+  const db = getDb();
+  const row = db.prepare("SELECT COUNT(*) as c FROM user_account").get() as { c: number };
+  return row.c > 0;
 }
 
-export function verifySitePassword(password: string): boolean {
-  const hash = getSetting(SITE_PASSWORD_KEY);
-  if (!hash) return false;
-  return bcrypt.compareSync(password, hash);
+export function listAccounts(): UserAccount[] {
+  const db = getDb();
+  return db
+    .prepare(`SELECT ${ACCOUNT_COLUMNS} FROM user_account ORDER BY username`)
+    .all() as UserAccount[];
 }
 
-export function clearSitePassword(): void {
-  setSetting(SITE_PASSWORD_KEY, "");
+export function getAccountById(id: number): UserAccount | undefined {
+  const db = getDb();
+  return db.prepare(`SELECT ${ACCOUNT_COLUMNS} FROM user_account WHERE id = ?`).get(id) as
+    | UserAccount
+    | undefined;
 }
 
-// ---------- 세션 토큰 (관리자/현장 공용 서명 로직, scope로 구분) ----------
+export function createAccount(
+  username: string,
+  password: string,
+  role: AccountRole,
+  displayName: string | null
+): UserAccount {
+  const db = getDb();
+  const hash = bcrypt.hashSync(password, 10);
+  const info = db
+    .prepare("INSERT INTO user_account (username, display_name, password_hash, role) VALUES (?, ?, ?, ?)")
+    .run(username, displayName, hash, role);
+  return db
+    .prepare(`SELECT ${ACCOUNT_COLUMNS} FROM user_account WHERE id = ?`)
+    .get(info.lastInsertRowid) as UserAccount;
+}
+
+export function updateAccount(
+  id: number,
+  updates: { displayName?: string | null; role?: AccountRole; active?: boolean }
+): UserAccount {
+  const db = getDb();
+  const current = db.prepare("SELECT * FROM user_account WHERE id = ?").get(id) as
+    | (UserAccount & { password_hash: string })
+    | undefined;
+  if (!current) throw new Error("계정을 찾을 수 없습니다.");
+  const displayName = updates.displayName !== undefined ? updates.displayName : current.display_name;
+  const role = updates.role ?? current.role;
+  const active = updates.active !== undefined ? (updates.active ? 1 : 0) : current.active;
+  db.prepare(
+    "UPDATE user_account SET display_name = ?, role = ?, active = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(displayName, role, active, id);
+  return db.prepare(`SELECT ${ACCOUNT_COLUMNS} FROM user_account WHERE id = ?`).get(id) as UserAccount;
+}
+
+export function resetAccountPassword(id: number, newPassword: string): void {
+  const db = getDb();
+  const hash = bcrypt.hashSync(newPassword, 10);
+  const info = db
+    .prepare("UPDATE user_account SET password_hash = ?, updated_at = datetime('now') WHERE id = ?")
+    .run(hash, id);
+  if (info.changes === 0) throw new Error("계정을 찾을 수 없습니다.");
+}
+
+export function verifyAccountLogin(
+  username: string,
+  password: string
+): { id: number; role: AccountRole; displayName: string | null } | null {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT id, password_hash, role, display_name, active FROM user_account WHERE username = ?")
+    .get(username) as
+    | { id: number; password_hash: string; role: AccountRole; display_name: string | null; active: number }
+    | undefined;
+  if (!row || !row.active) return null;
+  if (!bcrypt.compareSync(password, row.password_hash)) return null;
+  return { id: row.id, role: row.role, displayName: row.display_name };
+}
+
+// ---------- 세션 토큰 (관리자/개인계정 공용 서명 로직, scope로 구분) ----------
 
 function sign(payload: string, secret: string): string {
   return crypto.createHmac("sha256", secret).update(payload).digest("base64url");
 }
 
-export function createSessionToken(scope: Scope): string {
+function signPayload(payload: TokenPayload, secret: string): string {
+  const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${encoded}.${sign(encoded, secret)}`;
+}
+
+function decodeToken(token: string | undefined | null): TokenPayload | null {
+  if (!token) return null;
+  const [payload, sig] = token.split(".");
+  if (!payload || !sig) return null;
   const { session_secret } = getAdminAuthRow();
-  const payload = Buffer.from(JSON.stringify({ scope, exp: Date.now() + SESSION_TTL_MS })).toString(
-    "base64url"
-  );
-  return `${payload}.${sign(payload, session_secret)}`;
+  if (sign(payload, session_secret) !== sig) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString()) as TokenPayload;
+    if (typeof parsed.exp !== "number" || parsed.exp <= Date.now()) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function createSessionToken(scope: "admin"): string {
+  const { session_secret } = getAdminAuthRow();
+  return signPayload({ scope, exp: Date.now() + SESSION_TTL_MS }, session_secret);
+}
+
+export function createUserSessionToken(accountId: number, role: AccountRole): string {
+  const { session_secret } = getAdminAuthRow();
+  return signPayload({ scope: "site", accountId, role, exp: Date.now() + SESSION_TTL_MS }, session_secret);
 }
 
 export function verifySessionToken(token: string | undefined | null, scope: Scope): boolean {
-  if (!token) return false;
-  const [payload, sig] = token.split(".");
-  if (!payload || !sig) return false;
-  const { session_secret } = getAdminAuthRow();
-  if (sign(payload, session_secret) !== sig) return false;
-  try {
-    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString());
-    return parsed.scope === scope && typeof parsed.exp === "number" && parsed.exp > Date.now();
-  } catch {
-    return false;
-  }
+  return decodeToken(token)?.scope === scope;
+}
+
+export function getUserSession(req: {
+  cookies: { get(name: string): { value: string } | undefined };
+}): { accountId: number; role: AccountRole } | null {
+  const parsed = decodeToken(req.cookies.get(SITE_SESSION_COOKIE)?.value);
+  if (!parsed || parsed.scope !== "site" || parsed.accountId == null || !parsed.role) return null;
+  return { accountId: parsed.accountId, role: parsed.role };
 }
 
 export function isAdminRequest(req: {
@@ -113,6 +211,13 @@ export function isSiteRequest(req: {
   return (
     verifySessionToken(req.cookies.get(SITE_SESSION_COOKIE)?.value, "site") || isAdminRequest(req)
   );
+}
+
+export function isEditorRequest(req: {
+  cookies: { get(name: string): { value: string } | undefined };
+}): boolean {
+  if (isAdminRequest(req)) return true;
+  return getUserSession(req)?.role === "editor";
 }
 
 // ---------- 로그인 시도 제한 (무차별 대입 방지) ----------

@@ -58,6 +58,47 @@ function isGroupActive(group: NavGroup, pathname: string): boolean {
   return group.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  admin: "관리자",
+  editor: "입력가능",
+  viewer: "조회전용",
+};
+
+function AccountBadge() {
+  const [session, setSession] = useState<{
+    loggedIn: boolean;
+    displayName: string | null;
+    role: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/site/session")
+      .then((r) => r.json())
+      .then((d) =>
+        setSession({ loggedIn: !!d.loggedIn, displayName: d.displayName, role: d.role })
+      );
+  }, []);
+
+  async function logout() {
+    await fetch("/api/site/logout", { method: "POST" });
+    window.location.reload();
+  }
+
+  if (!session?.loggedIn) return null;
+
+  return (
+    <div className="ml-auto hidden md:flex items-center gap-2 text-xs text-slate-500">
+      <span>
+        {session.displayName}
+        {session.role && ` (${ROLE_LABELS[session.role] ?? session.role})`}
+      </span>
+      <button onClick={logout} className="underline">
+        로그아웃
+      </button>
+    </div>
+  );
+}
+
 export default function NavBar() {
   const pathname = usePathname();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
@@ -123,6 +164,8 @@ export default function NavBar() {
             );
           })}
         </nav>
+
+        <AccountBadge />
 
         <button
           type="button"
