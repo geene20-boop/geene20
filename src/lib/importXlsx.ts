@@ -55,7 +55,7 @@ function emptyResult(): ImportResult {
 }
 
 // 설비가동정보 (파일1) 형식 파싱: 날짜/주야 2행 1세트, row 5(index4)부터 데이터 시작
-export function importProductionLog(buf: Buffer): ImportResult {
+export function importProductionLog(buf: Buffer, actor: string): ImportResult {
   const wb = XLSX.read(buf, { type: "buffer", cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
@@ -76,12 +76,12 @@ export function importProductionLog(buf: Buffer): ImportResult {
       feed_hopper_a, feed_hopper_b, feed_fine_powder, feed_mixer, feed_molder, feed_total,
       brix, line_hours_a, line_hours_b, line_hours_total,
       lng_dryer, lng_rto, gas_usage_shift, gas_usage_total,
-      moisture_manual, hardness_manual
+      moisture_manual, hardness_manual, entered_by, updated_by
     ) VALUES (@date, @shift, @product, @daily_pack_amount, @dryer_temp_a, @dryer_temp_b,
       @feed_hopper_a, @feed_hopper_b, @feed_fine_powder, @feed_mixer, @feed_molder, @feed_total,
       @brix, @line_hours_a, @line_hours_b, @line_hours_total,
       @lng_dryer, @lng_rto, @gas_usage_shift, @gas_usage_total,
-      @moisture_manual, @hardness_manual)
+      @moisture_manual, @hardness_manual, @actor, @actor)
     ON CONFLICT(date, shift) DO UPDATE SET
       product = excluded.product,
       daily_pack_amount = excluded.daily_pack_amount,
@@ -103,6 +103,8 @@ export function importProductionLog(buf: Buffer): ImportResult {
       gas_usage_total = excluded.gas_usage_total,
       moisture_manual = excluded.moisture_manual,
       hardness_manual = excluded.hardness_manual,
+      updated_by = excluded.updated_by,
+      entered_by = COALESCE(production_log.entered_by, excluded.entered_by),
       updated_at = datetime('now')
   `);
 
@@ -151,6 +153,7 @@ export function importProductionLog(buf: Buffer): ImportResult {
         gas_usage_total: num(row[19]),
         moisture_manual: num(row[21]),
         hardness_manual: num(row[22]),
+        actor,
       });
 
       if (existed) result.updated++;
@@ -160,11 +163,21 @@ export function importProductionLog(buf: Buffer): ImportResult {
     }
   }
 
+  if (result.inserted > 0 || result.updated > 0) {
+    logAudit(
+      "production_log",
+      "엑셀 업로드",
+      "update",
+      actor,
+      `신규 ${result.inserted}건, 갱신 ${result.updated}건 (엑셀 업로드)`
+    );
+  }
+
   return result;
 }
 
 // 비료시료 강도테스트 (파일2) 형식 파싱: 5행 1블록 반복
-export function importQcTests(buf: Buffer): ImportResult {
+export function importQcTests(buf: Buffer, actor: string): ImportResult {
   const wb = XLSX.read(buf, { type: "buffer", cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
@@ -184,12 +197,14 @@ export function importQcTests(buf: Buffer): ImportResult {
       sample_no, fertilizer_type, date, shift, time,
       v1, v2, v3, v4, v5, v6, v7, v8, v9, v10,
       v11, v12, v13, v14, v15, v16, v17, v18, v19, v20,
-      burner_temp, granulation_brix, granulation_input, fine_powder, hopper, moisture, worker
+      burner_temp, granulation_brix, granulation_input, fine_powder, hopper, moisture, worker,
+      entered_by, updated_by
     ) VALUES (
       @sample_no, @fertilizer_type, @date, @shift, @time,
       @v1, @v2, @v3, @v4, @v5, @v6, @v7, @v8, @v9, @v10,
       @v11, @v12, @v13, @v14, @v15, @v16, @v17, @v18, @v19, @v20,
-      @burner_temp, @granulation_brix, @granulation_input, @fine_powder, @hopper, @moisture, @worker
+      @burner_temp, @granulation_brix, @granulation_input, @fine_powder, @hopper, @moisture, @worker,
+      @actor, @actor
     )
   `);
 
@@ -243,11 +258,16 @@ export function importQcTests(buf: Buffer): ImportResult {
         hopper: num(v11_20Row?.[15]),
         moisture: num(brixMoistureRow?.[16]),
         worker: str(metaRow[17]),
+        actor,
       });
       result.inserted++;
     } catch (e) {
       result.errors.push(`row ${r + 1}: ${String(e)}`);
     }
+  }
+
+  if (result.inserted > 0) {
+    logAudit("qc_test", "엑셀 업로드", "create", actor, `신규 ${result.inserted}건 (엑셀 업로드)`);
   }
 
   return result;

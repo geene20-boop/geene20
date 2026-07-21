@@ -15,6 +15,8 @@ import { apiGet, apiPut } from "@/lib/apiClient";
 import { MergedShiftRow, MonthlySummary } from "@/lib/analytics";
 import { getWorkerComparison } from "@/lib/workerComparison";
 import { useSiteSession } from "@/lib/useSiteSession";
+import { useEnteredBy } from "@/lib/useEnteredBy";
+import EnteredByField from "@/components/EnteredByField";
 
 function monthAgo(n: number) {
   const d = new Date();
@@ -53,6 +55,16 @@ export default function DashboardPage() {
   const [specs, setSpecs] = useState<SpecRow[]>([]);
   const [loading, setLoading] = useState(false);
   const session = useSiteSession();
+  const { enteredBy, setEnteredBy } = useEnteredBy();
+  const [nameError, setNameError] = useState(false);
+
+  useEffect(() => {
+    if (session.loggedIn && session.displayName) {
+
+      setEnteredBy(session.displayName);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.loggedIn, session.displayName]);
 
   async function load() {
     setLoading(true);
@@ -98,9 +110,14 @@ export default function DashboardPage() {
   const workerComparison = useMemo(() => getWorkerComparison(rows), [rows]);
 
   async function updateSpec(metric: string, field: "min_value" | "max_value", value: string) {
+    if (!enteredBy.trim()) {
+      setNameError(true);
+      return;
+    }
+    setNameError(false);
     const current = specs.find((s) => s.metric === metric) ?? { metric, min_value: null, max_value: null };
     const num = value.trim() === "" ? null : Number(value);
-    const updated = { ...current, [field]: num };
+    const updated = { ...current, [field]: num, entered_by: enteredBy };
     const result = await apiPut<SpecRow[]>("/api/specs", updated);
     setSpecs(result);
     load();
@@ -265,6 +282,14 @@ export default function DashboardPage() {
             {!session.canWrite && (
               <p className="text-xs text-amber-600 mb-2">조회 전용 계정은 기준값을 수정할 수 없습니다.</p>
             )}
+            <div className="mb-3 max-w-xs">
+              <EnteredByField
+                value={enteredBy}
+                onChange={setEnteredBy}
+                error={nameError}
+                lockedValue={session.loggedIn ? session.displayName : null}
+              />
+            </div>
             <div className="flex flex-col gap-3">
               {["hardness", "moisture", "gas_per_hour"].map((metric) => {
                 const spec = specs.find((s) => s.metric === metric);

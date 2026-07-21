@@ -25,6 +25,7 @@ const TABLE_OPTIONS: { value: AuditTable | ""; label: string }[] = [
   { value: "packing_breakage", label: "포장 파손" },
   { value: "packing_adjustment", label: "포장 재고조정" },
   { value: "packing_return", label: "포장 반품" },
+  { value: "spec_limit", label: "품질 기준값 설정" },
 ];
 
 const ACTION_BADGE: Record<string, string> = {
