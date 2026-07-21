@@ -43,6 +43,9 @@ export async function PUT(
   }
 
   const updated: PackingEntry = { ...before, ...body };
+  if (typeof updated.qty !== "number" || updated.qty <= 0) {
+    return NextResponse.json({ error: "qty는 0보다 커야 합니다." }, { status: 400 });
+  }
 
   try {
     runInTransaction((db) => {

@@ -294,14 +294,18 @@ function formatBytes(n: number): string {
 
 function BackupCard() {
   const [backups, setBackups] = useState<{ name: string; sizeBytes: number; createdAt: string }[]>([]);
+  const [emailConfigured, setEmailConfigured] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [emailMessage, setEmailMessage] = useState<string | null>(null);
 
   async function refresh() {
     const res = await fetch("/api/admin/backup");
     if (!res.ok) return;
     const data = await res.json();
     setBackups(data.backups ?? []);
+    setEmailConfigured(!!data.emailConfigured);
   }
 
   useEffect(() => {
@@ -321,6 +325,20 @@ function BackupCard() {
       setMessage(`오류: ${(err as Error).message}`);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function sendTestEmail() {
+    setTestingEmail(true);
+    setEmailMessage(null);
+    try {
+      const res = await fetch("/api/admin/backup/send-test", { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).error ?? "실패했습니다.");
+      setEmailMessage("메일이 발송되었습니다. 받은편지함(스팸함도)을 확인해주세요.");
+    } catch (err) {
+      setEmailMessage(`오류: ${(err as Error).message}`);
+    } finally {
+      setTestingEmail(false);
     }
   }
 
@@ -347,6 +365,30 @@ function BackupCard() {
         </button>
       </div>
       {message && <p className="text-sm text-slate-600">{message}</p>}
+
+      <div className="border-t pt-3">
+        <p className="text-sm font-medium text-slate-700">이메일 자동 발송</p>
+        {emailConfigured ? (
+          <>
+            <p className="text-xs text-slate-500 mt-1">
+              설정되어 있습니다. 매일 최근 백업 파일을 지정된 이메일로 자동 발송합니다.
+            </p>
+            <button
+              onClick={sendTestEmail}
+              disabled={testingEmail}
+              className="mt-2 border rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
+            >
+              {testingEmail ? "발송 중..." : "지금 테스트 발송"}
+            </button>
+            {emailMessage && <p className="text-sm text-slate-600 mt-1">{emailMessage}</p>}
+          </>
+        ) : (
+          <p className="text-xs text-amber-600 mt-1">
+            아직 설정되지 않았습니다. SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, BACKUP_EMAIL_TO
+            환경변수를 Railway 프로젝트 설정(Variables)에 추가하면 자동으로 활성화됩니다.
+          </p>
+        )}
+      </div>
 
       <div className="text-xs text-slate-500 mt-1">
         <p className="font-medium text-slate-600 mb-1">서버에 저장된 스냅샷 ({backups.length}개)</p>
