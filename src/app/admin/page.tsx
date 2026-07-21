@@ -197,6 +197,93 @@ function AccountManagementCard() {
   );
 }
 
+function AdminPasswordCard() {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setMessage(null);
+    if (newPassword.length < 4) {
+      setMessage("오류: 새 비밀번호는 4자 이상이어야 합니다.");
+      return;
+    }
+    if (newPassword !== confirm) {
+      setMessage("오류: 새 비밀번호 확인이 일치하지 않습니다.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch("/api/admin/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "실패했습니다.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirm("");
+      setMessage("관리자 비밀번호가 변경되었습니다.");
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border p-5 flex flex-col gap-3">
+      <div>
+        <h2 className="font-semibold text-slate-800">관리자 비밀번호 변경</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          지금 로그인에 쓴 비밀번호를 바로 바꿀 수 있습니다. (복구 코드는 비밀번호를 잊어버렸을 때만
+          사용합니다)
+        </p>
+      </div>
+      <form onSubmit={submit} className="flex gap-2 items-end flex-wrap">
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">현재 비밀번호</span>
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            className="border rounded-md px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">새 비밀번호</span>
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            className="border rounded-md px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">새 비밀번호 확인</span>
+          <input
+            type="password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            className="border rounded-md px-2 py-1.5 text-sm"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={busy || !currentPassword || newPassword.length < 4}
+          className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
+        >
+          변경
+        </button>
+      </form>
+      {message && <p className="text-sm text-slate-600">{message}</p>}
+    </div>
+  );
+}
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -331,6 +418,7 @@ export default function AdminPage() {
       </div>
 
       <AccountManagementCard />
+      <AdminPasswordCard />
       <BackupCard />
     </div>
   );
