@@ -19,8 +19,8 @@ export async function POST(req: NextRequest) {
   if (!verifyRecoveryCode(String(code ?? ""))) {
     return NextResponse.json({ error: "복구 코드가 올바르지 않습니다." }, { status: 401 });
   }
-  if (!newPassword || String(newPassword).length < 4) {
-    return NextResponse.json({ error: "새 비밀번호는 4자 이상이어야 합니다." }, { status: 400 });
+  if (!newPassword || String(newPassword).length < 8) {
+    return NextResponse.json({ error: "새 비밀번호는 8자 이상이어야 합니다." }, { status: 400 });
   }
 
   setAdminPassword(String(newPassword));

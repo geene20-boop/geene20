@@ -196,6 +196,13 @@ export function getUserSession(req: {
 }): { accountId: number; role: AccountRole } | null {
   const parsed = decodeToken(req.cookies.get(SITE_SESSION_COOKIE)?.value);
   if (!parsed || parsed.scope !== "site" || parsed.accountId == null || !parsed.role) return null;
+  // 토큰 자체는 유효해도, 그 사이 관리자가 계정을 비활성화했다면 즉시 차단되도록
+  // 매 요청마다 현재 활성 상태를 확인한다 (토큰 만료 전이라도 바로 로그아웃 효과).
+  const db = getDb();
+  const row = db.prepare("SELECT active FROM user_account WHERE id = ?").get(parsed.accountId) as
+    | { active: number }
+    | undefined;
+  if (!row || !row.active) return null;
   return { accountId: parsed.accountId, role: parsed.role };
 }
 
@@ -208,9 +215,7 @@ export function isAdminRequest(req: {
 export function isSiteRequest(req: {
   cookies: { get(name: string): { value: string } | undefined };
 }): boolean {
-  return (
-    verifySessionToken(req.cookies.get(SITE_SESSION_COOKIE)?.value, "site") || isAdminRequest(req)
-  );
+  return getUserSession(req) !== null || isAdminRequest(req);
 }
 
 export function isEditorRequest(req: {

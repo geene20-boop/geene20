@@ -10,8 +10,8 @@ export async function POST(req: NextRequest) {
   if (!verifyAdminPassword(String(currentPassword ?? ""))) {
     return NextResponse.json({ error: "현재 비밀번호가 올바르지 않습니다." }, { status: 401 });
   }
-  if (!newPassword || String(newPassword).length < 4) {
-    return NextResponse.json({ error: "새 비밀번호는 4자 이상이어야 합니다." }, { status: 400 });
+  if (!newPassword || String(newPassword).length < 8) {
+    return NextResponse.json({ error: "새 비밀번호는 8자 이상이어야 합니다." }, { status: 400 });
   }
 
   setAdminPassword(String(newPassword));

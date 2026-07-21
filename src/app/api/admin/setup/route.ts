@@ -7,8 +7,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "이미 관리자 비밀번호가 설정되어 있습니다." }, { status: 409 });
   }
   const { password } = await req.json();
-  if (!password || String(password).length < 4) {
-    return NextResponse.json({ error: "비밀번호는 4자 이상이어야 합니다." }, { status: 400 });
+  if (!password || String(password).length < 8) {
+    return NextResponse.json({ error: "비밀번호는 8자 이상이어야 합니다." }, { status: 400 });
   }
 
   setAdminPassword(String(password));

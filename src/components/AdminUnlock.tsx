@@ -34,7 +34,7 @@ function RecoverForm({ onSuccess, onBack }: { onSuccess: () => void; onBack: () 
     setBusy(true);
     setError(null);
     try {
-      if (newPassword.length < 4) throw new Error("비밀번호는 4자 이상이어야 합니다.");
+      if (newPassword.length < 8) throw new Error("비밀번호는 8자 이상이어야 합니다.");
       if (newPassword !== confirm) throw new Error("비밀번호 확인이 일치하지 않습니다.");
       const res = await fetch("/api/admin/recover", {
         method: "POST",
@@ -133,7 +133,7 @@ export default function AdminLoginModal({
     setError(null);
     try {
       if (!passwordSet) {
-        if (password.length < 4) throw new Error("비밀번호는 4자 이상이어야 합니다.");
+        if (password.length < 8) throw new Error("비밀번호는 8자 이상이어야 합니다.");
         if (password !== confirm) throw new Error("비밀번호 확인이 일치하지 않습니다.");
         const res = await fetch("/api/admin/setup", {
           method: "POST",

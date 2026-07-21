@@ -75,7 +75,7 @@ function AccountManagementCard() {
   }
 
   async function resetPassword(id: number) {
-    const newPassword = prompt("새 비밀번호를 입력하세요 (4자 이상)");
+    const newPassword = prompt("새 비밀번호를 입력하세요 (8자 이상)");
     if (!newPassword) return;
     const res = await fetch(`/api/accounts/${id}`, {
       method: "PUT",
@@ -132,7 +132,7 @@ function AccountManagementCard() {
         </label>
         <button
           type="submit"
-          disabled={busy || !username.trim() || password.length < 4}
+          disabled={busy || !username.trim() || password.length < 8}
           className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
         >
           계정 추가
@@ -140,6 +140,7 @@ function AccountManagementCard() {
       </form>
       {message && <p className="text-sm text-slate-600">{message}</p>}
 
+      <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-slate-100 text-slate-600">
           <tr>
@@ -193,6 +194,7 @@ function AccountManagementCard() {
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -207,8 +209,8 @@ function AdminPasswordCard() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setMessage(null);
-    if (newPassword.length < 4) {
-      setMessage("오류: 새 비밀번호는 4자 이상이어야 합니다.");
+    if (newPassword.length < 8) {
+      setMessage("오류: 새 비밀번호는 8자 이상이어야 합니다.");
       return;
     }
     if (newPassword !== confirm) {
@@ -273,7 +275,7 @@ function AdminPasswordCard() {
         </label>
         <button
           type="submit"
-          disabled={busy || !currentPassword || newPassword.length < 4}
+          disabled={busy || !currentPassword || newPassword.length < 8}
           className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
         >
           변경

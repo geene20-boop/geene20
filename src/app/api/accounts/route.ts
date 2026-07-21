@@ -23,8 +23,8 @@ export async function POST(req: NextRequest) {
   if (!username || username.length < 2) {
     return NextResponse.json({ error: "아이디는 2자 이상이어야 합니다." }, { status: 400 });
   }
-  if (password.length < 4) {
-    return NextResponse.json({ error: "비밀번호는 4자 이상이어야 합니다." }, { status: 400 });
+  if (password.length < 8) {
+    return NextResponse.json({ error: "비밀번호는 8자 이상이어야 합니다." }, { status: 400 });
   }
   if (!VALID_ROLES.includes(role)) {
     return NextResponse.json({ error: "role은 viewer 또는 editor여야 합니다." }, { status: 400 });
