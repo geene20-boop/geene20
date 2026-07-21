@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
   try {
     runInTransaction((db) => {
       if (type === "pack") {
-        applyPackEffect(db, effect, 1);
+        applyPackEffect(db, { ...effect, isProduction: true }, 1);
       } else {
         applyPackEffect(db, { productKey: body.productKey, qty: -body.qty }, 1);
       }

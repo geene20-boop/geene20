@@ -13,7 +13,8 @@ function makeDb(): Database.Database {
       unit TEXT,
       bag_kg REAL,
       bag_mat_key TEXT,
-      stock REAL NOT NULL DEFAULT 0
+      stock REAL NOT NULL DEFAULT 0,
+      cumulative_produced REAL NOT NULL DEFAULT 0
     );
   `);
   const insert = db.prepare(
@@ -30,6 +31,14 @@ function makeDb(): Database.Database {
 function stockOf(db: Database.Database, key: string): number {
   return (db.prepare("SELECT stock FROM packing_item WHERE key = ?").get(key) as { stock: number })
     .stock;
+}
+
+function cumulativeProducedOf(db: Database.Database, key: string): number {
+  return (
+    db.prepare("SELECT cumulative_produced FROM packing_item WHERE key = ?").get(key) as {
+      cumulative_produced: number;
+    }
+  ).cumulative_produced;
 }
 
 describe("adjustStock", () => {
@@ -111,6 +120,25 @@ describe("applyPackEffect", () => {
     applyPackEffect(db, { productKey: "product_a", qty: 5 }, 1);
     expect(stockOf(db, "product_a")).toBe(5);
     expect(stockOf(db, "bagmat_a")).toBe(100);
+  });
+
+  it("increases cumulative_produced only when isProduction is true (pack), not for ship", () => {
+    const db = makeDb();
+    applyPackEffect(db, { productKey: "product_a", qty: 10, isProduction: true }, 1);
+    expect(cumulativeProducedOf(db, "product_a")).toBe(10);
+
+    // 출하(ship)는 재고만 줄고 생산누계에는 영향 없어야 함
+    applyPackEffect(db, { productKey: "product_a", qty: -4 }, 1);
+    expect(stockOf(db, "product_a")).toBe(6);
+    expect(cumulativeProducedOf(db, "product_a")).toBe(10);
+  });
+
+  it("reverses cumulative_produced symmetrically on sign=-1 (edit/delete reversal)", () => {
+    const db = makeDb();
+    const entry = { productKey: "product_a", qty: 10, isProduction: true };
+    applyPackEffect(db, entry, 1);
+    applyPackEffect(db, entry, -1);
+    expect(cumulativeProducedOf(db, "product_a")).toBe(0);
   });
 });
 
