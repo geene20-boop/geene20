@@ -21,6 +21,7 @@ import type { MergedShiftRow } from "@/lib/analytics";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
+import { useSiteSession } from "@/lib/useSiteSession";
 
 interface YoYRow {
   month: string;
@@ -127,6 +128,15 @@ export default function UtilityPage() {
   const [monthMsg, setMonthMsg] = useState<string | null>(null);
   const { enteredBy, setEnteredBy } = useEnteredBy();
   const [nameError, setNameError] = useState(false);
+  const session = useSiteSession();
+
+  useEffect(() => {
+    if (session.loggedIn && session.displayName) {
+       
+      setEnteredBy(session.displayName);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.loggedIn, session.displayName]);
 
   // 일자별 증감 차트용 선택 월
   const [dailyMonth, setDailyMonth] = useState(thisMonth());
@@ -594,7 +604,12 @@ export default function UtilityPage() {
           onSubmit={saveMonth}
           className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${!admin.loggedIn ? "opacity-50 pointer-events-none" : ""}`}
         >
-          <EnteredByField value={enteredBy} onChange={setEnteredBy} error={nameError} />
+          <EnteredByField
+            value={enteredBy}
+            onChange={setEnteredBy}
+            error={nameError}
+            lockedValue={admin.loggedIn ? session.displayName : null}
+          />
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-slate-600">월</span>
             <input type="month" value={mForm.month} onChange={(e) => setMF("month", e.target.value)} className="border rounded-md px-2 py-1.5" required />

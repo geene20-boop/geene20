@@ -4,11 +4,28 @@ export default function EnteredByField({
   value,
   onChange,
   error,
+  lockedValue,
 }: {
   value: string;
   onChange: (v: string) => void;
   error?: boolean;
+  lockedValue?: string | null;
 }) {
+  if (lockedValue) {
+    return (
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-slate-600">입력자명</span>
+        <input
+          type="text"
+          value={lockedValue}
+          disabled
+          className="border rounded-md px-2 py-1.5 bg-slate-50 text-slate-500"
+        />
+        <span className="text-xs text-slate-400">로그인 계정으로 자동 입력됨</span>
+      </label>
+    );
+  }
+
   return (
     <label className="flex flex-col gap-1 text-sm">
       <span className="text-slate-600">

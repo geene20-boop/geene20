@@ -7,6 +7,7 @@ import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 import { KIND_LABELS, itemLabel } from "@/lib/packingClient";
+import { useSiteSession } from "@/lib/useSiteSession";
 
 type NewItemForm = {
   key: string;
@@ -34,6 +35,15 @@ export default function PackingItemsPage() {
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [editKey, setEditKey] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ category: "", sub: "", unit: "", bagKg: "", stock: "" });
+  const session = useSiteSession();
+
+  useEffect(() => {
+    if (session.loggedIn && session.displayName) {
+       
+      setEnteredBy(session.displayName);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.loggedIn, session.displayName]);
 
   async function loadItems() {
     setItems(await apiGet<PackingItem[]>("/api/packing-item"));
@@ -132,10 +142,26 @@ export default function PackingItemsPage() {
         </p>
       </div>
 
-      <form onSubmit={submit} className="flex flex-col gap-4 bg-white rounded-xl border p-5">
+      {!session.canWrite && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-md px-3 py-2">
+          조회 전용 계정입니다. 입력·수정은 editor 권한이 필요합니다.
+        </div>
+      )}
+
+      <form
+        onSubmit={submit}
+        className={`flex flex-col gap-4 bg-white rounded-xl border p-5 ${
+          !session.canWrite ? "opacity-50 pointer-events-none" : ""
+        }`}
+      >
         <h2 className="text-sm font-semibold text-slate-700">새 품목 추가</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <EnteredByField value={enteredBy} onChange={setEnteredBy} error={nameError} />
+          <EnteredByField
+            value={enteredBy}
+            onChange={setEnteredBy}
+            error={nameError}
+            lockedValue={session.loggedIn ? session.displayName : null}
+          />
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">품목 키 (영문/숫자, 고유값)</span>
             <input

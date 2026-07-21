@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
+import { useSiteSession } from "@/lib/useSiteSession";
 
 type ImportResult = {
   inserted: number;
@@ -27,6 +28,7 @@ function UploadCard({
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const session = useSiteSession();
 
   async function onUpload() {
     const file = inputRef.current?.files?.[0];
@@ -49,7 +51,11 @@ function UploadCard({
   }
 
   return (
-    <div className="bg-white rounded-xl border p-5 flex flex-col gap-3">
+    <div
+      className={`bg-white rounded-xl border p-5 flex flex-col gap-3 ${
+        !session.canWrite ? "opacity-50 pointer-events-none" : ""
+      }`}
+    >
       <div>
         <h2 className="font-semibold text-slate-800">{title}</h2>
         <p className="text-sm text-slate-500 mt-1">{description}</p>
@@ -223,11 +229,20 @@ function PackingStockImportCard() {
   const { enteredBy, setEnteredBy } = useEnteredBy();
   const [nameError, setNameError] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const session = useSiteSession();
 
   useEffect(() => {
     admin.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (admin.loggedIn && session.displayName) {
+       
+      setEnteredBy(session.displayName);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [admin.loggedIn, session.displayName]);
 
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -269,7 +284,12 @@ function PackingStockImportCard() {
       </div>
       {admin.loggedIn ? (
         <div className="flex flex-col gap-2">
-          <EnteredByField value={enteredBy} onChange={setEnteredBy} error={nameError} />
+          <EnteredByField
+            value={enteredBy}
+            onChange={setEnteredBy}
+            error={nameError}
+            lockedValue={admin.loggedIn ? session.displayName : null}
+          />
           <label className="text-sm border border-slate-300 rounded-md px-3 py-1.5 cursor-pointer w-fit bg-white">
             엑셀/CSV 업로드
             <input type="file" accept=".xlsx,.xls,.csv" onChange={onUpload} className="hidden" />

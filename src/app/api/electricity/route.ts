@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "plant는 '1공장' 또는 '2공장'이어야 합니다." }, { status: 400 });
   }
 
-  const actor = requireActor(body);
+  const actor = requireActor(req, body);
   if (!actor) {
     return NextResponse.json({ error: "입력자명을 입력해주세요." }, { status: 400 });
   }

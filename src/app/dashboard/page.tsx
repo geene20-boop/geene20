@@ -14,6 +14,7 @@ import {
 import { apiGet, apiPut } from "@/lib/apiClient";
 import { MergedShiftRow, MonthlySummary } from "@/lib/analytics";
 import { getWorkerComparison } from "@/lib/workerComparison";
+import { useSiteSession } from "@/lib/useSiteSession";
 
 function monthAgo(n: number) {
   const d = new Date();
@@ -51,6 +52,7 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<MonthlySummary | null>(null);
   const [specs, setSpecs] = useState<SpecRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const session = useSiteSession();
 
   async function load() {
     setLoading(true);
@@ -254,8 +256,15 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border p-4">
+          <div
+            className={`bg-white rounded-xl border p-4 ${
+              !session.canWrite ? "opacity-50 pointer-events-none" : ""
+            }`}
+          >
             <h2 className="text-sm font-semibold text-slate-700 mb-2">품질/효율 기준값 설정</h2>
+            {!session.canWrite && (
+              <p className="text-xs text-amber-600 mb-2">조회 전용 계정은 기준값을 수정할 수 없습니다.</p>
+            )}
             <div className="flex flex-col gap-3">
               {["hardness", "moisture", "gas_per_hour"].map((metric) => {
                 const spec = specs.find((s) => s.metric === metric);
