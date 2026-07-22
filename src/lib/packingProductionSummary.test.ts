@@ -1,6 +1,11 @@
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
-import { getMonthlyProduction, getSeasonProduction } from "@/lib/packingProductionSummary";
+import {
+  classifyProductCategory,
+  getDailyPackingSummary,
+  getMonthlyProduction,
+  getSeasonProduction,
+} from "@/lib/packingProductionSummary";
 
 function makeDb(): Database.Database {
   const db = new Database(":memory:");
@@ -8,6 +13,7 @@ function makeDb(): Database.Database {
     CREATE TABLE packing_item (
       key TEXT PRIMARY KEY,
       kind TEXT NOT NULL,
+      category TEXT,
       bag_kg REAL
     );
     CREATE TABLE packing_entry (
@@ -79,5 +85,74 @@ describe("getSeasonProduction", () => {
     expect(rows[1].tons).toBe(2);
     expect(rows[1].yoyTons).toBe(-1);
     expect(rows[1].yoyPercent).toBeCloseTo(-33.333, 2);
+  });
+});
+
+describe("classifyProductCategory", () => {
+  it("finds 입상규산/석회고토/칼슘유황 by substring", () => {
+    expect(classifyProductCategory("입상규산")).toBe("입상규산");
+    expect(classifyProductCategory("석회고토")).toBe("석회고토");
+    expect(classifyProductCategory("칼슘유황")).toBe("칼슘유황");
+  });
+
+  it("returns null for unrelated categories", () => {
+    expect(classifyProductCategory("톤백")).toBeNull();
+    expect(classifyProductCategory("생생비타")).toBeNull();
+  });
+});
+
+describe("getDailyPackingSummary", () => {
+  function makeCategoryDb(): Database.Database {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE packing_item (
+        key TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        category TEXT,
+        bag_kg REAL
+      );
+      CREATE TABLE packing_entry (
+        id TEXT PRIMARY KEY,
+        date TEXT NOT NULL,
+        type TEXT NOT NULL,
+        product_key TEXT NOT NULL,
+        qty REAL NOT NULL
+      );
+    `);
+    const insertItem = db.prepare(
+      "INSERT INTO packing_item (key, kind, category, bag_kg) VALUES (?, ?, ?, ?)"
+    );
+    insertItem.run("gyusan_a", "product", "입상규산", 20);
+    insertItem.run("sekhoego_a", "product", "석회고토", 20);
+    insertItem.run("tonbag_a", "product", "톤백", 1000);
+    return db;
+  }
+
+  function addEntry(db: Database.Database, id: string, date: string, productKey: string, qty: number) {
+    db.prepare(
+      "INSERT INTO packing_entry (id, date, type, product_key, qty) VALUES (?, ?, 'pack', ?, ?)"
+    ).run(id, date, productKey, qty);
+  }
+
+  it("sums tons across all packed products regardless of classification", () => {
+    const db = makeCategoryDb();
+    addEntry(db, "1", "2026-07-01", "gyusan_a", 100); // 2톤
+    addEntry(db, "2", "2026-07-01", "tonbag_a", 1); // 1톤 (분류 안 됨)
+    const summary = getDailyPackingSummary(db, "2026-07-01");
+    expect(summary.totalTons).toBe(3);
+  });
+
+  it("suggests the category with the most tons packed that day", () => {
+    const db = makeCategoryDb();
+    addEntry(db, "1", "2026-07-01", "gyusan_a", 100); // 2톤
+    addEntry(db, "2", "2026-07-01", "sekhoego_a", 250); // 5톤
+    const summary = getDailyPackingSummary(db, "2026-07-01");
+    expect(summary.suggestedProduct).toBe("석회고토");
+  });
+
+  it("returns zero/null when no packing entries exist for the date", () => {
+    const db = makeCategoryDb();
+    const summary = getDailyPackingSummary(db, "2026-07-01");
+    expect(summary).toEqual({ totalTons: 0, suggestedProduct: null });
   });
 });

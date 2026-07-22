@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiDelete, apiGet, apiPost } from "@/lib/apiClient";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import { QcTest, inferShift } from "@/lib/types";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
@@ -53,6 +53,7 @@ export default function QcPage() {
   const [message, setMessage] = useState<string | null>(null);
   const { enteredBy, setEnteredBy } = useEnteredBy();
   const [nameError, setNameError] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const session = useSiteSession();
 
   useEffect(() => {
@@ -117,15 +118,51 @@ export default function QcPage() {
       form.values.forEach((v, i) => {
         body[`v${i + 1}`] = n(v);
       });
-      await apiPost("/api/qc", body);
-      setMessage("저장되었습니다.");
-      setForm({ ...emptyForm(), date: form.date, fertilizer_type: form.fertilizer_type });
+      if (editingId != null) {
+        await apiPut(`/api/qc/${editingId}`, body);
+        setMessage("수정되었습니다.");
+        setEditingId(null);
+        setForm(emptyForm());
+      } else {
+        await apiPost("/api/qc", body);
+        setMessage("저장되었습니다.");
+        setForm({ ...emptyForm(), date: form.date, fertilizer_type: form.fertilizer_type });
+      }
       loadTests();
     } catch (err) {
       setMessage(`오류: ${(err as Error).message}`);
     } finally {
       setSaving(false);
     }
+  }
+
+  function onEdit(t: QcTest) {
+    setForm({
+      sample_no: t.sample_no != null ? String(t.sample_no) : "",
+      fertilizer_type: t.fertilizer_type ?? "",
+      date: t.date,
+      time: t.time ?? "",
+      values: Array.from({ length: 20 }, (_, i) => {
+        const v = t[`v${i + 1}` as keyof QcTest] as number | null;
+        return v != null ? String(v) : "";
+      }),
+      burner_temp: t.burner_temp != null ? String(t.burner_temp) : "",
+      granulation_brix: t.granulation_brix != null ? String(t.granulation_brix) : "",
+      granulation_input: t.granulation_input != null ? String(t.granulation_input) : "",
+      fine_powder: t.fine_powder != null ? String(t.fine_powder) : "",
+      hopper: t.hopper != null ? String(t.hopper) : "",
+      moisture: t.moisture != null ? String(t.moisture) : "",
+      worker: t.worker ?? "",
+    });
+    setEditingId(t.id);
+    setMessage(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function onCancelEdit() {
+    setForm(emptyForm());
+    setEditingId(null);
+    setMessage(null);
   }
 
   async function onDelete(id: number) {
@@ -135,6 +172,7 @@ export default function QcPage() {
     }
     if (!confirm("이 측정 기록을 삭제할까요?")) return;
     await apiDelete(`/api/qc/${id}`, { entered_by: enteredBy.trim() });
+    if (editingId === id) onCancelEdit();
     loadTests();
   }
 
@@ -160,6 +198,14 @@ export default function QcPage() {
           !session.canWrite ? "opacity-50 pointer-events-none" : ""
         }`}
       >
+        {editingId != null && (
+          <div className="flex items-center justify-between text-xs bg-sky-50 border border-sky-200 text-sky-800 rounded-md px-3 py-2">
+            <span>{form.date} · 시료No.{form.sample_no || "-"} 기록을 수정 중입니다.</span>
+            <button type="button" onClick={onCancelEdit} className="underline">
+              취소
+            </button>
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <EnteredByField
             value={enteredBy}
@@ -323,7 +369,7 @@ export default function QcPage() {
             disabled={saving}
             className="bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
-            {saving ? "저장 중..." : "측정 기록 저장"}
+            {saving ? "저장 중..." : editingId != null ? "수정 저장" : "측정 기록 저장"}
           </button>
           {message && <span className="text-sm text-slate-600">{message}</span>}
         </div>
@@ -370,7 +416,10 @@ export default function QcPage() {
                     {t.entered_by ?? "-"}
                     {t.updated_by && t.updated_by !== t.entered_by ? ` → ${t.updated_by}` : ""}
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <button onClick={() => onEdit(t)} className="text-sky-600 hover:underline mr-3">
+                      수정
+                    </button>
                     <button onClick={() => onDelete(t.id)} className="text-red-500 hover:underline">
                       삭제
                     </button>

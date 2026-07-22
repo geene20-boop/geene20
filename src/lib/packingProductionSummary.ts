@@ -90,6 +90,51 @@ export function getMonthlyProduction(db: Database.Database): MonthlyProductionRo
   }));
 }
 
+const PRODUCT_CATEGORIES = ["입상규산", "석회고토", "칼슘유황"];
+
+// 품목명(카테고리)에 생산품목 분류명이 들어있으면 그 분류로 본다 (예: "톤백 규산"엔 안 걸림)
+export function classifyProductCategory(name: string): string | null {
+  return PRODUCT_CATEGORIES.find((c) => name.includes(c)) ?? null;
+}
+
+export interface DailyPackingSummary {
+  totalTons: number; // 그날 포장된 전체 톤수(분류 무관, type='pack' 전체)
+  suggestedProduct: string | null; // 톤수가 가장 큰 분류(입상규산/석회고토/칼슘유황)
+}
+
+// 생산일지 "일일포장량/생산품목" 자동 반영용: 제품포장(packing_entry)에 그날 입력된
+// 생산제품+수량을 톤으로 환산해 합계 내고, 분류별 톤수가 가장 큰 것을 생산품목으로 제안한다.
+export function getDailyPackingSummary(db: Database.Database, date: string): DailyPackingSummary {
+  const rows = db
+    .prepare(
+      `SELECT pe.qty as qty, pi.bag_kg as bag_kg, pi.category as category
+       FROM packing_entry pe
+       JOIN packing_item pi ON pe.product_key = pi.key
+       WHERE pe.type = 'pack' AND pi.kind = 'product' AND pe.date = ?`
+    )
+    .all(date) as { qty: number; bag_kg: number | null; category: string | null }[];
+
+  let totalTons = 0;
+  const tonsByCategory = new Map<string, number>();
+  for (const row of rows) {
+    const tons = (row.qty * (row.bag_kg ?? 0)) / 1000;
+    totalTons += tons;
+    const category = row.category ? classifyProductCategory(row.category) : null;
+    if (category) tonsByCategory.set(category, (tonsByCategory.get(category) ?? 0) + tons);
+  }
+
+  let suggestedProduct: string | null = null;
+  let maxTons = 0;
+  for (const [category, tons] of tonsByCategory) {
+    if (tons > maxTons) {
+      maxTons = tons;
+      suggestedProduct = category;
+    }
+  }
+
+  return { totalTons, suggestedProduct };
+}
+
 export function getSeasonProduction(db: Database.Database): SeasonProductionRow[] {
   const entries = getRawEntries(db);
   const bySeason = new Map<string, number>();
