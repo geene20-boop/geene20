@@ -14,6 +14,7 @@ interface TokenPayload {
   exp: number;
   accountId?: number;
   role?: AccountRole;
+  name?: string; // 관리자(공용 비밀번호) 로그인 시 실제 입력한 사람 이름
 }
 
 interface AuthRow {
@@ -177,9 +178,9 @@ function decodeToken(token: string | undefined | null): TokenPayload | null {
   }
 }
 
-export function createSessionToken(scope: "admin"): string {
+export function createSessionToken(scope: "admin", name?: string): string {
   const { session_secret } = getAdminAuthRow();
-  return signPayload({ scope, exp: Date.now() + SESSION_TTL_MS }, session_secret);
+  return signPayload({ scope, exp: Date.now() + SESSION_TTL_MS, name }, session_secret);
 }
 
 export function createUserSessionToken(accountId: number, role: AccountRole): string {
@@ -210,6 +211,16 @@ export function isAdminRequest(req: {
   cookies: { get(name: string): { value: string } | undefined };
 }): boolean {
   return verifySessionToken(req.cookies.get(ADMIN_SESSION_COOKIE)?.value, "admin");
+}
+
+// 관리자(공용 비밀번호)로 로그인할 때 입력한 실제 이름. 옛 토큰 등 이름이 없으면 null.
+export function getAdminName(req: {
+  cookies: { get(name: string): { value: string } | undefined };
+}): string | null {
+  const parsed = decodeToken(req.cookies.get(ADMIN_SESSION_COOKIE)?.value);
+  if (!parsed || parsed.scope !== "admin") return null;
+  const name = parsed.name?.trim();
+  return name ? name.slice(0, 40) : null;
 }
 
 export function isSiteRequest(req: {

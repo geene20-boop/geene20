@@ -16,8 +16,10 @@ export async function GET(req: NextRequest) {
     const base: Record<string, unknown> = {
       시료No: r.sample_no ?? "",
       비종: r.fertilizer_type ?? "",
-      날짜: r.date,
-      시간: r.time ?? "",
+      생산일자: r.date,
+      생산시각: r.time ?? "",
+      측정일자: r.measured_date ?? "",
+      측정시각: r.measured_time ?? "",
       조: r.shift,
     };
     for (let i = 1; i <= 20; i++) {

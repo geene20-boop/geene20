@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
 import { AuditTable, AuditAction } from "@/lib/auditTypes";
-import { getAccountById, getUserSession, hasAnyAccount, isAdminRequest } from "@/lib/auth";
+import { getAccountById, getAdminName, getUserSession, hasAnyAccount, isAdminRequest } from "@/lib/auth";
 
 export function logAudit(
   table: AuditTable,
@@ -23,7 +23,7 @@ type ReqLike = { cookies: { get(name: string): { value: string } | undefined } }
 // 요청 바디의 entered_by를 그대로 사용한다.
 export function requireActor(req: ReqLike, body: unknown): string | null {
   if (hasAnyAccount()) {
-    if (isAdminRequest(req)) return "관리자";
+    if (isAdminRequest(req)) return getAdminName(req) ?? "관리자";
     const session = getUserSession(req);
     if (!session) return null;
     const account = getAccountById(session.accountId);

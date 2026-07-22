@@ -23,14 +23,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { password } = await req.json();
+  const { password, name } = await req.json();
+  const trimmedName = typeof name === "string" ? name.trim() : "";
+  if (!trimmedName) {
+    return NextResponse.json({ error: "이름을 입력해주세요." }, { status: 400 });
+  }
   if (!verifyAdminPassword(String(password ?? ""))) {
     recordLoginFailure(lockKey);
     return NextResponse.json({ error: "비밀번호가 올바르지 않습니다." }, { status: 401 });
   }
   recordLoginSuccess(lockKey);
 
-  const token = createSessionToken("admin");
+  const token = createSessionToken("admin", trimmedName.slice(0, 40));
   const res = NextResponse.json({ ok: true });
   res.cookies.set(ADMIN_SESSION_COOKIE, token, {
     httpOnly: true,

@@ -19,7 +19,7 @@ export default function EnteredByField({
           type="text"
           value={lockedValue}
           disabled
-          className="border rounded-md px-2 py-1.5 bg-slate-50 text-slate-500"
+          className="border rounded-md px-2 py-1.5 bg-slate-50 text-slate-500 cursor-default"
         />
         <span className="text-xs text-slate-400">로그인 계정으로 자동 입력됨</span>
       </label>

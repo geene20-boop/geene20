@@ -61,9 +61,11 @@ export function getDb(): Database.Database {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       sample_no INTEGER,
       fertilizer_type TEXT,
-      date TEXT NOT NULL,               -- YYYY-MM-DD
+      date TEXT NOT NULL,               -- YYYY-MM-DD (생산일자 - 조업/생산일지 연동 기준)
       shift TEXT NOT NULL,              -- '주' | '야' (테스트 시각 기준 자동/수기 지정)
-      time TEXT,                        -- HH:MM
+      time TEXT,                        -- HH:MM (생산시각)
+      measured_date TEXT,               -- 측정일자 (실제로 측정한 날짜, 생산일자와 다를 수 있음)
+      measured_time TEXT,               -- 측정시각
       v1 REAL, v2 REAL, v3 REAL, v4 REAL, v5 REAL,
       v6 REAL, v7 REAL, v8 REAL, v9 REAL, v10 REAL,
       v11 REAL, v12 REAL, v13 REAL, v14 REAL, v15 REAL,
@@ -275,6 +277,8 @@ export function getDb(): Database.Database {
   migrateColumns("qc_test", [
     ["entered_by", "TEXT"],
     ["updated_by", "TEXT"],
+    ["measured_date", "TEXT"],
+    ["measured_time", "TEXT"],
   ]);
   migrateColumns("electricity_usage", [
     ["entered_by", "TEXT"],
