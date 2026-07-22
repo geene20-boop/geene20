@@ -11,7 +11,7 @@ export function useAdminSession() {
     const data = await res.json();
     setLoggedIn(!!data.loggedIn);
     setChecked(true);
-    return data as { passwordSet: boolean; loggedIn: boolean; recoveryAvailable: boolean };
+    return data as { passwordSet: boolean; loggedIn: boolean; name: string | null; recoveryAvailable: boolean };
   }
 
   async function logout() {
@@ -111,6 +111,7 @@ export default function AdminLoginModal({
   const [passwordSet, setPasswordSet] = useState<boolean | null>(null);
   const [recoveryAvailable, setRecoveryAvailable] = useState(false);
   const [mode, setMode] = useState<"login" | "recover">("login");
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -129,6 +130,10 @@ export default function AdminLoginModal({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!name.trim()) {
+      setError("이름을 입력해주세요.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -138,14 +143,14 @@ export default function AdminLoginModal({
         const res = await fetch("/api/admin/setup", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ password }),
+          body: JSON.stringify({ password, name: name.trim() }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? "설정에 실패했습니다.");
       } else {
         const res = await fetch("/api/admin/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ password }),
+          body: JSON.stringify({ password, name: name.trim() }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? "로그인에 실패했습니다.");
       }
@@ -177,13 +182,23 @@ export default function AdminLoginModal({
               </p>
             )}
             <label className="flex flex-col gap-1 text-sm">
+              <span className="text-slate-600">이름 (입력자명에 기록됩니다)</span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="실제 이름을 입력하세요"
+                className="border rounded-md px-2 py-1.5"
+                autoFocus
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
               <span className="text-slate-600">비밀번호</span>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="border rounded-md px-2 py-1.5"
-                autoFocus
               />
             </label>
             {passwordSet === false && (

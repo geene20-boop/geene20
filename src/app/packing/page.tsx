@@ -23,6 +23,13 @@ function fmt(v: number | null | undefined): string {
   return v == null ? "-" : v.toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
 
+// "포" 단위 제품 재고를 톤으로 환산해 괄호로 함께 보여준다 (예: "500포 (10톤)")
+function tonSuffix(item: PackingItem): string | null {
+  if (item.kind !== "product" || item.unit !== "포" || !item.bag_kg) return null;
+  const tons = (item.stock * item.bag_kg) / 1000;
+  return `(${tons.toLocaleString(undefined, { maximumFractionDigits: 1 })}톤)`;
+}
+
 export default function PackingStockPage() {
   const [state, setState] = useState<PackingState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -82,7 +89,10 @@ export default function PackingStockPage() {
                 <span className="text-xs text-slate-500">{itemLabel(item)}</span>
                 <span className="text-2xl font-bold text-slate-800">
                   {fmt(item.stock)}
-                  <span className="text-sm font-normal text-slate-400 ml-1">{item.unit ?? ""}</span>
+                  <span className="text-sm font-normal text-slate-400 ml-1">
+                    {item.unit ?? ""}
+                    {tonSuffix(item) && ` ${tonSuffix(item)}`}
+                  </span>
                 </span>
               </div>
             ))}

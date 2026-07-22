@@ -44,6 +44,8 @@ export interface QcTest {
   date: string;
   shift: Shift;
   time: string | null;
+  measured_date: string | null;
+  measured_time: string | null;
   v1: number | null; v2: number | null; v3: number | null; v4: number | null; v5: number | null;
   v6: number | null; v7: number | null; v8: number | null; v9: number | null; v10: number | null;
   v11: number | null; v12: number | null; v13: number | null; v14: number | null; v15: number | null;

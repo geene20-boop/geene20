@@ -6,13 +6,17 @@ export async function POST(req: NextRequest) {
   if (hasAdminPassword()) {
     return NextResponse.json({ error: "이미 관리자 비밀번호가 설정되어 있습니다." }, { status: 409 });
   }
-  const { password } = await req.json();
+  const { password, name } = await req.json();
   if (!password || String(password).length < 8) {
     return NextResponse.json({ error: "비밀번호는 8자 이상이어야 합니다." }, { status: 400 });
   }
+  const trimmedName = typeof name === "string" ? name.trim() : "";
+  if (!trimmedName) {
+    return NextResponse.json({ error: "이름을 입력해주세요." }, { status: 400 });
+  }
 
   setAdminPassword(String(password));
-  const token = createSessionToken("admin");
+  const token = createSessionToken("admin", trimmedName.slice(0, 40));
   const res = NextResponse.json({ ok: true });
   res.cookies.set(ADMIN_SESSION_COOKIE, token, {
     httpOnly: true,
