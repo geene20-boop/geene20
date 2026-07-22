@@ -8,7 +8,7 @@ import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import { useSiteSession } from "@/lib/useSiteSession";
 
-export const PRODUCT_OPTIONS = ["규산", "석회고토", "칼슘유황"];
+export const PRODUCT_OPTIONS = ["입상규산", "석회고토", "칼슘유황"];
 export const GRANULATION_AGENT_OPTIONS = ["당밀계열", "전분계열", "CMC계열"];
 
 type FormState = {
@@ -201,6 +201,10 @@ export default function ProductionPage() {
     bagPackQty: number;
     bagPackCount: number;
   } | null>(null);
+  const [packingEntryRef, setPackingEntryRef] = useState<{
+    totalTons: number;
+    suggestedProduct: string | null;
+  } | null>(null);
   const [carryoverPreview, setCarryoverPreview] = useState<{ dryer: number | null; rto: number | null }>({
     dryer: null,
     rto: null,
@@ -271,6 +275,13 @@ export default function ProductionPage() {
     return carry != null && carry !== carryoverPreview.rto;
   }, [carryoverPreview.rto, form.carryover_rto]);
 
+  // 제품포장(packing_entry)에 입력된 그날 실제 포장량과 이 기록의 일일포장량이 다른지 확인
+  const packAmountMismatch = useMemo(() => {
+    if (!packingEntryRef || packingEntryRef.totalTons <= 0) return false;
+    const amount = n(form.daily_pack_amount);
+    return amount != null && amount !== packingEntryRef.totalTons;
+  }, [packingEntryRef, form.daily_pack_amount]);
+
   const gasUsageShift = useMemo(() => {
     if (dryerReal == null && rtoReal == null) return null;
     return (dryerReal ?? 0) + (rtoReal ?? 0);
@@ -296,12 +307,14 @@ export default function ProductionPage() {
         carryoverPreview: { dryer: number | null; rto: number | null };
         qcRef: { hardness: number | null; moisture: number | null; brix: number | null };
         packingRef: { configured: boolean; tonQty: number | null; bagPackQty: number; bagPackCount: number };
+        packingEntryRef: { totalTons: number; suggestedProduct: string | null };
       }>(`/api/production/context?date=${form.date}&shift=${form.shift}`);
       if (cancelled) return;
 
       setCarryoverUnlocked(false);
       setQcRef(ctx.qcRef);
       setPackingRef(ctx.packingRef.configured ? ctx.packingRef : null);
+      setPackingEntryRef(ctx.packingEntryRef);
       setCarryoverPreview(ctx.carryoverPreview);
 
       if (ctx.existing) {
@@ -315,6 +328,9 @@ export default function ProductionPage() {
           shift: f.shift,
           carryover_dryer: toFormValue(ctx.carryoverPreview?.dryer),
           carryover_rto: toFormValue(ctx.carryoverPreview?.rto),
+          daily_pack_amount:
+            ctx.packingEntryRef.totalTons > 0 ? String(ctx.packingEntryRef.totalTons) : "",
+          product: ctx.packingEntryRef.suggestedProduct ?? "",
         }));
       }
       setDirty(false);
@@ -542,10 +558,17 @@ export default function ProductionPage() {
               />
             </div>
           </label>
-          <SelectField label="생산품목" value={form.product} onChange={(v) => set("product", v)} options={PRODUCT_OPTIONS} />
           <div className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">
-              일일포장량(ton)
+            <SelectField label="생산품목 (제품포장 자동 분류)" value={form.product} onChange={(v) => set("product", v)} options={PRODUCT_OPTIONS} />
+            {packingEntryRef?.suggestedProduct && packingEntryRef.suggestedProduct !== form.product && (
+              <span className="text-[11px] text-amber-600">
+                제품포장 기준 제안: {packingEntryRef.suggestedProduct}
+              </span>
+            )}
+          </div>
+          <div className="flex flex-col gap-1 text-sm">
+            <span className={`flex items-center gap-1 ${packAmountMismatch ? "text-red-600 font-medium" : "text-slate-600"}`}>
+              일일포장량(ton) (제품포장 자동 반영)
               {packingRef?.tonQty != null && ` (포장일지 참고: ${packingRef.tonQty}톤)`}
             </span>
             <div className="flex gap-2">
@@ -554,8 +577,19 @@ export default function ProductionPage() {
                 step="any"
                 value={form.daily_pack_amount}
                 onChange={(e) => set("daily_pack_amount", e.target.value)}
-                className="border rounded-md px-2 py-1.5 flex-1 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                className={`border rounded-md px-2 py-1.5 flex-1 focus:outline-none focus:ring-2 focus:ring-slate-400 ${
+                  packAmountMismatch ? "text-red-600 font-medium" : ""
+                }`}
               />
+              {packingEntryRef && packingEntryRef.totalTons > 0 && (
+                <button
+                  type="button"
+                  onClick={() => set("daily_pack_amount", String(packingEntryRef.totalTons))}
+                  className="text-xs border border-slate-300 rounded-md px-2 whitespace-nowrap"
+                >
+                  제품포장값 적용
+                </button>
+              )}
               {packingRef?.tonQty != null && (
                 <button
                   type="button"
@@ -566,6 +600,11 @@ export default function ProductionPage() {
                 </button>
               )}
             </div>
+            {packAmountMismatch && (
+              <span className="text-[11px] text-red-600">
+                제품포장에 입력된 그날 포장량({packingEntryRef!.totalTons}톤)과 다릅니다.
+              </span>
+            )}
             {packingRef && packingRef.bagPackCount > 0 && (
               <span className="text-[11px] text-amber-600">
                 포 단위 포장 {packingRef.bagPackCount}건({packingRef.bagPackQty}포)은 톤 환산이 안 되어

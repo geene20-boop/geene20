@@ -4,6 +4,7 @@ import { getMergedRows } from "@/lib/analytics";
 import { getPreviousProductionLog } from "@/lib/productionCalc";
 import { fetchPackingLogCsv, parsePackingLogCsv, summarizePackingLog } from "@/lib/packingLog";
 import { PACKING_LOG_CSV_URL_KEY, PACKING_LOG_LAST_SYNC_KEY } from "@/app/api/packing-log/route";
+import { getDailyPackingSummary } from "@/lib/packingProductionSummary";
 import { ProductionLog } from "@/lib/types";
 
 // 생산일지 입력 화면 하나를 그릴 때 필요한 여러 참고정보(기존기록/전일재고/QC평균/포장일지)를
@@ -60,5 +61,13 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ existing: existing ?? null, carryoverPreview, qcRef, packingRef });
+  const packingEntryRef = getDailyPackingSummary(db, date);
+
+  return NextResponse.json({
+    existing: existing ?? null,
+    carryoverPreview,
+    qcRef,
+    packingRef,
+    packingEntryRef,
+  });
 }
