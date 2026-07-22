@@ -655,7 +655,9 @@ export default function ProductionPage() {
                 className={`flex items-center gap-1 ${dryerCarryMismatch ? "text-red-600 font-medium" : "text-slate-600"}`}
               >
                 전일재고 - 건조로 누계
-                {!carryoverUnlocked && (
+                {carryoverUnlocked ? (
+                  <span className="text-[11px] text-emerald-600 font-normal">(수정 가능)</span>
+                ) : (
                   <button type="button" onClick={requestCarryoverEdit} className="text-[11px] underline text-sky-600">
                     수정
                   </button>
@@ -668,7 +670,11 @@ export default function ProductionPage() {
                 disabled={!carryoverUnlocked}
                 onChange={(e) => set("carryover_dryer", e.target.value)}
                 className={`border rounded-md px-2 py-1.5 disabled:bg-slate-50 ${
-                  dryerCarryMismatch ? "text-red-600 font-medium" : "disabled:text-slate-500"
+                  dryerCarryMismatch
+                    ? "text-red-600 font-medium"
+                    : carryoverUnlocked
+                      ? "border-emerald-300 bg-emerald-50"
+                      : "disabled:text-slate-500"
                 }`}
               />
               {dryerCarryMismatch && (
@@ -682,7 +688,9 @@ export default function ProductionPage() {
                 className={`flex items-center gap-1 ${rtoCarryMismatch ? "text-red-600 font-medium" : "text-slate-600"}`}
               >
                 전일재고 - RTO 누계
-                {!carryoverUnlocked && (
+                {carryoverUnlocked ? (
+                  <span className="text-[11px] text-emerald-600 font-normal">(수정 가능)</span>
+                ) : (
                   <button type="button" onClick={requestCarryoverEdit} className="text-[11px] underline text-sky-600">
                     수정
                   </button>
@@ -695,7 +703,11 @@ export default function ProductionPage() {
                 disabled={!carryoverUnlocked}
                 onChange={(e) => set("carryover_rto", e.target.value)}
                 className={`border rounded-md px-2 py-1.5 disabled:bg-slate-50 ${
-                  rtoCarryMismatch ? "text-red-600 font-medium" : "disabled:text-slate-500"
+                  rtoCarryMismatch
+                    ? "text-red-600 font-medium"
+                    : carryoverUnlocked
+                      ? "border-emerald-300 bg-emerald-50"
+                      : "disabled:text-slate-500"
                 }`}
               />
               {rtoCarryMismatch && (
