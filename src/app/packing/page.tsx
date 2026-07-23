@@ -10,6 +10,7 @@ import {
   PackingReturn,
 } from "@/lib/types";
 import { groupByKind, itemLabel } from "@/lib/packingClient";
+import ShipmentSummaryTab from "./ShipmentSummaryTab";
 
 interface PackingState {
   stock: PackingItem[];
@@ -105,7 +106,17 @@ function daysAgo(n: number) {
   return d.toISOString().slice(0, 10);
 }
 
+const TABS = [
+  { key: "product", label: "01. 제품" },
+  { key: "bagmat", label: "02. 포장지" },
+  { key: "aux", label: "03. 부자재" },
+  { key: "period", label: "04. 기간별 생산·출하" },
+  { key: "shipment", label: "05. 출하누계" },
+] as const;
+type Tab = (typeof TABS)[number]["key"];
+
 export default function PackingStockPage() {
+  const [tab, setTab] = useState<Tab>("product");
   const [state, setState] = useState<PackingState | null>(null);
   const [loading, setLoading] = useState(false);
   const [rangeFrom, setRangeFrom] = useState(daysAgo(30));
@@ -231,7 +242,11 @@ export default function PackingStockPage() {
         { label: "톤백 제품", key: `${style.category}::tonbag`, rows: tonbagRows },
       ]
         .filter((m) => m.rows.length > 0)
-        .map((m) => ({ ...m, tons: m.rows.reduce((sum, r) => sum + tonsOfItem(r), 0) }));
+        .map((m) => ({
+          ...m,
+          tons: m.rows.reduce((sum, r) => sum + tonsOfItem(r), 0),
+          bags: m.rows.reduce((sum, r) => sum + r.stock, 0),
+        }));
       const tons = mids.reduce((sum, m) => sum + m.tons, 0);
       return { ...style, mids, tons };
     }).filter((g) => g.mids.length > 0);
@@ -250,26 +265,6 @@ export default function PackingStockPage() {
     return (state?.stock ?? []).filter((i) => i.kind === "product" && !groupedKeys.has(i.key));
   }, [state, productGroups]);
 
-  const [openMajors, setOpenMajors] = useState<Set<string>>(new Set());
-  const [openMids, setOpenMids] = useState<Set<string>>(new Set());
-
-  function toggleMajor(category: string) {
-    setOpenMajors((prev) => {
-      const next = new Set(prev);
-      if (next.has(category)) next.delete(category);
-      else next.add(category);
-      return next;
-    });
-  }
-
-  function toggleMid(key: string) {
-    setOpenMids((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
   const itemByKey = useMemo(() => {
     const map = new Map<string, PackingItem>();
     for (const i of state?.stock ?? []) map.set(i.key, i);
@@ -277,145 +272,35 @@ export default function PackingStockPage() {
   }, [state]);
 
   const recentActivity = useMemo(() => {
-    if (!state) return [];
-    return state.entries.map((e) => {
-      const item = itemByKey.get(e.product_key);
-      const tons = item?.bag_kg ? (e.qty * item.bag_kg) / 1000 : 0;
-      return {
-        date: e.date,
-        label: e.type === "pack" ? "생산" : "출하",
-        item: item ? itemLabel(item) : e.product_key,
-        qty: e.type === "pack" ? e.qty : -e.qty,
-        unit: item?.unit ?? "",
-        tons: e.type === "pack" ? tons : -tons,
-      };
-    });
-  }, [state, itemByKey]);
-
-  // 조회기간 전체의 생산/출하 합계 (포 수량 + 톤 환산)
-  const activityTotals = useMemo(() => {
-    let packBags = 0;
-    let packTons = 0;
-    let shipBags = 0;
-    let shipTons = 0;
+    const pack: { date: string; item: string; qty: number; unit: string; tons: number }[] = [];
+    const ship: { date: string; item: string; qty: number; unit: string; tons: number }[] = [];
     for (const e of state?.entries ?? []) {
       const item = itemByKey.get(e.product_key);
       const tons = item?.bag_kg ? (e.qty * item.bag_kg) / 1000 : 0;
-      if (e.type === "pack") {
-        if (item?.unit === "포") packBags += e.qty;
-        packTons += tons;
-      } else {
-        if (item?.unit === "포") shipBags += e.qty;
-        shipTons += tons;
-      }
+      const row = { date: e.date, item: item ? itemLabel(item) : e.product_key, qty: e.qty, unit: item?.unit ?? "", tons };
+      if (e.type === "pack") pack.push(row);
+      else ship.push(row);
     }
-    return { packBags, packTons, shipBags, shipTons };
+    return { pack, ship };
   }, [state, itemByKey]);
 
-  return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-bold">제품포장 재고현황</h1>
-        <p className="text-sm text-slate-500 mt-1">제품·포장지·부자재 재고를 실시간으로 확인합니다.</p>
-      </div>
+  function sumActivity(rows: { qty: number; unit: string; tons: number }[]) {
+    let bags = 0;
+    let tons = 0;
+    for (const r of rows) {
+      if (r.unit === "포") bags += r.qty;
+      tons += r.tons;
+    }
+    return { bags, tons };
+  }
+  const packTotals = useMemo(() => sumActivity(recentActivity.pack), [recentActivity]);
+  const shipTotals = useMemo(() => sumActivity(recentActivity.ship), [recentActivity]);
 
-      <div className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold text-slate-700">01. 제품</h2>
-        <p className="text-xs text-slate-400">대분류·중분류를 눌러 펼쳐보세요.</p>
-        <div className="bg-white rounded-xl border overflow-hidden divide-y">
-          {productGroups.map((group) => {
-            const majorOpen = openMajors.has(group.category);
-            return (
-              <div key={group.category}>
-                <button
-                  type="button"
-                  onClick={() => toggleMajor(group.category)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 text-white font-bold text-left ${group.bg}`}
-                >
-                  <span className="text-xs opacity-75">[{group.no}]</span>
-                  <span className="flex-1">{group.category}</span>
-                  <span className="tabular-nums">{fmtTon(group.tons)}톤</span>
-                  <span
-                    className={`text-xs transition-transform ${majorOpen ? "rotate-90" : ""}`}
-                  >
-                    ▶
-                  </span>
-                </button>
-                {majorOpen &&
-                  group.mids.map((mid) => {
-                    const midOpen = openMids.has(mid.key);
-                    return (
-                      <div key={mid.key} className="border-t">
-                        <button
-                          type="button"
-                          onClick={() => toggleMid(mid.key)}
-                          className="w-full flex items-center gap-3 px-6 py-2 bg-slate-50 hover:bg-slate-100 text-left text-sm font-medium"
-                        >
-                          <span className="flex-1">{mid.label}</span>
-                          <span className="tabular-nums text-slate-600">{fmtTon(mid.tons)}톤</span>
-                          <span
-                            className={`text-xs text-slate-400 transition-transform ${
-                              midOpen ? "rotate-90" : ""
-                            }`}
-                          >
-                            ▶
-                          </span>
-                        </button>
-                        {midOpen &&
-                          mid.rows.map((item) => (
-                            <div
-                              key={item.key}
-                              className="flex items-center gap-3 px-8 py-2 text-sm border-t bg-slate-50/60"
-                            >
-                              <span className="flex-1 text-slate-600">
-                                {stripCode(item.sub) || stripCode(item.category) || item.key}
-                              </span>
-                              <span className="tabular-nums">
-                                {fmt(item.stock)}
-                                {item.unit ?? ""}
-                                <span className="text-slate-400 ml-1">
-                                  ({fmtTon(tonsOfItem(item))}톤)
-                                </span>
-                              </span>
-                            </div>
-                          ))}
-                      </div>
-                    );
-                  })}
-              </div>
-            );
-          })}
-          {productGroups.length === 0 && !loading && (
-            <p className="px-4 py-8 text-center text-sm text-slate-400">등록된 제품이 없습니다.</p>
-          )}
-        </div>
-        {productGroups.length > 0 && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-800 text-white font-bold">
-            <span className="flex-1">전체합계 (01~04 톤 환산)</span>
-            <span className="tabular-nums">{fmtTon(grandTotalTons)}톤</span>
-          </div>
-        )}
-        {leftoverProducts.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {leftoverProducts.map((item) => (
-              <div key={item.key} className="bg-white rounded-xl border p-4 flex flex-col gap-1">
-                <span className="text-xs text-slate-500">{itemLabel(item)}</span>
-                <span className="text-2xl font-bold text-slate-800">
-                  {fmt(item.stock)}
-                  <span className="text-sm font-normal text-slate-400 ml-1">{item.unit ?? ""}</span>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {renderGroupedKindSection("02. 포장지", bagmatGroups, bagmatGrandTotal)}
-      {renderGroupedKindSection("03. 부자재", auxGroups, auxGrandTotal)}
-
+  function renderPeriodActivityCard(title: string, rows: { date: string; item: string; qty: number; unit: string; tons: number }[], totals: { bags: number; tons: number }) {
+    return (
       <div className="bg-white rounded-xl border overflow-x-auto">
-        <div className="flex items-center justify-between px-4 pt-4 flex-wrap gap-2">
-          <h2 className="text-sm font-semibold text-slate-700">최근 생산/출하</h2>
+        <div className="flex items-center gap-3 px-4 pt-4 flex-wrap">
+          <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
           <div className="flex items-center gap-2">
             <input
               type="date"
@@ -436,58 +321,151 @@ export default function PackingStockPage() {
           <thead className="bg-slate-100 text-slate-600">
             <tr>
               <th className="text-left px-3 py-2">날짜</th>
-              <th className="text-left px-3 py-2">구분</th>
               <th className="text-left px-3 py-2">품목</th>
               <th className="text-right px-3 py-2">수량</th>
             </tr>
           </thead>
           <tbody>
-            {recentActivity.map((r, i) => (
+            {rows.map((r, i) => (
               <tr key={i} className="border-t">
                 <td className="px-3 py-2">{r.date}</td>
-                <td className="px-3 py-2">{r.label}</td>
                 <td className="px-3 py-2">{r.item}</td>
                 <td className="px-3 py-2 text-right tabular-nums">
                   {fmt(r.qty)}
                   {r.unit}
-                  {r.unit !== "톤" && (
-                    <span className="text-slate-400 ml-1">({fmtTon(r.tons)}톤)</span>
-                  )}
+                  {r.unit !== "톤" && <span className="text-slate-400 ml-1">({fmtTon(r.tons)}톤)</span>}
                 </td>
               </tr>
             ))}
-            {recentActivity.length === 0 && !loading && (
+            {rows.length === 0 && !loading && (
               <tr>
-                <td colSpan={4} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={3} className="px-3 py-8 text-center text-slate-400">
                   해당 기간에 기록이 없습니다.
                 </td>
               </tr>
             )}
           </tbody>
-          {recentActivity.length > 0 && (
+          {rows.length > 0 && (
             <tfoot>
               <tr className="border-t bg-slate-50 font-medium">
                 <td colSpan={2} className="px-3 py-2 text-slate-600">
                   기간 합계
                 </td>
-                <td className="px-3 py-2 text-slate-600">생산</td>
                 <td className="px-3 py-2 text-right tabular-nums">
-                  {fmt(activityTotals.packBags)}포
-                  <span className="text-slate-400 ml-1">({fmtTon(activityTotals.packTons)}톤)</span>
-                </td>
-              </tr>
-              <tr className="bg-slate-50 font-medium">
-                <td colSpan={2} className="px-3 py-2" />
-                <td className="px-3 py-2 text-slate-600">출하</td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {fmt(activityTotals.shipBags)}포
-                  <span className="text-slate-400 ml-1">({fmtTon(activityTotals.shipTons)}톤)</span>
+                  {fmt(totals.bags)}포
+                  <span className="text-slate-400 ml-1">({fmtTon(totals.tons)}톤)</span>
                 </td>
               </tr>
             </tfoot>
           )}
         </table>
       </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="text-xl font-bold">제품포장 재고현황</h1>
+        <p className="text-sm text-slate-500 mt-1">제품·포장지·부자재 재고를 실시간으로 확인합니다.</p>
+      </div>
+
+      <div className="flex gap-2 border-b overflow-x-auto">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${
+              tab === t.key ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "product" && (
+        <div className="flex flex-col gap-2">
+          <div className="bg-white rounded-xl border overflow-hidden divide-y">
+            {productGroups.map((group) => (
+              <div key={group.category}>
+                <div className={`flex items-center gap-3 px-4 py-3 text-white font-bold ${group.bg}`}>
+                  <span className="text-xs opacity-75">[{group.no}]</span>
+                  <span className="flex-1">{group.category}</span>
+                  <span className="tabular-nums">{fmtTon(group.tons)}톤</span>
+                </div>
+                {group.mids.map((mid) => (
+                  <div key={mid.key} className="border-t">
+                    <div className="flex items-center gap-3 px-6 py-2 bg-slate-50 text-sm font-medium">
+                      <span className="flex-1">{mid.label}</span>
+                      <span className="tabular-nums text-slate-600">
+                        {mid.key.endsWith("::bag") ? (
+                          <>
+                            {fmt(mid.bags)}포{" "}
+                            <span className="text-slate-400">({fmtTon(mid.tons)}톤)</span>
+                          </>
+                        ) : (
+                          <>{fmtTon(mid.tons)}톤</>
+                        )}
+                      </span>
+                    </div>
+                    {mid.rows.map((item) => (
+                      <div
+                        key={item.key}
+                        className="flex items-center gap-3 px-8 py-2 text-sm border-t bg-slate-50/60"
+                      >
+                        <span className="flex-1 text-slate-600">
+                          {stripCode(item.sub) || stripCode(item.category) || item.key}
+                        </span>
+                        <span className="tabular-nums">
+                          {fmt(item.stock)}
+                          {item.unit ?? ""}
+                          <span className="text-slate-400 ml-1">({fmtTon(tonsOfItem(item))}톤)</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ))}
+            {productGroups.length === 0 && !loading && (
+              <p className="px-4 py-8 text-center text-sm text-slate-400">등록된 제품이 없습니다.</p>
+            )}
+          </div>
+          {productGroups.length > 0 && (
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-800 text-white font-bold">
+              <span className="flex-1">전체합계 (01~03 톤 환산)</span>
+              <span className="tabular-nums">{fmtTon(grandTotalTons)}톤</span>
+            </div>
+          )}
+          {leftoverProducts.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {leftoverProducts.map((item) => (
+                <div key={item.key} className="bg-white rounded-xl border p-4 flex flex-col gap-1">
+                  <span className="text-xs text-slate-500">{itemLabel(item)}</span>
+                  <span className="text-2xl font-bold text-slate-800">
+                    {fmt(item.stock)}
+                    <span className="text-sm font-normal text-slate-400 ml-1">{item.unit ?? ""}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === "bagmat" && renderGroupedKindSection("포장지", bagmatGroups, bagmatGrandTotal)}
+      {tab === "aux" && renderGroupedKindSection("부자재", auxGroups, auxGrandTotal)}
+
+      {tab === "period" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {renderPeriodActivityCard("기간별 생산누계", recentActivity.pack, packTotals)}
+          {renderPeriodActivityCard("기간별 출하누계", recentActivity.ship, shipTotals)}
+        </div>
+      )}
+
+      {tab === "shipment" && <ShipmentSummaryTab />}
     </div>
   );
 }
