@@ -30,6 +30,17 @@ function tonSuffix(item: PackingItem): string | null {
   return `(${tons.toLocaleString(undefined, { maximumFractionDigits: 1 })}톤)`;
 }
 
+// 부자재는 30개, 포장지는 10000매 미만이면 부족주의
+const LOW_STOCK_THRESHOLD: Partial<Record<PackingItem["kind"], number>> = {
+  aux: 30,
+  bagmat: 10000,
+};
+
+function isLowStock(item: PackingItem): boolean {
+  const threshold = LOW_STOCK_THRESHOLD[item.kind];
+  return threshold != null && item.stock < threshold;
+}
+
 export default function PackingStockPage() {
   const [state, setState] = useState<PackingState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -84,18 +95,31 @@ export default function PackingStockPage() {
         <div key={kind} className="flex flex-col gap-2">
           <h2 className="text-sm font-semibold text-slate-700">{KIND_LABELS[kind]}</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {(grouped[kind] ?? []).map((item) => (
-              <div key={item.key} className="bg-white rounded-xl border p-4 flex flex-col gap-1">
-                <span className="text-xs text-slate-500">{itemLabel(item)}</span>
-                <span className="text-2xl font-bold text-slate-800">
-                  {fmt(item.stock)}
-                  <span className="text-sm font-normal text-slate-400 ml-1">
-                    {item.unit ?? ""}
-                    {tonSuffix(item) && ` ${tonSuffix(item)}`}
+            {(grouped[kind] ?? []).map((item) => {
+              const low = isLowStock(item);
+              return (
+                <div
+                  key={item.key}
+                  className={`rounded-xl border p-4 flex flex-col gap-1 ${
+                    low ? "bg-red-50 border-red-300" : "bg-white"
+                  }`}
+                >
+                  <span className={`text-xs ${low ? "text-red-600 font-medium" : "text-slate-500"}`}>
+                    {itemLabel(item)}
+                    {low && " (부족주의)"}
                   </span>
-                </span>
-              </div>
-            ))}
+                  <span className={`text-2xl font-bold ${low ? "text-red-600" : "text-slate-800"}`}>
+                    {fmt(item.stock)}
+                    <span
+                      className={`text-sm font-normal ml-1 ${low ? "text-red-400" : "text-slate-400"}`}
+                    >
+                      {item.unit ?? ""}
+                      {tonSuffix(item) && ` ${tonSuffix(item)}`}
+                    </span>
+                  </span>
+                </div>
+              );
+            })}
             {(grouped[kind] ?? []).length === 0 && !loading && (
               <p className="col-span-full text-sm text-slate-400">등록된 품목이 없습니다.</p>
             )}

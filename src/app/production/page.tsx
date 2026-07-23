@@ -286,15 +286,18 @@ export default function ProductionPage() {
     return (dryerReal ?? 0) + (rtoReal ?? 0);
   }, [dryerReal, rtoReal]);
 
+  const [logsDate, setLogsDate] = useState(today());
+
   async function loadLogs() {
-    const rows = await apiGet<ProductionLog[]>("/api/production");
+    const rows = await apiGet<ProductionLog[]>(`/api/production?from=${logsDate}&to=${logsDate}`);
     setLogs(rows);
   }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadLogs();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logsDate]);
 
   // 날짜/조가 바뀌면 화면에 필요한 참고정보(기존기록/전일재고/QC평균/포장일지)를
   // 단일 API 호출로 한 번에 받아온다
@@ -886,13 +889,49 @@ export default function ProductionPage() {
               확정
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="border rounded-md px-4 py-2 text-sm font-medium"
+          >
+            ↑ 맨 위로
+          </button>
           {message && <span className="text-sm text-slate-600">{message}</span>}
         </div>
       </form>
 
       <div className="bg-white rounded-xl border overflow-x-auto">
-        <div className="flex items-center justify-between px-3 pt-3">
-          <h2 className="text-sm font-semibold text-slate-700">최근 생산일지</h2>
+        <div className="flex items-center justify-between px-3 pt-3 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-slate-700">최근 생산일지</h2>
+            <button
+              type="button"
+              onClick={() => setLogsDate((d) => shiftDate(d, -1))}
+              className="border rounded-md px-2 py-1 text-xs"
+            >
+              ◀ 전날
+            </button>
+            <input
+              type="date"
+              value={logsDate}
+              onChange={(e) => setLogsDate(e.target.value)}
+              className="border rounded-md px-2 py-1 text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => setLogsDate((d) => shiftDate(d, 1))}
+              className="border rounded-md px-2 py-1 text-xs"
+            >
+              다음날 ▶
+            </button>
+            <button
+              type="button"
+              onClick={() => setLogsDate(today())}
+              className="border rounded-md px-2 py-1 text-xs"
+            >
+              오늘
+            </button>
+          </div>
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 파일 다운로드 링크(페이지 이동 아님) */}
           <a href="/api/production/export" className="text-xs border border-slate-300 rounded-md px-3 py-1.5">
             엑셀 다운로드 (전체)
