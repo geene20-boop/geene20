@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
     "A라인(h)": r.line_hours_a ?? "",
     "B라인(h)": r.line_hours_b ?? "",
     "비가동(h)": r.downtime_hours ?? "",
+    비가동발생원인: r.downtime_reason ?? "",
     "실가동합계(h)": r.line_hours_total ?? "",
     건조로누계: r.lng_dryer ?? "",
     RTO누계: r.lng_rto ?? "",

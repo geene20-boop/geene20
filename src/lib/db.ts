@@ -278,6 +278,7 @@ export function getDb(): Database.Database {
     ["granulation_agent", "TEXT"],
     ["granulation_usage_per_min", "REAL"],
     ["downtime_hours", "REAL"],
+    ["downtime_reason", "TEXT"],
     ["carryover_dryer", "REAL"],
     ["carryover_rto", "REAL"],
     ["entered_by", "TEXT"],
