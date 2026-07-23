@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/apiClient";
 import {
   PackingItem,
@@ -81,29 +81,59 @@ export default function PackingStockPage() {
 
   const grouped = useMemo(() => groupByKind(state?.stock ?? []), [state]);
 
+  // 대분류(석회고토 등) 안에서 다시 중분류(포장지 제품 / 톤백 제품)로 나눈다.
+  // 톤백 제품이 없는 대분류(칼슘유황)는 "톤백 제품" 중분류 자체를 생략한다.
   const productGroups = useMemo(() => {
     const products = (state?.stock ?? []).filter((i) => i.kind === "product");
     return PRODUCT_CATEGORY_STYLE.map((style) => {
-      const rows = products.filter(
-        (p) =>
-          p.category === style.category ||
-          (p.category === "톤백" && tonbagParentCategory(p.sub) === style.category)
+      const bagRows = products.filter((p) => p.category === style.category);
+      const tonbagRows = products.filter(
+        (p) => p.category === "톤백" && tonbagParentCategory(p.sub) === style.category
       );
-      const subtotalTons = rows.reduce((sum, r) => sum + tonsOfItem(r), 0);
-      return { ...style, rows, subtotalTons };
-    }).filter((g) => g.rows.length > 0);
+      const mids = [
+        { label: "포장지 제품", key: `${style.category}::bag`, rows: bagRows },
+        { label: "톤백 제품", key: `${style.category}::tonbag`, rows: tonbagRows },
+      ]
+        .filter((m) => m.rows.length > 0)
+        .map((m) => ({ ...m, tons: m.rows.reduce((sum, r) => sum + tonsOfItem(r), 0) }));
+      const tons = mids.reduce((sum, m) => sum + m.tons, 0);
+      return { ...style, mids, tons };
+    }).filter((g) => g.mids.length > 0);
   }, [state]);
 
   const grandTotalTons = useMemo(
-    () => productGroups.reduce((sum, g) => sum + g.subtotalTons, 0),
+    () => productGroups.reduce((sum, g) => sum + g.tons, 0),
     [productGroups]
   );
 
   // 피벗 대분류(석회고토/입상규산/칼슘유황)에 속하지 않는 제품(예: 생생비타)은 기존처럼 단순 카드로 표시
   const leftoverProducts = useMemo(() => {
-    const groupedKeys = new Set(productGroups.flatMap((g) => g.rows.map((r) => r.key)));
+    const groupedKeys = new Set(
+      productGroups.flatMap((g) => g.mids.flatMap((m) => m.rows.map((r) => r.key)))
+    );
     return (state?.stock ?? []).filter((i) => i.kind === "product" && !groupedKeys.has(i.key));
   }, [state, productGroups]);
+
+  const [openMajors, setOpenMajors] = useState<Set<string>>(new Set());
+  const [openMids, setOpenMids] = useState<Set<string>>(new Set());
+
+  function toggleMajor(category: string) {
+    setOpenMajors((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  }
+
+  function toggleMid(key: string) {
+    setOpenMids((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
   const itemByKey = useMemo(() => {
     const map = new Map<string, PackingItem>();
     for (const i of state?.stock ?? []) map.set(i.key, i);
@@ -135,53 +165,78 @@ export default function PackingStockPage() {
 
       <div className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold text-slate-700">01. 제품</h2>
-        <div className="bg-white rounded-xl border overflow-x-auto">
-          <table className="w-full text-sm">
-            <tbody>
-              {productGroups.map((group) => (
-                <Fragment key={group.category}>
-                  {group.rows.map((item, idx) => (
-                    <tr key={item.key} className="border-t">
-                      {idx === 0 && (
-                        <td
-                          rowSpan={group.rows.length + 1}
-                          className={`${group.bg} text-white text-center font-bold align-middle px-3 py-2 w-32 whitespace-nowrap`}
+        <p className="text-xs text-slate-400">대분류·중분류를 눌러 펼쳐보세요.</p>
+        <div className="bg-white rounded-xl border overflow-hidden divide-y">
+          {productGroups.map((group) => {
+            const majorOpen = openMajors.has(group.category);
+            return (
+              <div key={group.category}>
+                <button
+                  type="button"
+                  onClick={() => toggleMajor(group.category)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-white font-bold text-left ${group.bg}`}
+                >
+                  <span className="text-xs opacity-75">[{group.no}]</span>
+                  <span className="flex-1">{group.category}</span>
+                  <span className="tabular-nums">{fmtTon(group.tons)}톤</span>
+                  <span
+                    className={`text-xs transition-transform ${majorOpen ? "rotate-90" : ""}`}
+                  >
+                    ▶
+                  </span>
+                </button>
+                {majorOpen &&
+                  group.mids.map((mid) => {
+                    const midOpen = openMids.has(mid.key);
+                    return (
+                      <div key={mid.key} className="border-t">
+                        <button
+                          type="button"
+                          onClick={() => toggleMid(mid.key)}
+                          className="w-full flex items-center gap-3 px-6 py-2 bg-slate-50 hover:bg-slate-100 text-left text-sm font-medium"
                         >
-                          [{group.no}] {group.category}
-                        </td>
-                      )}
-                      <td className="px-3 py-2 text-slate-600">{item.sub ?? item.category}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {fmt(item.stock)}
-                        {item.unit ?? ""}
-                        <span className="text-slate-400 ml-1">({fmtTon(tonsOfItem(item))}톤)</span>
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="border-t bg-slate-50 font-medium">
-                    <td className="px-3 py-2 text-slate-600">소합계</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtTon(group.subtotalTons)}톤</td>
-                  </tr>
-                </Fragment>
-              ))}
-              {productGroups.length === 0 && !loading && (
-                <tr>
-                  <td colSpan={3} className="px-3 py-8 text-center text-slate-400">
-                    등록된 제품이 없습니다.
-                  </td>
-                </tr>
-              )}
-              {productGroups.length > 0 && (
-                <tr className="border-t bg-slate-800 text-white font-bold">
-                  <td className="px-3 py-2" colSpan={2}>
-                    전체합계
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{fmtTon(grandTotalTons)}톤</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                          <span className="flex-1">{mid.label}</span>
+                          <span className="tabular-nums text-slate-600">{fmtTon(mid.tons)}톤</span>
+                          <span
+                            className={`text-xs text-slate-400 transition-transform ${
+                              midOpen ? "rotate-90" : ""
+                            }`}
+                          >
+                            ▶
+                          </span>
+                        </button>
+                        {midOpen &&
+                          mid.rows.map((item) => (
+                            <div
+                              key={item.key}
+                              className="flex items-center gap-3 px-8 py-2 text-sm border-t bg-slate-50/60"
+                            >
+                              <span className="flex-1 text-slate-600">{item.sub ?? item.category}</span>
+                              <span className="tabular-nums">
+                                {fmt(item.stock)}
+                                {item.unit ?? ""}
+                                <span className="text-slate-400 ml-1">
+                                  ({fmtTon(tonsOfItem(item))}톤)
+                                </span>
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    );
+                  })}
+              </div>
+            );
+          })}
+          {productGroups.length === 0 && !loading && (
+            <p className="px-4 py-8 text-center text-sm text-slate-400">등록된 제품이 없습니다.</p>
+          )}
         </div>
+        {productGroups.length > 0 && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-800 text-white font-bold">
+            <span className="flex-1">전체합계 (01~04 톤 환산)</span>
+            <span className="tabular-nums">{fmtTon(grandTotalTons)}톤</span>
+          </div>
+        )}
         {leftoverProducts.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {leftoverProducts.map((item) => (
