@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiGet } from "@/lib/apiClient";
 import { AuditLogRow, AuditTable, TABLE_LABELS, ACTION_LABELS } from "@/lib/auditTypes";
+import { formatKst } from "@/lib/kst";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -141,7 +142,7 @@ export default function HistoryPage() {
             {rows.map((r) => (
               <tr key={r.id} className="border-t border-slate-100">
                 <td className="px-3 py-2 whitespace-nowrap text-slate-500 text-xs">
-                  {r.created_at}
+                  {formatKst(r.created_at)}
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">{TABLE_LABELS[r.table_name]}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{r.record_key}</td>

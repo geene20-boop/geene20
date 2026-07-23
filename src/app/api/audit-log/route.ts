@@ -23,11 +23,12 @@ export async function GET(req: NextRequest) {
     params.push(`%${actor}%`);
   }
   if (from) {
-    conditions.push("date(created_at) >= date(?)");
+    // created_at은 UTC로 저장되므로 +9시간 보정한 뒤 한국 날짜 기준으로 비교한다.
+    conditions.push("date(created_at, '+9 hours') >= date(?)");
     params.push(from);
   }
   if (to) {
-    conditions.push("date(created_at) <= date(?)");
+    conditions.push("date(created_at, '+9 hours') <= date(?)");
     params.push(to);
   }
 
