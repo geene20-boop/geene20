@@ -11,7 +11,8 @@ export type AuditTable =
   | "packing_breakage"
   | "packing_adjustment"
   | "packing_return"
-  | "spec_limit";
+  | "spec_limit"
+  | "worker";
 export type AuditAction = "create" | "update" | "delete";
 
 export interface AuditLogRow {
@@ -36,6 +37,7 @@ export const TABLE_LABELS: Record<AuditTable, string> = {
   packing_adjustment: "포장 재고조정",
   packing_return: "포장 반품",
   spec_limit: "품질 기준값 설정",
+  worker: "근로자명부",
 };
 
 export const ACTION_LABELS: Record<AuditAction, string> = {

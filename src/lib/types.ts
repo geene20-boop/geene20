@@ -247,3 +247,10 @@ export interface PackingAdjustment {
   entered_by: string | null;
   created_at: string;
 }
+
+export interface Worker {
+  id: number;
+  name: string;
+  active: number;
+  created_at: string;
+}
