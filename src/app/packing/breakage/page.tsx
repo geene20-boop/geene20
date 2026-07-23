@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
-import { PackingBreakage, PackingItem } from "@/lib/types";
+import { PackingBreakage, PackingItem, Worker } from "@/lib/types";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
@@ -23,6 +23,7 @@ export default function PackingBreakagePage() {
   const [key, setKey] = useState("");
   const [qty, setQty] = useState("");
   const [worker, setWorker] = useState("");
+  const [workers, setWorkers] = useState<Worker[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const { enteredBy, setEnteredBy } = useEnteredBy();
@@ -53,6 +54,7 @@ export default function PackingBreakagePage() {
     loadItems();
     loadRows();
     admin.refresh();
+    apiGet<Worker[]>("/api/worker").then(setWorkers);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -155,7 +157,15 @@ export default function PackingBreakagePage() {
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">작업자</span>
-            <input type="text" value={worker} onChange={(e) => setWorker(e.target.value)} className="border rounded-md px-2 py-1.5" />
+            <select value={worker} onChange={(e) => setWorker(e.target.value)} className="border rounded-md px-2 py-1.5">
+              <option value="">선택</option>
+              {worker && !workers.some((w) => w.name === worker) && <option value={worker}>{worker}</option>}
+              {workers.map((w) => (
+                <option key={w.id} value={w.name}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
         {message && <p className="text-sm text-slate-600">{message}</p>}

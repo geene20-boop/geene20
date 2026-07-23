@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
   logAudit(
     "packing_item",
-    key,
+    [body.category, body.sub].filter(Boolean).join(" ") || key,
     "create",
     actor,
     [kind, body.category, body.sub, body.unit].filter(Boolean).join("/")

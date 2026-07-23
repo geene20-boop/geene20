@@ -58,6 +58,7 @@ export interface QcTest {
   fine_powder: number | null;
   hopper: number | null;
   moisture: number | null;
+  moisture_note: string | null;
   worker: string | null;
   entered_by: string | null;
   updated_by: string | null;

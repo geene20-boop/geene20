@@ -3,7 +3,7 @@ import { getDb } from "@/lib/db";
 import { isAdminRequest } from "@/lib/auth";
 import { PackingRestock } from "@/lib/types";
 import { logAudit, requireActor } from "@/lib/audit";
-import { adjustStock, runInTransaction } from "@/lib/packingStock";
+import { adjustStock, packingItemAuditLabel, runInTransaction } from "@/lib/packingStock";
 
 export async function DELETE(
   req: NextRequest,
@@ -32,6 +32,6 @@ export async function DELETE(
     db.prepare("DELETE FROM packing_restock WHERE id = ?").run(id);
   });
 
-  logAudit("packing_restock", `${before.date} ${before.key}`, "delete", actor, "삭제됨(재고 원복)");
+  logAudit("packing_restock", `${before.date} ${packingItemAuditLabel(db, before.key)}`, "delete", actor, "삭제됨(재고 원복)");
   return NextResponse.json({ ok: true });
 }

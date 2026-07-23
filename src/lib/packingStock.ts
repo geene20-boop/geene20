@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { getDb } from "@/lib/db";
 import { PackingItem } from "@/lib/types";
+import { itemLabel } from "@/lib/packingClient";
 
 export interface PackEffectInput {
   productKey: string;
@@ -18,6 +19,12 @@ export interface PackEffectInput {
 
 export function getPackingItem(db: Database.Database, key: string): PackingItem | undefined {
   return db.prepare("SELECT * FROM packing_item WHERE key = ?").get(key) as PackingItem | undefined;
+}
+
+/** 이력관리(감사로그) 표시용: 영문 품목 key 대신 한글 품목명을 보여준다. */
+export function packingItemAuditLabel(db: Database.Database, key: string): string {
+  const item = getPackingItem(db, key);
+  return item ? itemLabel(item) : key;
 }
 
 /** 품목 재고를 delta만큼 증감. 존재하지 않는 품목이면 에러. */

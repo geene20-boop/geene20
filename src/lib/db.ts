@@ -290,6 +290,7 @@ export function getDb(): Database.Database {
     ["updated_by", "TEXT"],
     ["measured_date", "TEXT"],
     ["measured_time", "TEXT"],
+    ["moisture_note", "TEXT"],
   ]);
   migrateColumns("electricity_usage", [
     ["entered_by", "TEXT"],

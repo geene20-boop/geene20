@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { PackingEntry, PackingEntryType } from "@/lib/types";
 import { logAudit, requireActor } from "@/lib/audit";
-import { applyPackEffect, runInTransaction } from "@/lib/packingStock";
+import { applyPackEffect, packingItemAuditLabel, runInTransaction } from "@/lib/packingStock";
 
 export async function GET(req: NextRequest) {
   const db = getDb();
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
 
   logAudit(
     "packing_entry",
-    `${body.date} ${type === "pack" ? "생산" : "출하"} ${body.productKey}`,
+    `${body.date} ${type === "pack" ? "생산" : "출하"} ${packingItemAuditLabel(getDb(), body.productKey)}`,
     "create",
     actor,
     `${body.qty}${body.unit ?? ""}`

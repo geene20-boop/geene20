@@ -2,13 +2,18 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
-import { PackingItem, QcTest, inferShift } from "@/lib/types";
+import { PackingItem, QcTest, Worker, inferShift } from "@/lib/types";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import { useSiteSession } from "@/lib/useSiteSession";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const nowHHMM = () => new Date().toISOString().slice(11, 16);
+const daysAgo = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+};
 
 type FormState = {
   sample_no: string;
@@ -24,6 +29,7 @@ type FormState = {
   fine_powder: string;
   hopper: string;
   moisture: string;
+  moisture_note: string;
   worker: string;
 };
 
@@ -41,6 +47,7 @@ const emptyForm = (): FormState => ({
   fine_powder: "",
   hopper: "",
   moisture: "",
+  moisture_note: "",
   worker: "",
 });
 
@@ -61,9 +68,12 @@ export default function QcPage() {
   const [nameError, setNameError] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [productOptions, setProductOptions] = useState<string[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([]);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
   const [draftAvailable, setDraftAvailable] = useState<FormState | null>(null);
+  const [rangeFrom, setRangeFrom] = useState(daysAgo(30));
+  const [rangeTo, setRangeTo] = useState(today());
   const session = useSiteSession();
 
   useEffect(() => {
@@ -81,6 +91,7 @@ export default function QcPage() {
       );
       setProductOptions(cats);
     });
+    apiGet<Worker[]>("/api/worker").then(setWorkers);
   }, []);
 
   useEffect(() => {
@@ -110,14 +121,15 @@ export default function QcPage() {
   const sum = values.reduce((a, b) => a + b, 0);
   const avg = values.length ? sum / values.length : null;
 
-  async function loadTests() {
-    const rows = await apiGet<QcTest[]>("/api/qc");
+  async function loadTests(from?: string, to?: string) {
+    const rows = await apiGet<QcTest[]>(`/api/qc?from=${from ?? rangeFrom}&to=${to ?? rangeTo}`);
     setTests(rows);
   }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTests();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 시료 No.는 해당 생산일자에 이미 등록된 최대 번호 다음 값으로 자동 생성한다 (수기입력 없음)
@@ -209,6 +221,7 @@ export default function QcPage() {
         fine_powder: n(form.fine_powder),
         hopper: n(form.hopper),
         moisture: n(form.moisture),
+        moisture_note: form.moisture_note || null,
         worker: form.worker || null,
         entered_by: enteredBy.trim(),
       };
@@ -252,6 +265,7 @@ export default function QcPage() {
       fine_powder: t.fine_powder != null ? String(t.fine_powder) : "",
       hopper: t.hopper != null ? String(t.hopper) : "",
       moisture: t.moisture != null ? String(t.moisture) : "",
+      moisture_note: t.moisture_note ?? "",
       worker: t.worker ?? "",
     });
     setEditingId(t.id);
@@ -482,12 +496,21 @@ export default function QcPage() {
             </label>
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-slate-600">작업자</span>
-              <input
-                type="text"
+              <select
                 value={form.worker}
                 onChange={(e) => set("worker", e.target.value)}
                 className="border rounded-md px-2 py-1.5"
-              />
+              >
+                <option value="">선택</option>
+                {form.worker && !workers.some((w) => w.name === form.worker) && (
+                  <option value={form.worker}>{form.worker}</option>
+                )}
+                {workers.map((w) => (
+                  <option key={w.id} value={w.name}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
         </fieldset>
@@ -496,16 +519,28 @@ export default function QcPage() {
           <legend className="text-sm font-semibold text-slate-700 px-1">
             수분 측정값 (120도, 8g 스탠다드 기준)
           </legend>
-          <label className="flex flex-col gap-1 text-sm mt-2 max-w-[200px]">
-            <span className="text-slate-600">수분(%)</span>
-            <input
-              type="number"
-              step="any"
-              value={form.moisture}
-              onChange={(e) => set("moisture", e.target.value)}
-              className="border rounded-md px-2 py-1.5"
-            />
-          </label>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-slate-600">수분(%)</span>
+              <input
+                type="number"
+                step="any"
+                value={form.moisture}
+                onChange={(e) => set("moisture", e.target.value)}
+                className="border rounded-md px-2 py-1.5"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm md:col-span-2">
+              <span className="text-slate-600">비고 (조건, 용도)</span>
+              <input
+                type="text"
+                value={form.moisture_note}
+                onChange={(e) => set("moisture_note", e.target.value)}
+                placeholder="예: 재검사, 출하용"
+                className="border rounded-md px-2 py-1.5"
+              />
+            </label>
+          </div>
         </fieldset>
 
         <div className="flex items-center gap-3">
@@ -535,8 +570,30 @@ export default function QcPage() {
       </form>
 
       <div className="bg-white rounded-xl border overflow-x-auto">
-        <div className="flex items-center justify-between px-3 pt-3">
-          <h2 className="text-sm font-semibold text-slate-700">최근 측정 기록</h2>
+        <div className="flex items-center justify-between px-3 pt-3 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-slate-700">측정 기록</h2>
+            <input
+              type="date"
+              value={rangeFrom}
+              onChange={(e) => setRangeFrom(e.target.value)}
+              className="border rounded-md px-2 py-1 text-xs"
+            />
+            <span className="text-xs text-slate-400">~</span>
+            <input
+              type="date"
+              value={rangeTo}
+              onChange={(e) => setRangeTo(e.target.value)}
+              className="border rounded-md px-2 py-1 text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => loadTests()}
+              className="border rounded-md px-3 py-1 text-xs bg-slate-900 text-white"
+            >
+              조회
+            </button>
+          </div>
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 파일 다운로드 링크(페이지 이동 아님) */}
           <a href="/api/qc/export" className="text-xs border border-slate-300 rounded-md px-3 py-1.5">
             엑셀 다운로드 (전체)
@@ -551,13 +608,14 @@ export default function QcPage() {
               <th className="text-left px-3 py-2">비종</th>
               <th className="text-right px-3 py-2">평균경도</th>
               <th className="text-right px-3 py-2">수분</th>
+              <th className="text-left px-3 py-2">비고</th>
               <th className="text-left px-3 py-2">작업자</th>
               <th className="text-left px-3 py-2">입력자/수정자</th>
               <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
-            {tests.slice(0, 30).map((t) => {
+            {tests.map((t) => {
               const vals = Array.from({ length: 20 }, (_, i) => t[`v${i + 1}` as keyof QcTest] as number | null).filter(
                 (v): v is number => typeof v === "number"
               );
@@ -572,6 +630,7 @@ export default function QcPage() {
                     <td className="px-3 py-2">{t.fertilizer_type ?? "-"}</td>
                     <td className="px-3 py-2 text-right">{avg != null ? avg.toFixed(2) : "-"}</td>
                     <td className="px-3 py-2 text-right">{t.moisture ?? "-"}</td>
+                    <td className="px-3 py-2">{t.moisture_note ?? "-"}</td>
                     <td className="px-3 py-2">{t.worker ?? "-"}</td>
                     <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
                       {t.entered_by ?? "-"}
@@ -594,7 +653,7 @@ export default function QcPage() {
                   </tr>
                   {expanded && (
                     <tr className="border-t bg-slate-50">
-                      <td colSpan={9} className="px-3 py-3">
+                      <td colSpan={10} className="px-3 py-3">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-1 text-xs text-slate-600">
                           <span>측정일시: {t.measured_date ?? "-"} {t.measured_time ?? ""}</span>
                           <span>버너: {t.burner_temp ?? "-"}</span>
@@ -612,8 +671,8 @@ export default function QcPage() {
             })}
             {tests.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-slate-400">
-                  아직 입력된 측정 기록이 없습니다.
+                <td colSpan={10} className="px-3 py-8 text-center text-slate-400">
+                  해당 기간에 입력된 측정 기록이 없습니다.
                 </td>
               </tr>
             )}

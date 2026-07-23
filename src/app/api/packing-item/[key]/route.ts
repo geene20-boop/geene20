@@ -41,7 +41,7 @@ export async function PUT(
 
   logAudit(
     "packing_item",
-    key,
+    [category, sub].filter(Boolean).join(" ") || key,
     "update",
     actor,
     `이전: ${before.category}/${before.sub}/${before.unit}/${before.stock}/${before.cumulative_produced} → 이후: ${category}/${sub}/${unit}/${stock}/${cumulativeProduced}`
@@ -84,7 +84,7 @@ export async function DELETE(
   db.prepare("DELETE FROM packing_item WHERE key = ?").run(key);
   logAudit(
     "packing_item",
-    key,
+    [before.category, before.sub].filter(Boolean).join(" ") || key,
     "delete",
     actor,
     [before.kind, before.category, before.sub, before.unit].filter(Boolean).join("/") + " 삭제됨"

@@ -20,6 +20,7 @@ const ALLOWED = [
   "fine_powder",
   "hopper",
   "moisture",
+  "moisture_note",
   "worker",
 ];
 
