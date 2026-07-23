@@ -15,7 +15,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
-import { apiGet, apiPost } from "@/lib/apiClient";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import { UtilityMonthRow, MonthlyUtility, ElectricityUsage } from "@/lib/types";
 import type { MergedShiftRow } from "@/lib/analytics";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
@@ -129,6 +129,7 @@ export default function UtilityPage() {
   const { enteredBy, setEnteredBy } = useEnteredBy();
   const [nameError, setNameError] = useState(false);
   const session = useSiteSession();
+  const canManageMonthly = admin.loggedIn || session.isModifier;
 
   useEffect(() => {
     if (session.loggedIn && session.displayName) {
@@ -576,11 +577,11 @@ export default function UtilityPage() {
           </div>
         </div>
         {importMsg && <p className="text-xs text-slate-600">{importMsg}</p>}
-        {!admin.loggedIn && (
+        {!canManageMonthly && (
           <div className="flex items-center justify-between gap-3 text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-md px-3 py-2">
             <span>
-              금액·경유 등 재무 데이터는 관리자만 입력/수정할 수 있습니다. 조회는 누구나 볼 수
-              있습니다.
+              금액·경유 등 재무 데이터는 관리자 또는 수정 권한 계정만 입력/수정할 수 있습니다.
+              조회는 누구나 볼 수 있습니다.
             </span>
             <button
               type="button"
@@ -603,13 +604,13 @@ export default function UtilityPage() {
         )}
         <form
           onSubmit={saveMonth}
-          className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${!admin.loggedIn ? "opacity-50 pointer-events-none" : ""}`}
+          className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${!canManageMonthly ? "opacity-50 pointer-events-none" : ""}`}
         >
           <EnteredByField
             value={enteredBy}
             onChange={setEnteredBy}
             error={nameError}
-            lockedValue={admin.loggedIn ? session.displayName : null}
+            lockedValue={session.loggedIn ? session.displayName : null}
           />
           <label className="flex flex-col gap-1 text-xs">
             <span className="text-slate-600">월</span>
@@ -674,8 +675,15 @@ export default function UtilityPage() {
           </div>
         </form>
 
-        {/* 저장된 월별 값 목록 (편집은 관리자만) */}
-        <MonthlyList onEdit={editMonth} refreshKey={sheet.length} canEdit={admin.loggedIn} />
+        {/* 저장된 월별 값 목록 (수정은 관리자·수정 권한, 승인/승인해제는 관리자만) */}
+        <MonthlyList
+          onEdit={editMonth}
+          refreshKey={sheet.length}
+          isAdmin={admin.loggedIn}
+          isModifier={session.isModifier}
+          enteredBy={enteredBy}
+          onNameError={() => setNameError(true)}
+        />
       </div>
     </div>
   );
@@ -684,13 +692,22 @@ export default function UtilityPage() {
 function MonthlyList({
   onEdit,
   refreshKey,
-  canEdit,
+  isAdmin,
+  isModifier,
+  enteredBy,
+  onNameError,
 }: {
   onEdit: (m: MonthlyUtility) => void;
   refreshKey: number;
-  canEdit: boolean;
+  isAdmin: boolean;
+  isModifier: boolean;
+  enteredBy: string;
+  onNameError: () => void;
 }) {
   const [rows, setRows] = useState<MonthlyUtility[]>([]);
+  const load = useCallback(async () => {
+    setRows(await apiGet<MonthlyUtility[]>("/api/monthly-utility"));
+  }, []);
   useEffect(() => {
     let cancelled = false;
     apiGet<MonthlyUtility[]>("/api/monthly-utility").then((data) => {
@@ -700,7 +717,35 @@ function MonthlyList({
       cancelled = true;
     };
   }, [refreshKey]);
+
+  function canEditRow(m: MonthlyUtility) {
+    return !m.locked && (isAdmin || isModifier);
+  }
+  function canDeleteRow(m: MonthlyUtility) {
+    if (m.locked) return false;
+    if (isAdmin) return true;
+    return isModifier && !m.approved_at;
+  }
+  async function remove(m: MonthlyUtility) {
+    if (!enteredBy.trim()) {
+      onNameError();
+      return;
+    }
+    if (!confirm(`${m.month} 월 데이터를 삭제할까요?`)) return;
+    await apiDelete(`/api/monthly-utility/${m.month}`, { entered_by: enteredBy });
+    await load();
+  }
+  async function toggleLock(m: MonthlyUtility) {
+    if (!enteredBy.trim()) {
+      onNameError();
+      return;
+    }
+    await apiPut(`/api/monthly-utility/${m.month}/lock`, { entered_by: enteredBy, locked: !m.locked });
+    await load();
+  }
+
   if (rows.length === 0) return null;
+  const canManage = isAdmin || isModifier;
   return (
     <div className="overflow-x-auto">
       <table className="text-xs w-full tabular-nums">
@@ -712,6 +757,7 @@ function MonthlyList({
             <th className="text-right px-2 py-1.5">경유(ℓ)</th>
             <th className="text-right px-2 py-1.5">경유금액</th>
             <th className="text-left px-2 py-1.5">입력자/수정자</th>
+            <th className="text-left px-2 py-1.5">상태</th>
             <th className="px-2 py-1.5"></th>
           </tr>
         </thead>
@@ -727,11 +773,32 @@ function MonthlyList({
                 {m.entered_by ?? "-"}
                 {m.updated_by && m.updated_by !== m.entered_by ? ` → ${m.updated_by}` : ""}
               </td>
-              <td className="text-right px-2 py-1.5">
-                {canEdit ? (
-                  <button onClick={() => onEdit(m)} className="text-sky-600 hover:underline">수정</button>
+              <td className="text-left px-2 py-1.5">
+                {m.locked ? (
+                  <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                    승인됨
+                  </span>
                 ) : (
                   <span className="text-slate-300">-</span>
+                )}
+              </td>
+              <td className="text-right px-2 py-1.5">
+                {!canManage ? (
+                  <span className="text-slate-300">-</span>
+                ) : (
+                  <div className="flex items-center justify-end gap-2">
+                    {canEditRow(m) && (
+                      <button onClick={() => onEdit(m)} className="text-sky-600 hover:underline">수정</button>
+                    )}
+                    {canDeleteRow(m) && (
+                      <button onClick={() => remove(m)} className="text-red-600 hover:underline">삭제</button>
+                    )}
+                    {isAdmin && (
+                      <button onClick={() => toggleLock(m)} className="text-slate-600 hover:underline">
+                        {m.locked ? "승인해제" : "승인"}
+                      </button>
+                    )}
+                  </div>
                 )}
               </td>
             </tr>

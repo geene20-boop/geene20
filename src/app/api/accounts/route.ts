@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(listAccounts());
 }
 
-const VALID_ROLES: AccountRole[] = ["viewer", "editor"];
+const VALID_ROLES: AccountRole[] = ["viewer", "editor", "modifier"];
 
 export async function POST(req: NextRequest) {
   if (!isAdminRequest(req)) {
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "비밀번호는 8자 이상이어야 합니다." }, { status: 400 });
   }
   if (!VALID_ROLES.includes(role)) {
-    return NextResponse.json({ error: "role은 viewer 또는 editor여야 합니다." }, { status: 400 });
+    return NextResponse.json({ error: "role은 viewer, editor, modifier 중 하나여야 합니다." }, { status: 400 });
   }
 
   try {

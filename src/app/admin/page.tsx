@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 
-type AccountRole = "viewer" | "editor";
+type AccountRole = "viewer" | "editor" | "modifier";
 
 interface AccountRow {
   id: number;
@@ -94,8 +94,11 @@ function AccountManagementCard() {
       <div>
         <h2 className="font-semibold text-slate-800">계정 관리</h2>
         <p className="text-sm text-slate-500 mt-1">
-          개인별 아이디/비밀번호로 로그인하며, 조회만 가능한 &quot;viewer&quot;와 입력까지 가능한
-          &quot;editor&quot; 중 하나의 권한을 부여합니다. (관리자 비밀번호와는 별개입니다)
+          개인별 아이디/비밀번호로 로그인하며, 조회만 가능한 &quot;viewer&quot;, 입력만 가능한
+          &quot;editor&quot;, 승인 전까지 수정·삭제까지 가능한 &quot;수정(modifier)&quot; 중 하나의 권한을
+          부여합니다. 관리자가 기록을 &quot;승인&quot;하면 그 기록은 누구도 수정·삭제할 수 없고,
+          관리자가 &quot;승인해제&quot;하면 수정 권한 계정은 수정만 가능해집니다. (관리자 비밀번호와는
+          별개입니다)
         </p>
         {accounts.length === 0 && (
           <p className="text-xs mt-2 text-amber-600 font-medium">
@@ -127,6 +130,7 @@ function AccountManagementCard() {
           <span className="text-slate-500">권한</span>
           <select value={role} onChange={(e) => setRole(e.target.value as AccountRole)} className="border rounded-md px-2 py-1.5 text-sm">
             <option value="editor">입력 가능(editor)</option>
+            <option value="modifier">수정·삭제 가능(modifier)</option>
             <option value="viewer">조회만(viewer)</option>
           </select>
         </label>
@@ -163,6 +167,7 @@ function AccountManagementCard() {
                   className="border rounded-md px-1.5 py-1 text-xs"
                 >
                   <option value="editor">입력 가능(editor)</option>
+                  <option value="modifier">수정·삭제 가능(modifier)</option>
                   <option value="viewer">조회만(viewer)</option>
                 </select>
               </td>

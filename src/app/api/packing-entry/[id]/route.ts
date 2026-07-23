@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { isAdminRequest } from "@/lib/auth";
+import { canDeleteRecord, canEditRecord } from "@/lib/auth";
 import { PackingEntry } from "@/lib/types";
 import { logAudit, requireActor } from "@/lib/audit";
 import { applyPackEffect, packingItemAuditLabel, runInTransaction } from "@/lib/packingStock";
@@ -24,9 +24,6 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!isAdminRequest(req)) {
-    return NextResponse.json({ error: "입력 내역 수정은 관리자 로그인이 필요합니다." }, { status: 403 });
-  }
   const { id } = await params;
   const body = await req.json();
   const actor = requireActor(req, body);
@@ -40,6 +37,12 @@ export async function PUT(
     | undefined;
   if (!before) {
     return NextResponse.json({ error: "수정할 입력 내역을 찾을 수 없습니다." }, { status: 404 });
+  }
+  if (!canEditRecord(req, before)) {
+    const reason = before.locked
+      ? "승인된 기록은 수정할 수 없습니다. 관리자가 승인 해제해야 합니다."
+      : "수정 권한이 없습니다.";
+    return NextResponse.json({ error: reason }, { status: 403 });
   }
 
   const updated: PackingEntry = { ...before, ...body };
@@ -105,9 +108,6 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!isAdminRequest(req)) {
-    return NextResponse.json({ error: "입력 내역 삭제는 관리자 로그인이 필요합니다." }, { status: 403 });
-  }
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
   const actor = requireActor(req, body);
@@ -121,6 +121,12 @@ export async function DELETE(
     | undefined;
   if (!before) {
     return NextResponse.json({ error: "삭제할 입력 내역을 찾을 수 없습니다." }, { status: 404 });
+  }
+  if (!canDeleteRecord(req, before)) {
+    const reason = before.locked
+      ? "승인된 기록은 삭제할 수 없습니다. 관리자가 승인 해제해야 합니다."
+      : "삭제 권한이 없습니다.";
+    return NextResponse.json({ error: reason }, { status: 403 });
   }
 
   runInTransaction((db) => {

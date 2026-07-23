@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-export type AccountRole = "admin" | "editor" | "viewer";
+export type AccountRole = "admin" | "editor" | "modifier" | "viewer";
 
 export interface SiteSession {
   checked: boolean;
@@ -11,7 +11,8 @@ export interface SiteSession {
   isAdmin: boolean;
   displayName: string | null;
   role: AccountRole | null;
-  canWrite: boolean; // 개방 모드이거나 editor/admin이면 true, viewer면 false
+  canWrite: boolean; // 개방 모드이거나 editor/modifier/admin이면 true, viewer면 false
+  isModifier: boolean; // role이 modifier인지 (수정 권한: 승인 전 기록은 수정·삭제 가능)
   refresh: () => Promise<void>;
 }
 
@@ -23,6 +24,7 @@ const initial: Omit<SiteSession, "refresh"> = {
   displayName: null,
   role: null,
   canWrite: true,
+  isModifier: false,
 };
 
 export function useSiteSession(): SiteSession {
@@ -40,7 +42,8 @@ export function useSiteSession(): SiteSession {
       isAdmin: !!d.isAdmin,
       displayName: d.displayName ?? null,
       role,
-      canWrite: !configured || role === "editor" || role === "admin",
+      canWrite: !configured || role === "editor" || role === "modifier" || role === "admin",
+      isModifier: role === "modifier",
     });
   }, []);
 

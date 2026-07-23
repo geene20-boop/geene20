@@ -125,6 +125,9 @@ export interface MonthlyUtility {
   diesel_won: number | null;
   production_ton: number | null;
   note: string | null;
+  locked: number;
+  approved_by: string | null;
+  approved_at: string | null;
   entered_by: string | null;
   updated_by: string | null;
   created_at: string;
@@ -178,6 +181,9 @@ export interface PackingItem {
   bag_mat_key: string | null;
   stock: number;
   cumulative_produced: number;
+  locked: number;
+  approved_by: string | null;
+  approved_at: string | null;
 }
 
 export type PackingEntryType = "pack" | "ship";
@@ -198,6 +204,9 @@ export interface PackingEntry {
   aux_use_key: string | null;
   aux_use_qty: number | null;
   worker: string | null;
+  locked: number;
+  approved_by: string | null;
+  approved_at: string | null;
   entered_by: string | null;
   updated_by: string | null;
   created_at: string;
@@ -211,6 +220,9 @@ export interface PackingRestock {
   key: string;
   qty: number;
   worker: string | null;
+  locked: number;
+  approved_by: string | null;
+  approved_at: string | null;
   entered_by: string | null;
   created_at: string;
 }
@@ -222,6 +234,9 @@ export interface PackingBreakage {
   key: string;
   qty: number;
   worker: string | null;
+  locked: number;
+  approved_by: string | null;
+  approved_at: string | null;
   entered_by: string | null;
   updated_by: string | null;
   created_at: string;
@@ -235,6 +250,9 @@ export interface PackingReturn {
   key: string;
   qty: number;
   worker: string | null;
+  locked: number;
+  approved_by: string | null;
+  approved_at: string | null;
   entered_by: string | null;
   created_at: string;
 }

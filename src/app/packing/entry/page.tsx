@@ -185,6 +185,25 @@ export default function PackingEntryPage() {
     await Promise.all([loadItems(), loadEntries()]);
   }
 
+  async function toggleLock(row: PackingEntry) {
+    if (!enteredBy.trim()) {
+      setNameError(true);
+      return;
+    }
+    await apiPut(`/api/packing-entry/${row.id}/lock`, { entered_by: enteredBy, locked: !row.locked });
+    await loadEntries();
+  }
+
+  const canManage = admin.loggedIn || session.isModifier;
+  function canEditRow(row: PackingEntry) {
+    return !row.locked && (admin.loggedIn || session.isModifier);
+  }
+  function canDeleteRow(row: PackingEntry) {
+    if (row.locked) return false;
+    if (admin.loggedIn) return true;
+    return session.isModifier && !row.approved_at;
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -454,7 +473,8 @@ export default function PackingEntryPage() {
               <th className="text-right px-3 py-2">수량</th>
               <th className="text-left px-3 py-2">작업자</th>
               <th className="text-left px-3 py-2">입력자</th>
-              {admin.loggedIn && <th className="text-left px-3 py-2">관리</th>}
+              <th className="text-left px-3 py-2">상태</th>
+              {canManage && <th className="text-left px-3 py-2">관리</th>}
             </tr>
           </thead>
           <tbody>
@@ -471,21 +491,42 @@ export default function PackingEntryPage() {
                   </td>
                   <td className="px-3 py-2">{row.worker ?? "-"}</td>
                   <td className="px-3 py-2 text-slate-500">{row.entered_by ?? "-"}</td>
-                  {admin.loggedIn && (
+                  <td className="px-3 py-2">
+                    {row.locked ? (
+                      <span className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                        승인됨
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-300">-</span>
+                    )}
+                  </td>
+                  {canManage && (
                     <td className="px-3 py-2">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => startEdit(row)}
-                          className="text-xs border rounded-md px-2 py-1 bg-white"
-                        >
-                          수정
-                        </button>
-                        <button
-                          onClick={() => removeEntry(row.id)}
-                          className="text-xs border rounded-md px-2 py-1 bg-white text-red-600"
-                        >
-                          삭제
-                        </button>
+                      <div className="flex gap-2 flex-wrap">
+                        {canEditRow(row) && (
+                          <button
+                            onClick={() => startEdit(row)}
+                            className="text-xs border rounded-md px-2 py-1 bg-white"
+                          >
+                            수정
+                          </button>
+                        )}
+                        {canDeleteRow(row) && (
+                          <button
+                            onClick={() => removeEntry(row.id)}
+                            className="text-xs border rounded-md px-2 py-1 bg-white text-red-600"
+                          >
+                            삭제
+                          </button>
+                        )}
+                        {admin.loggedIn && (
+                          <button
+                            onClick={() => toggleLock(row)}
+                            className="text-xs border rounded-md px-2 py-1 bg-white"
+                          >
+                            {row.locked ? "승인해제" : "승인"}
+                          </button>
+                        )}
                       </div>
                     </td>
                   )}
@@ -494,7 +535,7 @@ export default function PackingEntryPage() {
             })}
             {entries.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
                   해당 기간에 입력 기록이 없습니다.
                 </td>
               </tr>
@@ -505,7 +546,7 @@ export default function PackingEntryPage() {
 
       {!admin.loggedIn && (
         <p className="text-xs text-slate-400">
-          수정·삭제는 관리자만 가능합니다.{" "}
+          승인/승인해제는 관리자만 가능합니다.{" "}
           <button onClick={() => setShowAdminModal(true)} className="underline">
             관리자 로그인
           </button>

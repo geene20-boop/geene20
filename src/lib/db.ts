@@ -299,9 +299,37 @@ export function getDb(): Database.Database {
   migrateColumns("monthly_utility", [
     ["entered_by", "TEXT"],
     ["updated_by", "TEXT"],
+    ["locked", "INTEGER NOT NULL DEFAULT 0"],
+    ["approved_by", "TEXT"],
+    ["approved_at", "TEXT"],
   ]);
   migrateColumns("spec_limit", [["updated_by", "TEXT"]]);
-  migrateColumns("packing_item", [["cumulative_produced", "REAL NOT NULL DEFAULT 0"]]);
+  migrateColumns("packing_item", [
+    ["cumulative_produced", "REAL NOT NULL DEFAULT 0"],
+    ["locked", "INTEGER NOT NULL DEFAULT 0"],
+    ["approved_by", "TEXT"],
+    ["approved_at", "TEXT"],
+  ]);
+  migrateColumns("packing_entry", [
+    ["locked", "INTEGER NOT NULL DEFAULT 0"],
+    ["approved_by", "TEXT"],
+    ["approved_at", "TEXT"],
+  ]);
+  migrateColumns("packing_restock", [
+    ["locked", "INTEGER NOT NULL DEFAULT 0"],
+    ["approved_by", "TEXT"],
+    ["approved_at", "TEXT"],
+  ]);
+  migrateColumns("packing_breakage", [
+    ["locked", "INTEGER NOT NULL DEFAULT 0"],
+    ["approved_by", "TEXT"],
+    ["approved_at", "TEXT"],
+  ]);
+  migrateColumns("packing_return", [
+    ["locked", "INTEGER NOT NULL DEFAULT 0"],
+    ["approved_by", "TEXT"],
+    ["approved_at", "TEXT"],
+  ]);
 
   const specCount = db.prepare("SELECT COUNT(*) as c FROM spec_limit").get() as { c: number };
   if (specCount.c === 0) {
