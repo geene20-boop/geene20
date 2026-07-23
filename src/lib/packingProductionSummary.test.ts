@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyProductCategory,
   getDailyPackingSummary,
+  getDailyProduction,
   getMonthlyProduction,
   getSeasonProduction,
 } from "@/lib/packingProductionSummary";
@@ -70,6 +71,32 @@ describe("getMonthlyProduction", () => {
     expect(july2026?.tons).toBe(3);
     expect(july2026?.yoyTons).toBe(1);
     expect(july2026?.yoyPercent).toBe(50);
+  });
+});
+
+describe("getDailyProduction", () => {
+  it("computes 전일대비 using the day before, even if outside the query range", () => {
+    const db = makeDb();
+    addEntry(db, "1", "2025-07-04", "pack", "prod_a", 100); // 2톤 (조회기간 밖)
+    addEntry(db, "2", "2025-07-05", "pack", "prod_a", 150); // 3톤
+    const rows = getDailyProduction(db, "2025-07-05", "2025-07-05");
+    expect(rows).toEqual([{ date: "2025-07-05", tons: 3, dodTons: 1, dodPercent: 50 }]);
+  });
+
+  it("returns null 전일대비 when there is no entry for the previous day", () => {
+    const db = makeDb();
+    addEntry(db, "1", "2025-07-05", "pack", "prod_a", 100); // 2톤
+    const rows = getDailyProduction(db, "2025-07-05", "2025-07-05");
+    expect(rows).toEqual([{ date: "2025-07-05", tons: 2, dodTons: null, dodPercent: null }]);
+  });
+
+  it("only includes dates within the requested range", () => {
+    const db = makeDb();
+    addEntry(db, "1", "2025-07-01", "pack", "prod_a", 100);
+    addEntry(db, "2", "2025-07-10", "pack", "prod_a", 100);
+    addEntry(db, "3", "2025-07-20", "pack", "prod_a", 100);
+    const rows = getDailyProduction(db, "2025-07-05", "2025-07-15");
+    expect(rows.map((r) => r.date)).toEqual(["2025-07-10"]);
   });
 });
 

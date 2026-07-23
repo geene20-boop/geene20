@@ -14,6 +14,13 @@ export interface SeasonProductionRow {
   yoyPercent: number | null; // 전 시즌 대비 증감(%)
 }
 
+export interface DailyProductionRow {
+  date: string; // "YYYY-MM-DD"
+  tons: number;
+  dodTons: number | null; // 전일 대비 증감(톤)
+  dodPercent: number | null; // 전일 대비 증감(%)
+}
+
 function monthKey(dateStr: string): string {
   return dateStr.slice(0, 7);
 }
@@ -36,6 +43,12 @@ function prevMonthKey(month: string): string {
 function prevSeasonKey(season: string): string {
   const startYear = Number(season.slice(0, 4));
   return `${startYear - 1}-${startYear}`;
+}
+
+function shiftDateStr(dateStr: string, delta: number): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
 }
 
 interface RawEntry {
@@ -133,6 +146,24 @@ export function getDailyPackingSummary(db: Database.Database, date: string): Dai
   }
 
   return { totalTons, suggestedProduct };
+}
+
+// 조회기간(from~to) 내 날짜별 생산량과 전일대비 증감을 계산한다.
+// 전일대비는 조회기간 밖의 전날 실적도 참고해서(그래야 조회기간 첫날도 증감 계산 가능) 계산한다.
+export function getDailyProduction(db: Database.Database, from: string, to: string): DailyProductionRow[] {
+  const entries = getRawEntries(db);
+  const byDate = new Map<string, number>();
+  for (const e of entries) {
+    byDate.set(e.date, (byDate.get(e.date) ?? 0) + tonsOf(e));
+  }
+  const datesInRange = [...byDate.keys()].filter((d) => d >= from && d <= to).sort();
+  return datesInRange.map((date) => {
+    const tons = byDate.get(date)!;
+    const prevTons = byDate.get(shiftDateStr(date, -1)) ?? null;
+    const dodTons = prevTons != null ? tons - prevTons : null;
+    const dodPercent = prevTons != null && prevTons !== 0 ? ((dodTons as number) / prevTons) * 100 : null;
+    return { date, tons, dodTons, dodPercent };
+  });
 }
 
 export function getSeasonProduction(db: Database.Database): SeasonProductionRow[] {
