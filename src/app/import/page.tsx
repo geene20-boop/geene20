@@ -337,6 +337,7 @@ function PackingStockImportCard() {
           onClose={() => setShowAdminModal(false)}
           onSuccess={() => {
             admin.refresh();
+            session.refresh();
             setShowAdminModal(false);
           }}
         />

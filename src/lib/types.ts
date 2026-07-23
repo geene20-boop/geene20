@@ -31,6 +31,7 @@ export interface ProductionLog {
   downtime_hours: number | null;
   carryover_dryer: number | null;
   carryover_rto: number | null;
+  locked: number;
   entered_by: string | null;
   updated_by: string | null;
   created_at: string;

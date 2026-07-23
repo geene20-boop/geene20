@@ -52,6 +52,7 @@ export function getDb(): Database.Database {
       downtime_hours REAL,              -- 비가동시간 (A+B 가동시간에서 차감)
       carryover_dryer REAL,             -- 전일재고량 - 건조로 누계 (관리자 수정 가능)
       carryover_rto REAL,               -- 전일재고량 - RTO 누계 (관리자 수정 가능)
+      locked INTEGER NOT NULL DEFAULT 0, -- 확정됨(1)이면 관리자가 해제하기 전엔 수정 불가
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(date, shift)
@@ -273,6 +274,7 @@ export function getDb(): Database.Database {
     ["carryover_rto", "REAL"],
     ["entered_by", "TEXT"],
     ["updated_by", "TEXT"],
+    ["locked", "INTEGER NOT NULL DEFAULT 0"],
   ]);
   migrateColumns("qc_test", [
     ["entered_by", "TEXT"],

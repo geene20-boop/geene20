@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "HANIL QC — 설비/품질 관리 시스템",
+    name: "HANIL QC — (주)한일씨앤에스 통합정보시스템",
     short_name: "HANIL QC",
     description: "설비가동정보 + 비료시료 강도테스트 통합 관리 앱",
     start_url: "/",

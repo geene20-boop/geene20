@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { apiDelete, apiGet, apiPost } from "@/lib/apiClient";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import { ProductionLog } from "@/lib/types";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 import { useEnteredBy } from "@/lib/useEnteredBy";
@@ -26,7 +26,6 @@ type FormState = {
   feed_molder: string;
   brix: string;
   granulation_agent: string;
-  granulation_usage_per_min: string;
   line_hours_a: string;
   line_hours_b: string;
   downtime_hours: string;
@@ -62,7 +61,6 @@ const emptyForm: FormState = {
   feed_molder: "",
   brix: "",
   granulation_agent: "",
-  granulation_usage_per_min: "",
   line_hours_a: "",
   line_hours_b: "",
   downtime_hours: "",
@@ -101,7 +99,6 @@ function fromLog(row: ProductionLog): FormState {
     feed_molder: toFormValue(row.feed_molder),
     brix: toFormValue(row.brix),
     granulation_agent: row.granulation_agent ?? "",
-    granulation_usage_per_min: toFormValue(row.granulation_usage_per_min),
     line_hours_a: toFormValue(row.line_hours_a),
     line_hours_b: toFormValue(row.line_hours_b),
     downtime_hours: toFormValue(row.downtime_hours),
@@ -226,6 +223,8 @@ export default function ProductionPage() {
   const admin = useAdminSession();
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [carryoverUnlocked, setCarryoverUnlocked] = useState(false);
+  const [locked, setLocked] = useState(false);
+  const [pendingUnlock, setPendingUnlock] = useState(false);
 
   const [dirty, setDirty] = useState(false);
   const [draftAvailable, setDraftAvailable] = useState<FormState | null>(null);
@@ -319,9 +318,11 @@ export default function ProductionPage() {
 
       if (ctx.existing) {
         setCurrentId(ctx.existing.id);
+        setLocked(!!ctx.existing.locked);
         setForm((f) => ({ ...fromLog(ctx.existing as ProductionLog), date: f.date, shift: f.shift }));
       } else {
         setCurrentId(null);
+        setLocked(false);
         setForm((f) => ({
           ...emptyForm,
           date: f.date,
@@ -387,6 +388,63 @@ export default function ProductionPage() {
     }
   }
 
+  // 확정: 기존 데이터를 실수로 덮어쓰는 걸 막기 위해, 저장된 기록을 잠근다.
+  // 잠근 뒤에는 관리자 로그인 후 해제해야만 다시 수정할 수 있다.
+  async function onConfirmLock() {
+    if (currentId == null) return;
+    if (
+      !confirm(
+        "이 날짜/조 기록을 확정할까요? 확정 후에는 관리자 로그인 후 해제하기 전까지 수정할 수 없습니다."
+      )
+    )
+      return;
+    const updated = await apiPut<ProductionLog>(`/api/production/${currentId}/lock`, {
+      locked: true,
+      entered_by: enteredBy.trim(),
+    });
+    setLocked(!!updated.locked);
+    loadLogs();
+  }
+
+  async function unlockNow() {
+    if (currentId == null) return;
+    // 관리자 로그인 직후 곧바로 호출될 수 있어(입력자명 state가 아직 갱신되기 전),
+    // 서버에 방금 로그인한 관리자 이름을 직접 물어봐서 사용한다.
+    const adminSession = await fetch("/api/admin/session").then((r) => r.json());
+    const actorName = adminSession.name || enteredBy.trim();
+    if (!actorName) return;
+    const updated = await apiPut<ProductionLog>(`/api/production/${currentId}/lock`, {
+      locked: false,
+      entered_by: actorName,
+    });
+    setLocked(!!updated.locked);
+    loadLogs();
+  }
+
+  function requestUnlock() {
+    if (admin.loggedIn) {
+      unlockNow();
+    } else {
+      setPendingUnlock(true);
+      setShowAdminModal(true);
+    }
+  }
+
+  // 예방/돌발 정비로 생산이 없었던 날: 모든 칸을 비우되, LNG 누계만 전일재고와 동일하게
+  // 채워서 실사용량이 0으로 계산되게 한다.
+  function onMaintenanceDay() {
+    setForm((f) => ({
+      ...emptyForm,
+      date: f.date,
+      shift: f.shift,
+      carryover_dryer: toFormValue(carryoverPreview.dryer),
+      carryover_rto: toFormValue(carryoverPreview.rto),
+      lng_dryer: toFormValue(carryoverPreview.dryer),
+      lng_rto: toFormValue(carryoverPreview.rto),
+    }));
+    setDirty(true);
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!enteredBy.trim()) {
@@ -413,7 +471,6 @@ export default function ProductionPage() {
         feed_molder: n(form.feed_molder),
         brix: n(form.brix),
         granulation_agent: form.granulation_agent || null,
-        granulation_usage_per_min: n(form.granulation_usage_per_min),
         line_hours_a: n(form.line_hours_a),
         line_hours_b: n(form.line_hours_b),
         downtime_hours: n(form.downtime_hours),
@@ -485,11 +542,19 @@ export default function ProductionPage() {
 
       {showAdminModal && (
         <AdminLoginModal
-          onClose={() => setShowAdminModal(false)}
+          onClose={() => {
+            setShowAdminModal(false);
+            setPendingUnlock(false);
+          }}
           onSuccess={() => {
             admin.setLoggedIn(true);
+            session.refresh();
             setCarryoverUnlocked(true);
             setShowAdminModal(false);
+            if (pendingUnlock) {
+              setPendingUnlock(false);
+              unlockNow();
+            }
           }}
         />
       )}
@@ -500,10 +565,21 @@ export default function ProductionPage() {
         </div>
       )}
 
+      {currentId != null && locked && (
+        <div className="flex items-center justify-between text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md px-3 py-2">
+          <span>
+            🔒 확정됨 ({form.date} {form.shift}조) — 이 기록은 확정되어 수정할 수 없습니다.
+          </span>
+          <button type="button" onClick={requestUnlock} className="underline font-medium">
+            관리자 로그인 후 해제
+          </button>
+        </div>
+      )}
+
       <form
         onSubmit={onSubmit}
         className={`flex flex-col gap-4 bg-white rounded-xl border p-5 ${
-          !session.canWrite ? "opacity-50 pointer-events-none" : ""
+          !session.canWrite || locked ? "opacity-50 pointer-events-none" : ""
         }`}
       >
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -641,17 +717,12 @@ export default function ProductionPage() {
           <Field label="A/B미분" value={form.feed_fine_powder} onChange={(v) => set("feed_fine_powder", v)} />
         </Section>
 
-        <Section title="조립제 투입 조건 (Hz)">
+        <Section title="조립제 투입 단위 (ℓ/분)">
           <SelectField
             label="조립제"
             value={form.granulation_agent}
             onChange={(v) => set("granulation_agent", v)}
             options={GRANULATION_AGENT_OPTIONS}
-          />
-          <Field
-            label="분당 사용량"
-            value={form.granulation_usage_per_min}
-            onChange={(v) => set("granulation_usage_per_min", v)}
           />
           <Field label="혼합기" value={form.feed_mixer} onChange={(v) => set("feed_mixer", v)} />
           <Field label="성형기" value={form.feed_molder} onChange={(v) => set("feed_molder", v)} />
@@ -781,21 +852,6 @@ export default function ProductionPage() {
           </p>
         </fieldset>
 
-        <Section title="제품 품질확인 (수기입력, 비우면 QC 평균 자동 적용)">
-          <Field
-            label={`수분량${qcRef.moisture != null ? ` (QC평균: ${qcRef.moisture.toFixed(2)})` : ""}`}
-            value={form.moisture_manual}
-            onChange={(v) => set("moisture_manual", v)}
-            placeholder={qcRef.moisture != null ? String(qcRef.moisture.toFixed(2)) : undefined}
-          />
-          <Field
-            label={`경도${qcRef.hardness != null ? ` (QC평균: ${qcRef.hardness.toFixed(2)})` : ""}`}
-            value={form.hardness_manual}
-            onChange={(v) => set("hardness_manual", v)}
-            placeholder={qcRef.hardness != null ? String(qcRef.hardness.toFixed(2)) : undefined}
-          />
-        </Section>
-
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-600">비고</span>
           <textarea
@@ -814,6 +870,22 @@ export default function ProductionPage() {
           >
             {saving ? "저장 중..." : "저장 (같은 날짜/조는 덮어씀)"}
           </button>
+          <button
+            type="button"
+            onClick={onMaintenanceDay}
+            className="border rounded-md px-4 py-2 text-sm font-medium"
+          >
+            금일 정비
+          </button>
+          {currentId != null && !locked && (
+            <button
+              type="button"
+              onClick={onConfirmLock}
+              className="border border-emerald-300 text-emerald-700 rounded-md px-4 py-2 text-sm font-medium"
+            >
+              확정
+            </button>
+          )}
           {message && <span className="text-sm text-slate-600">{message}</span>}
         </div>
       </form>
@@ -852,7 +924,10 @@ export default function ProductionPage() {
                   setForm((f) => ({ ...f, date: row.date, shift: row.shift }));
                 }}
               >
-                <td className="px-3 py-2">{row.date}</td>
+                <td className="px-3 py-2">
+                  {row.date}
+                  {row.locked ? " 🔒" : ""}
+                </td>
                 <td className="px-3 py-2">{row.shift}</td>
                 <td className="px-3 py-2">{row.worker ?? "-"}</td>
                 <td className="px-3 py-2">{row.product ?? "-"}</td>
@@ -874,7 +949,8 @@ export default function ProductionPage() {
                       e.stopPropagation();
                       onDelete(row.id);
                     }}
-                    className="text-red-500 hover:underline"
+                    disabled={!!row.locked}
+                    className="text-red-500 hover:underline disabled:text-slate-300 disabled:no-underline disabled:cursor-not-allowed"
                   >
                     삭제
                   </button>
@@ -891,6 +967,15 @@ export default function ProductionPage() {
           </tbody>
         </table>
       </div>
+
+      <button
+        type="button"
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        className="fixed bottom-6 right-6 bg-slate-900 text-white rounded-full w-12 h-12 shadow-lg text-sm font-medium"
+        aria-label="맨 위로"
+      >
+        ↑ 맨위
+      </button>
     </div>
   );
 }

@@ -596,6 +596,7 @@ export default function UtilityPage() {
             onClose={() => setShowAdminModal(false)}
             onSuccess={() => {
               admin.setLoggedIn(true);
+              session.refresh();
               setShowAdminModal(false);
             }}
           />

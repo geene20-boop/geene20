@@ -467,6 +467,7 @@ export default function PackingEntryPage() {
           onClose={() => setShowAdminModal(false)}
           onSuccess={() => {
             admin.refresh();
+            session.refresh();
             setShowAdminModal(false);
           }}
         />
