@@ -65,15 +65,26 @@ function fmtTon(n: number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+function daysAgo(n: number) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function PackingStockPage() {
   const [state, setState] = useState<PackingState | null>(null);
   const [loading, setLoading] = useState(false);
+  const [rangeFrom, setRangeFrom] = useState(daysAgo(30));
+  const [rangeTo, setRangeTo] = useState(today());
 
   useEffect(() => {
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
-    apiGet<PackingState>("/api/packing-state")
+    apiGet<PackingState>(`/api/packing-state?from=${rangeFrom}&to=${rangeTo}`)
       .then((d) => {
         if (!cancelled) setState(d);
       })
@@ -83,7 +94,7 @@ export default function PackingStockPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [rangeFrom, rangeTo]);
 
   const grouped = useMemo(() => groupByKind(state?.stock ?? []), [state]);
 
@@ -150,23 +161,43 @@ export default function PackingStockPage() {
     if (!state) return [];
     return state.entries.map((e) => {
       const item = itemByKey.get(e.product_key);
+      const tons = item?.bag_kg ? (e.qty * item.bag_kg) / 1000 : 0;
       return {
         date: e.date,
         label: e.type === "pack" ? "생산" : "출하",
         item: item ? itemLabel(item) : e.product_key,
         qty: e.type === "pack" ? e.qty : -e.qty,
-        worker: e.worker,
+        unit: item?.unit ?? "",
+        tons: e.type === "pack" ? tons : -tons,
       };
     });
+  }, [state, itemByKey]);
+
+  // 조회기간 전체의 생산/출하 합계 (포 수량 + 톤 환산)
+  const activityTotals = useMemo(() => {
+    let packBags = 0;
+    let packTons = 0;
+    let shipBags = 0;
+    let shipTons = 0;
+    for (const e of state?.entries ?? []) {
+      const item = itemByKey.get(e.product_key);
+      const tons = item?.bag_kg ? (e.qty * item.bag_kg) / 1000 : 0;
+      if (e.type === "pack") {
+        if (item?.unit === "포") packBags += e.qty;
+        packTons += tons;
+      } else {
+        if (item?.unit === "포") shipBags += e.qty;
+        shipTons += tons;
+      }
+    }
+    return { packBags, packTons, shipBags, shipTons };
   }, [state, itemByKey]);
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-bold">제품포장 재고현황</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          제품·포장지·부자재 재고를 실시간으로 확인합니다. (최근 30일 활동 기준)
-        </p>
+        <p className="text-sm text-slate-500 mt-1">제품·포장지·부자재 재고를 실시간으로 확인합니다.</p>
       </div>
 
       <div className="flex flex-col gap-2">
@@ -296,7 +327,24 @@ export default function PackingStockPage() {
       ))}
 
       <div className="bg-white rounded-xl border overflow-x-auto">
-        <h2 className="text-sm font-semibold text-slate-700 px-4 pt-4">최근 생산/출하 (30일)</h2>
+        <div className="flex items-center justify-between px-4 pt-4 flex-wrap gap-2">
+          <h2 className="text-sm font-semibold text-slate-700">최근 생산/출하</h2>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={rangeFrom}
+              onChange={(e) => setRangeFrom(e.target.value)}
+              className="border rounded-md px-2 py-1 text-xs"
+            />
+            <span className="text-xs text-slate-400">~</span>
+            <input
+              type="date"
+              value={rangeTo}
+              onChange={(e) => setRangeTo(e.target.value)}
+              className="border rounded-md px-2 py-1 text-xs"
+            />
+          </div>
+        </div>
         <table className="w-full text-sm mt-2">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
@@ -304,7 +352,6 @@ export default function PackingStockPage() {
               <th className="text-left px-3 py-2">구분</th>
               <th className="text-left px-3 py-2">품목</th>
               <th className="text-right px-3 py-2">수량</th>
-              <th className="text-left px-3 py-2">작업자</th>
             </tr>
           </thead>
           <tbody>
@@ -313,18 +360,45 @@ export default function PackingStockPage() {
                 <td className="px-3 py-2">{r.date}</td>
                 <td className="px-3 py-2">{r.label}</td>
                 <td className="px-3 py-2">{r.item}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{fmt(r.qty)}</td>
-                <td className="px-3 py-2">{r.worker ?? "-"}</td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {fmt(r.qty)}
+                  {r.unit}
+                  {r.unit !== "톤" && (
+                    <span className="text-slate-400 ml-1">({fmtTon(r.tons)}톤)</span>
+                  )}
+                </td>
               </tr>
             ))}
             {recentActivity.length === 0 && !loading && (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-slate-400">
-                  최근 30일간 기록이 없습니다.
+                <td colSpan={4} className="px-3 py-8 text-center text-slate-400">
+                  해당 기간에 기록이 없습니다.
                 </td>
               </tr>
             )}
           </tbody>
+          {recentActivity.length > 0 && (
+            <tfoot>
+              <tr className="border-t bg-slate-50 font-medium">
+                <td colSpan={2} className="px-3 py-2 text-slate-600">
+                  기간 합계
+                </td>
+                <td className="px-3 py-2 text-slate-600">생산</td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {fmt(activityTotals.packBags)}포
+                  <span className="text-slate-400 ml-1">({fmtTon(activityTotals.packTons)}톤)</span>
+                </td>
+              </tr>
+              <tr className="bg-slate-50 font-medium">
+                <td colSpan={2} className="px-3 py-2" />
+                <td className="px-3 py-2 text-slate-600">출하</td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {fmt(activityTotals.shipBags)}포
+                  <span className="text-slate-400 ml-1">({fmtTon(activityTotals.shipTons)}톤)</span>
+                </td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
     </div>
