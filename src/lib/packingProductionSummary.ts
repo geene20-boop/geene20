@@ -181,3 +181,118 @@ export function getSeasonProduction(db: Database.Database): SeasonProductionRow[
     yoyPercent,
   }));
 }
+
+// ---------- 비종별(대분류) 내역 포함 월별/시즌별 생산누계 ----------
+// 위 getMonthlyProduction/getSeasonProduction(합계만)과 별개로, 대분류별 내역이 필요한
+// 화면(생산누계의 "월별 비종별"/"연간 비종별" 탭) 전용으로 추가했다.
+
+export interface CategoryTons {
+  category: string; // "석회고토" | "입상규산" | "칼슘유황"
+  tons: number;
+}
+
+export interface MonthlyProductionByCategoryRow {
+  month: string; // "YYYY-MM"
+  tons: number;
+  byCategory: CategoryTons[];
+  yoyTons: number | null; // 전년 동월 대비 증감(톤)
+  yoyPercent: number | null; // 전년 동월 대비 증감(%)
+}
+
+export interface SeasonProductionByCategoryRow {
+  season: string; // "2025-2026"
+  tons: number;
+  byCategory: CategoryTons[];
+  yoyTons: number | null; // 전 시즌 대비 증감(톤)
+  yoyPercent: number | null; // 전 시즌 대비 증감(%)
+}
+
+const DISPLAY_CATEGORIES = ["석회고토", "입상규산", "칼슘유황"];
+
+interface RawEntryWithSub {
+  date: string;
+  qty: number;
+  bag_kg: number | null;
+  category: string | null;
+  sub: string | null;
+}
+
+function getRawEntriesWithSub(db: Database.Database): RawEntryWithSub[] {
+  return db
+    .prepare(
+      `SELECT pe.date as date, pe.qty as qty, pi.bag_kg as bag_kg, pi.category as category, pi.sub as sub
+       FROM packing_entry pe
+       JOIN packing_item pi ON pe.product_key = pi.key
+       WHERE pe.type = 'pack' AND pi.kind = 'product'`
+    )
+    .all() as RawEntryWithSub[];
+}
+
+// classifyProductCategory와 달리 톤백 제품(category="톤백")도 sub(세부명)로 상위 대분류에 포함시킨다.
+function classifyCategoryWithTonbag(category: string | null, sub: string | null): string | null {
+  const cat = category ?? "";
+  if (cat.includes("입상규산")) return "입상규산";
+  if (cat.includes("석회고토")) return "석회고토";
+  if (cat.includes("칼슘") || cat.includes("유황")) return "칼슘유황";
+  if (cat === "톤백") {
+    const s = sub ?? "";
+    if (s.includes("석회고토")) return "석회고토";
+    if (s.includes("규산")) return "입상규산";
+    if (s.includes("칼슘") || s.includes("유황")) return "칼슘유황";
+  }
+  return null;
+}
+
+function byCategoryOf(catMap: Map<string, number> | undefined): CategoryTons[] {
+  return DISPLAY_CATEGORIES.map((category) => ({ category, tons: catMap?.get(category) ?? 0 }));
+}
+
+export function getMonthlyProductionByCategory(db: Database.Database): MonthlyProductionByCategoryRow[] {
+  const entries = getRawEntriesWithSub(db);
+  const byMonth = new Map<string, number>();
+  const byMonthCategory = new Map<string, Map<string, number>>();
+  for (const e of entries) {
+    const month = monthKey(e.date);
+    const tons = tonsOf(e);
+    byMonth.set(month, (byMonth.get(month) ?? 0) + tons);
+    const category = classifyCategoryWithTonbag(e.category, e.sub);
+    if (category) {
+      const catMap = byMonthCategory.get(month) ?? new Map<string, number>();
+      catMap.set(category, (catMap.get(category) ?? 0) + tons);
+      byMonthCategory.set(month, catMap);
+    }
+  }
+  const months = [...byMonth.keys()].sort();
+  return withYoy(months, byMonth, prevMonthKey, (month, tons, yoyTons, yoyPercent) => ({
+    month,
+    tons,
+    byCategory: byCategoryOf(byMonthCategory.get(month)),
+    yoyTons,
+    yoyPercent,
+  }));
+}
+
+export function getSeasonProductionByCategory(db: Database.Database): SeasonProductionByCategoryRow[] {
+  const entries = getRawEntriesWithSub(db);
+  const bySeason = new Map<string, number>();
+  const bySeasonCategory = new Map<string, Map<string, number>>();
+  for (const e of entries) {
+    const season = seasonKey(e.date);
+    const tons = tonsOf(e);
+    bySeason.set(season, (bySeason.get(season) ?? 0) + tons);
+    const category = classifyCategoryWithTonbag(e.category, e.sub);
+    if (category) {
+      const catMap = bySeasonCategory.get(season) ?? new Map<string, number>();
+      catMap.set(category, (catMap.get(category) ?? 0) + tons);
+      bySeasonCategory.set(season, catMap);
+    }
+  }
+  const seasons = [...bySeason.keys()].sort();
+  return withYoy(seasons, bySeason, prevSeasonKey, (season, tons, yoyTons, yoyPercent) => ({
+    season,
+    tons,
+    byCategory: byCategoryOf(bySeasonCategory.get(season)),
+    yoyTons,
+    yoyPercent,
+  }));
+}

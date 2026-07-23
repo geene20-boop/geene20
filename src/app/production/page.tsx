@@ -214,6 +214,7 @@ export default function ProductionPage() {
   const { enteredBy, setEnteredBy } = useEnteredBy();
   const [nameError, setNameError] = useState(false);
   const session = useSiteSession();
+  const [tab, setTab] = useState<"condition" | "material" | "log">("condition");
 
   useEffect(() => {
     if (session.loggedIn && session.displayName) {
@@ -594,12 +595,36 @@ export default function ProductionPage() {
         </div>
       )}
 
+      <div className="flex gap-2 border-b">
+        {(
+          [
+            { key: "condition", label: "생산조건" },
+            { key: "material", label: "원료조건" },
+            { key: "log", label: "생산일지 조회" },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
+              tab === t.key ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {(tab === "condition" || tab === "material") && (
       <form
         onSubmit={onSubmit}
         className={`flex flex-col gap-4 bg-white rounded-xl border p-5 ${
           !session.canWrite || locked ? "opacity-50 pointer-events-none" : ""
         }`}
       >
+        {tab === "condition" && (
+        <>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <EnteredByField
             value={enteredBy}
@@ -732,6 +757,47 @@ export default function ProductionPage() {
           <Field label="B라인" value={form.dryer_temp_b} onChange={(v) => set("dryer_temp_b", v)} />
         </Section>
 
+        <Section title="라인 가동 시간 (Hr)">
+          <Field label="A라인" value={form.line_hours_a} onChange={(v) => set("line_hours_a", v)} />
+          <Field label="B라인" value={form.line_hours_b} onChange={(v) => set("line_hours_b", v)} />
+          <Field label="비가동시간" value={form.downtime_hours} onChange={(v) => set("downtime_hours", v)} />
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-600">A+B 합계 - 비가동 (자동)</span>
+            <div className="border rounded-md px-2 py-1.5 bg-slate-50 text-slate-500">{lineHoursTotal.toFixed(2)}</div>
+          </div>
+          {(n(form.downtime_hours) ?? 0) > 0 && (
+            <label className="flex flex-col gap-1 text-sm col-span-2 md:col-span-4">
+              <span className="text-amber-700 font-medium">비가동발생원인</span>
+              <input
+                type="text"
+                value={form.downtime_reason}
+                onChange={(e) => set("downtime_reason", e.target.value)}
+                placeholder="예: 설비 점검, 원료 공급 지연 등"
+                className="border rounded-md px-2 py-1.5 border-amber-400 bg-amber-50"
+              />
+            </label>
+          )}
+        </Section>
+
+        <label className="flex flex-col gap-1 text-sm">
+          <span className={maintenanceMode ? "text-amber-700 font-medium" : "text-slate-600"}>
+            {maintenanceMode ? "정비내역" : "비고"}
+          </span>
+          <textarea
+            value={form.note}
+            onChange={(e) => set("note", e.target.value)}
+            className={`border rounded-md px-2 py-1.5 ${
+              maintenanceMode ? "border-amber-400 bg-amber-50" : ""
+            }`}
+            rows={2}
+            placeholder={maintenanceMode ? "정비 내용을 입력하세요 (예: 압출기 스크류 교체)" : undefined}
+          />
+        </label>
+        </>
+        )}
+
+        {tab === "material" && (
+        <>
         <Section title="원료 피딩 조건 (Hz)">
           <Field label="A호퍼" value={form.feed_hopper_a} onChange={(v) => set("feed_hopper_a", v)} />
           <Field label="B호퍼" value={form.feed_hopper_b} onChange={(v) => set("feed_hopper_b", v)} />
@@ -756,28 +822,6 @@ export default function ProductionPage() {
             value={form.brix}
             onChange={(v) => set("brix", v)}
           />
-        </Section>
-
-        <Section title="라인 가동 시간 (Hr)">
-          <Field label="A라인" value={form.line_hours_a} onChange={(v) => set("line_hours_a", v)} />
-          <Field label="B라인" value={form.line_hours_b} onChange={(v) => set("line_hours_b", v)} />
-          <Field label="비가동시간" value={form.downtime_hours} onChange={(v) => set("downtime_hours", v)} />
-          <div className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">A+B 합계 - 비가동 (자동)</span>
-            <div className="border rounded-md px-2 py-1.5 bg-slate-50 text-slate-500">{lineHoursTotal.toFixed(2)}</div>
-          </div>
-          {(n(form.downtime_hours) ?? 0) > 0 && (
-            <label className="flex flex-col gap-1 text-sm col-span-2 md:col-span-4">
-              <span className="text-amber-700 font-medium">비가동발생원인</span>
-              <input
-                type="text"
-                value={form.downtime_reason}
-                onChange={(e) => set("downtime_reason", e.target.value)}
-                placeholder="예: 설비 점검, 원료 공급 지연 등"
-                className="border rounded-md px-2 py-1.5 border-amber-400 bg-amber-50"
-              />
-            </label>
-          )}
         </Section>
 
         <fieldset className="border rounded-lg p-4">
@@ -884,21 +928,8 @@ export default function ProductionPage() {
             &quot;수정&quot;으로 고칠 수 있습니다.
           </p>
         </fieldset>
-
-        <label className="flex flex-col gap-1 text-sm">
-          <span className={maintenanceMode ? "text-amber-700 font-medium" : "text-slate-600"}>
-            {maintenanceMode ? "정비내역" : "비고"}
-          </span>
-          <textarea
-            value={form.note}
-            onChange={(e) => set("note", e.target.value)}
-            className={`border rounded-md px-2 py-1.5 ${
-              maintenanceMode ? "border-amber-400 bg-amber-50" : ""
-            }`}
-            rows={2}
-            placeholder={maintenanceMode ? "정비 내용을 입력하세요 (예: 압출기 스크류 교체)" : undefined}
-          />
-        </label>
+        </>
+        )}
 
         <div className="flex items-center gap-3">
           <button
@@ -934,7 +965,9 @@ export default function ProductionPage() {
           {message && <span className="text-sm text-slate-600">{message}</span>}
         </div>
       </form>
+      )}
 
+      {tab === "log" && (
       <div className="bg-white rounded-xl border overflow-x-auto">
         <div className="flex items-center justify-between px-3 pt-3 flex-wrap gap-2">
           <div className="flex items-center gap-2">
@@ -1007,7 +1040,13 @@ export default function ProductionPage() {
                 <td className="px-3 py-2">{row.worker ?? "-"}</td>
                 <td className="px-3 py-2">{row.product ?? "-"}</td>
                 <td className="px-3 py-2 text-right">{row.daily_pack_amount ?? "-"}</td>
-                <td className="px-3 py-2 text-right">{row.downtime_hours ?? "-"}</td>
+                <td className="px-3 py-2 text-right">
+                  {row.note?.startsWith("정비") ? (
+                    <span className="text-amber-700 font-medium">금일정비</span>
+                  ) : (
+                    (row.downtime_hours ?? "-")
+                  )}
+                </td>
                 <td className="px-3 py-2 text-right">{row.line_hours_total ?? "-"}</td>
                 <td className="px-3 py-2 text-right">
                   {row.gas_usage_shift != null ? row.gas_usage_shift.toFixed(1) : "-"}
@@ -1045,6 +1084,7 @@ export default function ProductionPage() {
           </tbody>
         </table>
       </div>
+      )}
 
       <button
         type="button"

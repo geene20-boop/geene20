@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { getDailyProduction, getMonthlyProduction, getSeasonProduction } from "@/lib/packingProductionSummary";
+import {
+  getDailyProduction,
+  getMonthlyProduction,
+  getMonthlyProductionByCategory,
+  getSeasonProduction,
+  getSeasonProductionByCategory,
+} from "@/lib/packingProductionSummary";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -20,5 +26,7 @@ export async function GET(req: NextRequest) {
     daily: getDailyProduction(db, from, to),
     monthly: getMonthlyProduction(db),
     seasonal: getSeasonProduction(db),
+    monthlyByCategory: getMonthlyProductionByCategory(db),
+    seasonalByCategory: getSeasonProductionByCategory(db),
   });
 }

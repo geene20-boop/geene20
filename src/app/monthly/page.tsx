@@ -61,6 +61,7 @@ function MiniChart({
 }
 
 export default function MonthlyPage() {
+  const [tab, setTab] = useState<"chart" | "daily">("chart");
   const [month, setMonth] = useState(currentMonth());
   const [rows, setRows] = useState<DailySheetRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -143,7 +144,28 @@ export default function MonthlyPage() {
         </label>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="flex gap-2 border-b">
+        {(
+          [
+            { key: "chart", label: "월간 그래프" },
+            { key: "daily", label: "일자별 조회" },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
+              tab === t.key ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "chart" && (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <MiniChart title="비가동시간 (일 합계, h)" data={chartData.downtime} dataKey="비가동" color="#dc2626" />
         <MiniChart
           title="조립제 사용량 증감 (전일 대비)"
@@ -159,7 +181,9 @@ export default function MonthlyPage() {
           color="#ea580c"
         />
       </div>
+      )}
 
+      {tab === "daily" && (
       <div className="bg-white rounded-xl border overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-100 text-slate-600">
@@ -260,6 +284,7 @@ export default function MonthlyPage() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

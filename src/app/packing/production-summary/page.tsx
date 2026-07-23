@@ -5,13 +5,20 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import { apiGet } from "@/lib/apiClient";
-import { DailyProductionRow, MonthlyProductionRow, SeasonProductionRow } from "@/lib/packingProductionSummary";
+import {
+  DailyProductionRow,
+  MonthlyProductionByCategoryRow,
+  MonthlyProductionRow,
+  SeasonProductionByCategoryRow,
+  SeasonProductionRow,
+} from "@/lib/packingProductionSummary";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -39,10 +46,28 @@ function deltaClass(n: number | null): string {
   return "text-slate-500";
 }
 
+function deltaFill(n: number | null): string {
+  if (n == null) return "#cbd5e1";
+  return n >= 0 ? "#10b981" : "#f43f5e";
+}
+
+// 전년 동월(12개월 전) - 월별 비종별 탭에서 "전년동월" 열을 찾을 때 사용
+function prevYearSameMonthKey(month: string): string {
+  const year = Number(month.slice(0, 4));
+  return `${year - 1}${month.slice(4)}`;
+}
+
+function prevSeasonKey(season: string): string {
+  const startYear = Number(season.slice(0, 4));
+  return `${startYear - 1}-${startYear}`;
+}
+
 const TABS = [
   { key: "daily", label: "일자별" },
   { key: "monthly", label: "월별" },
   { key: "seasonal", label: "시즌별" },
+  { key: "monthlyByCategory", label: "월별 비종별" },
+  { key: "seasonalByCategory", label: "연간 비종별" },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 
@@ -51,6 +76,8 @@ export default function PackingProductionSummaryPage() {
   const [daily, setDaily] = useState<DailyProductionRow[]>([]);
   const [monthly, setMonthly] = useState<MonthlyProductionRow[]>([]);
   const [seasonal, setSeasonal] = useState<SeasonProductionRow[]>([]);
+  const [monthlyByCategory, setMonthlyByCategory] = useState<MonthlyProductionByCategoryRow[]>([]);
+  const [seasonalByCategory, setSeasonalByCategory] = useState<SeasonProductionByCategoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [from, setFrom] = useState(daysAgo(30));
   const [to, setTo] = useState(today());
@@ -63,10 +90,14 @@ export default function PackingProductionSummaryPage() {
         daily: DailyProductionRow[];
         monthly: MonthlyProductionRow[];
         seasonal: SeasonProductionRow[];
+        monthlyByCategory: MonthlyProductionByCategoryRow[];
+        seasonalByCategory: SeasonProductionByCategoryRow[];
       }>(`/api/packing-production-summary?${params.toString()}`);
       setDaily(data.daily);
       setMonthly(data.monthly);
       setSeasonal(data.seasonal);
+      setMonthlyByCategory(data.monthlyByCategory);
+      setSeasonalByCategory(data.seasonalByCategory);
     } finally {
       setLoading(false);
     }
@@ -83,6 +114,20 @@ export default function PackingProductionSummaryPage() {
   const seasonalChartData = seasonal.map((r) => ({ label: r.season, 생산량: Number(r.tons.toFixed(1)) }));
 
   const dailyRangeTotal = daily.reduce((sum, r) => sum + r.tons, 0);
+
+  const monthlyByCategoryChartData = monthlyByCategory.map((r) => ({ label: r.month.slice(2), 생산량: Number(r.tons.toFixed(1)) }));
+  const monthlyByCategoryYoyChartData = monthlyByCategory.map((r) => ({
+    label: r.month.slice(2),
+    전년동월대비: r.yoyTons != null ? Number(r.yoyTons.toFixed(1)) : 0,
+  }));
+  const seasonalByCategoryChartData = seasonalByCategory.map((r) => ({ label: r.season, 생산량: Number(r.tons.toFixed(1)) }));
+  const seasonalByCategoryYoyChartData = seasonalByCategory.map((r) => ({
+    label: r.season,
+    전년대비: r.yoyTons != null ? Number(r.yoyTons.toFixed(1)) : 0,
+  }));
+
+  const monthlyByCategoryMap = new Map(monthlyByCategory.map((r) => [r.month, r]));
+  const seasonalByCategoryMap = new Map(seasonalByCategory.map((r) => [r.season, r]));
 
   return (
     <div className="flex flex-col gap-6">
@@ -298,6 +343,193 @@ export default function PackingProductionSummaryPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {!loading && tab === "monthlyByCategory" && (
+        <div className="bg-white rounded-xl border p-4">
+          <h2 className="text-sm font-semibold text-slate-700 mb-3">월별 생산량 추이 (톤)</h2>
+          <div className="h-56 mb-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyByCategoryChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="label" fontSize={11} />
+                <YAxis fontSize={11} />
+                <Tooltip />
+                <Bar dataKey="생산량" fill="#6366f1" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <h2 className="text-sm font-semibold text-slate-700 mb-3">월별 전년동월대비 증감 (톤)</h2>
+          <div className="h-56 mb-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyByCategoryYoyChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="label" fontSize={11} />
+                <YAxis fontSize={11} />
+                <Tooltip />
+                <Bar dataKey="전년동월대비">
+                  {monthlyByCategory.map((r, i) => (
+                    <Cell key={i} fill={deltaFill(r.yoyTons)} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex flex-col divide-y">
+            {[...monthlyByCategory].reverse().map((r) => {
+              const prev = monthlyByCategoryMap.get(prevYearSameMonthKey(r.month));
+              return (
+                <div key={r.month} className="py-3">
+                  <div className="flex items-baseline gap-3 flex-wrap mb-1">
+                    <span className="text-sm font-bold text-slate-800">{r.month}</span>
+                    <span className="text-sm font-bold text-slate-800 tabular-nums">{fmtTon(r.tons)}톤</span>
+                    <span className="text-xs text-slate-500">
+                      전년동월대비{" "}
+                      <b className={deltaClass(r.yoyTons)}>
+                        {fmtDelta(r.yoyTons, "톤")} ({fmtDelta(r.yoyPercent, "%")})
+                      </b>
+                    </span>
+                  </div>
+                  <table className="text-xs w-full tabular-nums">
+                    <thead>
+                      <tr className="text-slate-400">
+                        <th className="text-left py-0.5 pl-3 font-normal">대분류</th>
+                        <th className="text-right py-0.5 font-normal">금월</th>
+                        <th className="text-right py-0.5 font-normal">전년동월</th>
+                        <th className="text-right py-0.5 font-normal">증감(톤)</th>
+                        <th className="text-right py-0.5 font-normal">증감(%)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r.byCategory.map((c) => {
+                        const prevTons = prev?.byCategory.find((p) => p.category === c.category)?.tons ?? null;
+                        const deltaTons = prevTons != null ? c.tons - prevTons : null;
+                        const deltaPercent = prevTons != null && prevTons !== 0 ? ((deltaTons as number) / prevTons) * 100 : null;
+                        return (
+                          <tr key={c.category} className="text-slate-500">
+                            <td className="py-0.5 pl-3">{c.category}</td>
+                            <td className="py-0.5 text-right">{fmtTon(c.tons)}톤</td>
+                            <td className="py-0.5 text-right">{prevTons != null ? `${fmtTon(prevTons)}톤` : "-"}</td>
+                            <td className={`py-0.5 text-right ${deltaClass(deltaTons)}`}>{fmtDelta(deltaTons, "톤")}</td>
+                            <td className={`py-0.5 text-right ${deltaClass(deltaPercent)}`}>{fmtDelta(deltaPercent, "%")}</td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="font-bold text-slate-700 border-t border-dashed">
+                        <td className="pt-1 pl-3">합계</td>
+                        <td className="pt-1 text-right">{fmtTon(r.tons)}톤</td>
+                        <td className="pt-1 text-right">{prev ? `${fmtTon(prev.tons)}톤` : "-"}</td>
+                        <td className={`pt-1 text-right ${deltaClass(r.yoyTons)}`}>{fmtDelta(r.yoyTons, "톤")}</td>
+                        <td className={`pt-1 text-right ${deltaClass(r.yoyPercent)}`}>{fmtDelta(r.yoyPercent, "%")}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
+            {monthlyByCategory.length === 0 && (
+              <p className="py-8 text-center text-sm text-slate-400">아직 생산(포장) 입력 기록이 없습니다.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!loading && tab === "seasonalByCategory" && (
+        <div className="bg-white rounded-xl border p-4">
+          <h2 className="text-sm font-semibold text-slate-700 mb-3">
+            연도별(시즌) 생산량 추이 (톤){" "}
+            <span className="text-xs font-normal text-slate-400">
+              - 매년 7월 1일부터 다음해 6월 30일까지를 한 시즌(1년)으로 계산
+            </span>
+          </h2>
+          <div className="h-56 mb-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={seasonalByCategoryChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="label" fontSize={11} />
+                <YAxis fontSize={11} />
+                <Tooltip />
+                <Bar dataKey="생산량" fill="#0891b2" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <h2 className="text-sm font-semibold text-slate-700 mb-3">시즌별 전년대비 증감 (톤)</h2>
+          <div className="h-56 mb-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={seasonalByCategoryYoyChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="label" fontSize={11} />
+                <YAxis fontSize={11} />
+                <Tooltip />
+                <Bar dataKey="전년대비">
+                  {seasonalByCategory.map((r, i) => (
+                    <Cell key={i} fill={deltaFill(r.yoyTons)} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="flex flex-col divide-y">
+            {[...seasonalByCategory].reverse().map((r) => {
+              const prev = seasonalByCategoryMap.get(prevSeasonKey(r.season));
+              return (
+              <div key={r.season} className="py-3">
+                <div className="flex items-baseline gap-3 flex-wrap mb-1">
+                  <span className="text-sm font-bold text-slate-800">{r.season.replace("-", "년 7월 ~ ")}년 6월</span>
+                  <span className="text-sm font-bold text-slate-800 tabular-nums">{fmtTon(r.tons)}톤</span>
+                  <span className="text-xs text-slate-500">
+                    전년대비{" "}
+                    <b className={deltaClass(r.yoyTons)}>
+                      {fmtDelta(r.yoyTons, "톤")} ({fmtDelta(r.yoyPercent, "%")})
+                    </b>
+                  </span>
+                </div>
+                <table className="text-xs w-full tabular-nums">
+                  <thead>
+                    <tr className="text-slate-400">
+                      <th className="text-left py-0.5 pl-3 font-normal">대분류</th>
+                      <th className="text-right py-0.5 font-normal">금년</th>
+                      <th className="text-right py-0.5 font-normal">전년</th>
+                      <th className="text-right py-0.5 font-normal">증감(톤)</th>
+                      <th className="text-right py-0.5 font-normal">증감(%)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {r.byCategory.map((c) => {
+                      const prevTons = prev?.byCategory.find((p) => p.category === c.category)?.tons ?? null;
+                      const deltaTons = prevTons != null ? c.tons - prevTons : null;
+                      const deltaPercent = prevTons != null && prevTons !== 0 ? ((deltaTons as number) / prevTons) * 100 : null;
+                      return (
+                        <tr key={c.category} className="text-slate-500">
+                          <td className="py-0.5 pl-3">{c.category}</td>
+                          <td className="py-0.5 text-right">{fmtTon(c.tons)}톤</td>
+                          <td className="py-0.5 text-right">{prevTons != null ? `${fmtTon(prevTons)}톤` : "-"}</td>
+                          <td className={`py-0.5 text-right ${deltaClass(deltaTons)}`}>{fmtDelta(deltaTons, "톤")}</td>
+                          <td className={`py-0.5 text-right ${deltaClass(deltaPercent)}`}>{fmtDelta(deltaPercent, "%")}</td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="font-bold text-slate-700 border-t border-dashed">
+                      <td className="pt-1 pl-3">합계</td>
+                      <td className="pt-1 text-right">{fmtTon(r.tons)}톤</td>
+                      <td className="pt-1 text-right">{prev ? `${fmtTon(prev.tons)}톤` : "-"}</td>
+                      <td className={`pt-1 text-right ${deltaClass(r.yoyTons)}`}>{fmtDelta(r.yoyTons, "톤")}</td>
+                      <td className={`pt-1 text-right ${deltaClass(r.yoyPercent)}`}>{fmtDelta(r.yoyPercent, "%")}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              );
+            })}
+            {seasonalByCategory.length === 0 && (
+              <p className="py-8 text-center text-sm text-slate-400">아직 생산(포장) 입력 기록이 없습니다.</p>
+            )}
           </div>
         </div>
       )}
