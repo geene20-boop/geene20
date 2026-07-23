@@ -639,11 +639,6 @@ export default function ProductionPage() {
           </label>
           <div className="flex flex-col gap-1 text-sm">
             <SelectField label="생산품목 (제품포장 자동 분류)" value={form.product} onChange={(v) => set("product", v)} options={PRODUCT_OPTIONS} />
-            {packingEntryRef?.suggestedProduct && packingEntryRef.suggestedProduct !== form.product && (
-              <span className="text-[11px] text-amber-600">
-                제품포장 기준 제안: {packingEntryRef.suggestedProduct}
-              </span>
-            )}
           </div>
           <div className="flex flex-col gap-1 text-sm">
             <span className={`flex items-center gap-1 ${packAmountMismatch ? "text-red-600 font-medium" : "text-slate-600"}`}>

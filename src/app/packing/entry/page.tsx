@@ -404,6 +404,13 @@ export default function PackingEntryPage() {
           >
             {saving ? "저장 중..." : editingId ? "수정 저장" : "등록"}
           </button>
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="border rounded-md px-4 py-1.5 text-sm font-medium"
+          >
+            ↑ 맨 위로
+          </button>
         </div>
       </form>
 

@@ -53,6 +53,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/history", label: "이력 관리" },
       { href: "/import", label: "데이터 가져오기" },
+      { href: "/worker", label: "근로자명부" },
       { href: "/admin", label: "관리자 설정" },
     ],
   },

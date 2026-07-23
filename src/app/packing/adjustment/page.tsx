@@ -126,7 +126,14 @@ function AdjustmentForm() {
           <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} className="border rounded-md px-2 py-1.5" placeholder="예: 실사 결과 반영" />
         </label>
         {message && <p className="text-sm text-slate-600">{message}</p>}
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="border rounded-md px-4 py-1.5 text-sm font-medium"
+          >
+            ↑ 맨 위로
+          </button>
           <button type="submit" disabled={saving} className="bg-slate-900 text-white rounded-md px-4 py-1.5 text-sm font-medium disabled:opacity-50">
             {saving ? "저장 중..." : "조정 반영"}
           </button>

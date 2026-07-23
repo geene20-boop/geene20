@@ -261,7 +261,7 @@ export default function PackingDailyLogPage() {
       {renderTable(`3. ${KIND_LABELS.aux} 재고 현황`, data?.auxes ?? [], true)}
 
       <div className="bg-white rounded-xl border overflow-x-auto">
-        <h2 className="text-sm font-semibold text-slate-700 px-4 pt-4">4. 파손(파포) 내역 (해당일)</h2>
+        <h2 className="text-sm font-semibold text-slate-700 px-4 pt-4">4. 파손(파포) 내역 ({date})</h2>
         <table className="w-full text-sm mt-2">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
@@ -290,7 +290,7 @@ export default function PackingDailyLogPage() {
       </div>
 
       <div className="bg-white rounded-xl border overflow-x-auto">
-        <h2 className="text-sm font-semibold text-slate-700 px-4 pt-4">5. 반품 내역 (해당일)</h2>
+        <h2 className="text-sm font-semibold text-slate-700 px-4 pt-4">5. 반품 내역 ({date})</h2>
         <table className="w-full text-sm mt-2">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
@@ -316,6 +316,16 @@ export default function PackingDailyLogPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="border rounded-md px-4 py-1.5 text-sm font-medium bg-white"
+        >
+          ↑ 맨 위로
+        </button>
       </div>
     </div>
   );
