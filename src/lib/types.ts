@@ -29,6 +29,7 @@ export interface ProductionLog {
   granulation_agent: string | null;
   granulation_usage_per_min: number | null;
   downtime_hours: number | null;
+  downtime_reason: string | null;
   carryover_dryer: number | null;
   carryover_rto: number | null;
   locked: number;

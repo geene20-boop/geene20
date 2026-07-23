@@ -29,6 +29,7 @@ type FormState = {
   line_hours_a: string;
   line_hours_b: string;
   downtime_hours: string;
+  downtime_reason: string;
   lng_dryer: string;
   lng_rto: string;
   carryover_dryer: string;
@@ -64,6 +65,7 @@ const emptyForm: FormState = {
   line_hours_a: "",
   line_hours_b: "",
   downtime_hours: "",
+  downtime_reason: "",
   lng_dryer: "",
   lng_rto: "",
   carryover_dryer: "",
@@ -102,6 +104,7 @@ function fromLog(row: ProductionLog): FormState {
     line_hours_a: toFormValue(row.line_hours_a),
     line_hours_b: toFormValue(row.line_hours_b),
     downtime_hours: toFormValue(row.downtime_hours),
+    downtime_reason: row.downtime_reason ?? "",
     lng_dryer: toFormValue(row.lng_dryer),
     lng_rto: toFormValue(row.lng_rto),
     carryover_dryer: toFormValue(row.carryover_dryer),
@@ -227,6 +230,7 @@ export default function ProductionPage() {
   const [pendingUnlock, setPendingUnlock] = useState(false);
 
   const [dirty, setDirty] = useState(false);
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [draftAvailable, setDraftAvailable] = useState<FormState | null>(null);
   const draftKey = `production_draft_${form.date}_${form.shift}`;
 
@@ -323,6 +327,7 @@ export default function ProductionPage() {
         setCurrentId(ctx.existing.id);
         setLocked(!!ctx.existing.locked);
         setForm((f) => ({ ...fromLog(ctx.existing as ProductionLog), date: f.date, shift: f.shift }));
+        setMaintenanceMode(!!ctx.existing.note?.startsWith("정비"));
       } else {
         setCurrentId(null);
         setLocked(false);
@@ -336,6 +341,7 @@ export default function ProductionPage() {
             ctx.packingEntryRef.totalTons > 0 ? String(ctx.packingEntryRef.totalTons) : "",
           product: ctx.packingEntryRef.suggestedProduct ?? "",
         }));
+        setMaintenanceMode(false);
       }
       setDirty(false);
 
@@ -444,7 +450,9 @@ export default function ProductionPage() {
       carryover_rto: toFormValue(carryoverPreview.rto),
       lng_dryer: toFormValue(carryoverPreview.dryer),
       lng_rto: toFormValue(carryoverPreview.rto),
+      note: "정비",
     }));
+    setMaintenanceMode(true);
     setDirty(true);
   }
 
@@ -477,6 +485,7 @@ export default function ProductionPage() {
         line_hours_a: n(form.line_hours_a),
         line_hours_b: n(form.line_hours_b),
         downtime_hours: n(form.downtime_hours),
+        downtime_reason: n(form.downtime_hours) ? form.downtime_reason || null : null,
         lng_dryer: n(form.lng_dryer),
         lng_rto: n(form.lng_rto),
         moisture_manual: n(form.moisture_manual),
@@ -514,6 +523,7 @@ export default function ProductionPage() {
     if (id === currentId) {
       setCurrentId(null);
       setForm((f) => ({ ...emptyForm, date: f.date, shift: f.shift }));
+      setMaintenanceMode(false);
     }
   }
 
@@ -743,6 +753,18 @@ export default function ProductionPage() {
             <span className="text-slate-600">A+B 합계 - 비가동 (자동)</span>
             <div className="border rounded-md px-2 py-1.5 bg-slate-50 text-slate-500">{lineHoursTotal.toFixed(2)}</div>
           </div>
+          {(n(form.downtime_hours) ?? 0) > 0 && (
+            <label className="flex flex-col gap-1 text-sm col-span-2 md:col-span-4">
+              <span className="text-amber-700 font-medium">비가동발생원인</span>
+              <input
+                type="text"
+                value={form.downtime_reason}
+                onChange={(e) => set("downtime_reason", e.target.value)}
+                placeholder="예: 설비 점검, 원료 공급 지연 등"
+                className="border rounded-md px-2 py-1.5 border-amber-400 bg-amber-50"
+              />
+            </label>
+          )}
         </Section>
 
         <fieldset className="border rounded-lg p-4">
@@ -851,12 +873,17 @@ export default function ProductionPage() {
         </fieldset>
 
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600">비고</span>
+          <span className={maintenanceMode ? "text-amber-700 font-medium" : "text-slate-600"}>
+            {maintenanceMode ? "정비내역" : "비고"}
+          </span>
           <textarea
             value={form.note}
             onChange={(e) => set("note", e.target.value)}
-            className="border rounded-md px-2 py-1.5"
+            className={`border rounded-md px-2 py-1.5 ${
+              maintenanceMode ? "border-amber-400 bg-amber-50" : ""
+            }`}
             rows={2}
+            placeholder={maintenanceMode ? "정비 내용을 입력하세요 (예: 압출기 스크류 교체)" : undefined}
           />
         </label>
 
@@ -945,6 +972,7 @@ export default function ProductionPage() {
               <th className="text-right px-3 py-2">가스사용(㎥)</th>
               <th className="text-right px-3 py-2">경도</th>
               <th className="text-right px-3 py-2">수분</th>
+              <th className="text-left px-3 py-2">비고</th>
               <th className="text-left px-3 py-2">입력자/수정자</th>
               <th className="px-3 py-2"></th>
             </tr>
@@ -973,6 +1001,9 @@ export default function ProductionPage() {
                 </td>
                 <td className="px-3 py-2 text-right">{row.hardness_manual ?? "-"}</td>
                 <td className="px-3 py-2 text-right">{row.moisture_manual ?? "-"}</td>
+                <td className="px-3 py-2 text-xs text-slate-600 max-w-[160px] truncate" title={row.note ?? ""}>
+                  {row.note ?? "-"}
+                </td>
                 <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
                   {row.entered_by ?? "-"}
                   {row.updated_by && row.updated_by !== row.entered_by ? ` → ${row.updated_by}` : ""}
@@ -993,7 +1024,7 @@ export default function ProductionPage() {
             ))}
             {logs.length === 0 && (
               <tr>
-                <td colSpan={12} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={13} className="px-3 py-8 text-center text-slate-400">
                   아직 입력된 생산일지가 없습니다.
                 </td>
               </tr>

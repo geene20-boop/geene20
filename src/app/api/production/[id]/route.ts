@@ -51,6 +51,7 @@ const PASSTHROUGH_COLUMNS = [
   "line_hours_a",
   "line_hours_b",
   "downtime_hours",
+  "downtime_reason",
   "lng_dryer",
   "lng_rto",
   "gas_usage_total",
