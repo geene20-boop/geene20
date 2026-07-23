@@ -9,7 +9,7 @@ import {
   PackingBreakage,
   PackingReturn,
 } from "@/lib/types";
-import { KIND_LABELS, groupByKind, itemLabel } from "@/lib/packingClient";
+import { groupByKind, itemLabel } from "@/lib/packingClient";
 
 interface PackingState {
   stock: PackingItem[];
@@ -65,6 +65,37 @@ function fmtTon(n: number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
+// 포장지: 실제 대분류(공통=톤백내피/석회고토/입상규산/칼슘유황) 그대로 색상 구분해서 세로 목록으로 보여준다 (피벗 아님)
+const BAGMAT_GROUP_STYLE: Record<string, { label: string; bg: string }> = {
+  공통: { label: "톤백 내피", bg: "bg-indigo-700" },
+  석회고토: { label: "석회고토 포장지", bg: "bg-amber-800" },
+  입상규산: { label: "입상규산 포장지", bg: "bg-emerald-700" },
+  칼슘유황: { label: "칼슘유황 포장지", bg: "bg-purple-700" },
+};
+const BAGMAT_GROUP_ORDER = ["공통", "석회고토", "입상규산", "칼슘유황"];
+
+// 부자재는 실제 데이터에 별도 대분류가 없어(전부 "공통") 품목명으로 PLT류/랩핑류/탑시트류를 나눈다
+function auxGroupKey(sub: string | null): string {
+  const s = sub ?? "";
+  if (s.includes("PLT")) return "plt";
+  if (s.includes("랩핑") || s.includes("스트레치")) return "wrap";
+  if (s.includes("탑시트")) return "topsheet";
+  return "etc";
+}
+const AUX_GROUP_STYLE: Record<string, { label: string; bg: string }> = {
+  plt: { label: "PLT류", bg: "bg-teal-700" },
+  wrap: { label: "랩핑류", bg: "bg-pink-700" },
+  topsheet: { label: "탑시트류", bg: "bg-sky-700" },
+  etc: { label: "기타", bg: "bg-slate-600" },
+};
+const AUX_GROUP_ORDER = ["plt", "wrap", "topsheet", "etc"];
+
+// 그룹 내 품목 단위가 모두 같으면 그 단위로, 다르면 단위 없이 개수만 합산해서 보여준다
+function groupSubtotal(rows: PackingItem[]): { qty: number; unit: string | null } {
+  const units = new Set(rows.map((r) => r.unit ?? ""));
+  return { qty: rows.reduce((sum, r) => sum + r.stock, 0), unit: units.size === 1 ? rows[0]?.unit ?? null : null };
+}
+
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -97,6 +128,94 @@ export default function PackingStockPage() {
   }, [rangeFrom, rangeTo]);
 
   const grouped = useMemo(() => groupByKind(state?.stock ?? []), [state]);
+
+  const bagmatGroups = useMemo(() => {
+    const rows = grouped.bagmat ?? [];
+    return BAGMAT_GROUP_ORDER.map((key) => {
+      const items = rows.filter((r) => stripCode(r.category) === key);
+      if (items.length === 0) return null;
+      return { key, ...BAGMAT_GROUP_STYLE[key], rows: items, subtotal: groupSubtotal(items) };
+    }).filter((g): g is NonNullable<typeof g> => g !== null);
+  }, [grouped]);
+
+  const auxGroups = useMemo(() => {
+    const rows = grouped.aux ?? [];
+    const byKey = new Map<string, PackingItem[]>();
+    for (const r of rows) {
+      const key = auxGroupKey(r.sub);
+      (byKey.get(key) ?? byKey.set(key, []).get(key)!).push(r);
+    }
+    return AUX_GROUP_ORDER.map((key) => {
+      const items = byKey.get(key);
+      if (!items || items.length === 0) return null;
+      return { key, ...AUX_GROUP_STYLE[key], rows: items, subtotal: groupSubtotal(items) };
+    }).filter((g): g is NonNullable<typeof g> => g !== null);
+  }, [grouped]);
+
+  const bagmatGrandTotal = useMemo(
+    () => (grouped.bagmat ?? []).reduce((sum, r) => sum + r.stock, 0),
+    [grouped]
+  );
+  const auxGrandTotal = useMemo(
+    () => (grouped.aux ?? []).reduce((sum, r) => sum + r.stock, 0),
+    [grouped]
+  );
+
+  function renderGroupedKindSection(
+    title: string,
+    groups: { key: string; label: string; bg: string; rows: PackingItem[]; subtotal: { qty: number; unit: string | null } }[],
+    grandTotal: number
+  ) {
+    return (
+      <div className="flex flex-col gap-2">
+        <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
+        <div className="bg-white rounded-xl border overflow-hidden divide-y">
+          {groups.map((group) => (
+            <div key={group.key}>
+              <div className={`flex items-center gap-3 px-4 py-2 text-white font-bold text-sm ${group.bg}`}>
+                <span className="flex-1">{group.label}</span>
+                <span className="tabular-nums">
+                  {fmt(group.subtotal.qty)}
+                  {group.subtotal.unit ?? ""}
+                </span>
+              </div>
+              {group.rows.map((item) => {
+                const low = isLowStock(item);
+                return (
+                  <div key={item.key} className="flex items-center gap-3 px-6 py-2 text-sm border-t">
+                    <span className="flex-1 text-slate-600">
+                      {stripCode(item.sub) || stripCode(item.category) || item.key}
+                    </span>
+                    <span className="tabular-nums flex items-center">
+                      {fmt(item.stock)}
+                      {item.unit ?? ""}
+                      {low && (
+                        <span className="ml-2 inline-flex items-center gap-1 text-[11px] font-bold text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                          ⚠ 부족주의
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          {groups.length === 0 && !loading && (
+            <p className="px-4 py-8 text-center text-sm text-slate-400">등록된 품목이 없습니다.</p>
+          )}
+        </div>
+        {groups.length > 0 && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-800 text-white font-bold text-sm">
+            <span className="flex-1">전체합계</span>
+            <span className="tabular-nums">
+              {fmt(grandTotal)}
+              <span className="text-xs font-normal text-slate-300 ml-2">(단위가 다르면 개수만 단순 합산)</span>
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // 대분류(석회고토 등) 안에서 다시 중분류(포장지 제품 / 톤백 제품)로 나눈다.
   // 톤백 제품이 없는 대분류(칼슘유황)는 "톤백 제품" 중분류 자체를 생략한다.
@@ -291,40 +410,8 @@ export default function PackingStockPage() {
         )}
       </div>
 
-      {(["bagmat", "aux"] as const).map((kind) => (
-        <div key={kind} className="flex flex-col gap-2">
-          <h2 className="text-sm font-semibold text-slate-700">{KIND_LABELS[kind]}</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {(grouped[kind] ?? []).map((item) => {
-              const low = isLowStock(item);
-              return (
-                <div
-                  key={item.key}
-                  className={`rounded-xl border p-4 flex flex-col gap-1 ${
-                    low ? "bg-red-50 border-red-300" : "bg-white"
-                  }`}
-                >
-                  <span className={`text-xs ${low ? "text-red-600 font-medium" : "text-slate-500"}`}>
-                    {itemLabel(item)}
-                    {low && " (부족주의)"}
-                  </span>
-                  <span className={`text-2xl font-bold ${low ? "text-red-600" : "text-slate-800"}`}>
-                    {fmt(item.stock)}
-                    <span
-                      className={`text-sm font-normal ml-1 ${low ? "text-red-400" : "text-slate-400"}`}
-                    >
-                      {item.unit ?? ""}
-                    </span>
-                  </span>
-                </div>
-              );
-            })}
-            {(grouped[kind] ?? []).length === 0 && !loading && (
-              <p className="col-span-full text-sm text-slate-400">등록된 품목이 없습니다.</p>
-            )}
-          </div>
-        </div>
-      ))}
+      {renderGroupedKindSection("02. 포장지", bagmatGroups, bagmatGrandTotal)}
+      {renderGroupedKindSection("03. 부자재", auxGroups, auxGrandTotal)}
 
       <div className="bg-white rounded-xl border overflow-x-auto">
         <div className="flex items-center justify-between px-4 pt-4 flex-wrap gap-2">
