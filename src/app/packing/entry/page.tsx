@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
-import { PackingEntry, PackingEntryType, PackingItem } from "@/lib/types";
+import { PackingEntry, PackingEntryType, PackingItem, Worker } from "@/lib/types";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
@@ -57,6 +57,7 @@ function n(v: string): number | null {
 export default function PackingEntryPage() {
   const [items, setItems] = useState<PackingItem[]>([]);
   const [entries, setEntries] = useState<PackingEntry[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([]);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -65,6 +66,8 @@ export default function PackingEntryPage() {
   const admin = useAdminSession();
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [rangeFrom, setRangeFrom] = useState(daysAgo(30));
+  const [rangeTo, setRangeTo] = useState(today());
   const session = useSiteSession();
 
   useEffect(() => {
@@ -78,8 +81,8 @@ export default function PackingEntryPage() {
   async function loadItems() {
     setItems(await apiGet<PackingItem[]>("/api/packing-item"));
   }
-  async function loadEntries() {
-    setEntries(await apiGet<PackingEntry[]>(`/api/packing-entry?from=${daysAgo(30)}&to=${today()}`));
+  async function loadEntries(from?: string, to?: string) {
+    setEntries(await apiGet<PackingEntry[]>(`/api/packing-entry?from=${from ?? rangeFrom}&to=${to ?? rangeTo}`));
   }
 
   useEffect(() => {
@@ -87,6 +90,7 @@ export default function PackingEntryPage() {
     loadItems();
     loadEntries();
     admin.refresh();
+    apiGet<Worker[]>("/api/worker").then(setWorkers);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -231,12 +235,21 @@ export default function PackingEntryPage() {
           </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">작업자</span>
-            <input
-              type="text"
+            <select
               value={form.worker}
               onChange={(e) => set("worker", e.target.value)}
               className="border rounded-md px-2 py-1.5"
-            />
+            >
+              <option value="">선택</option>
+              {form.worker && !workers.some((w) => w.name === form.worker) && (
+                <option value={form.worker}>{form.worker}</option>
+              )}
+              {workers.map((w) => (
+                <option key={w.id} value={w.name}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
 
@@ -395,7 +408,36 @@ export default function PackingEntryPage() {
       </form>
 
       <div className="bg-white rounded-xl border overflow-x-auto">
-        <h2 className="text-sm font-semibold text-slate-700 px-4 pt-4">최근 30일 입력내역</h2>
+        <div className="flex items-center justify-between px-4 pt-4 flex-wrap gap-2">
+          <h2 className="text-sm font-semibold text-slate-700">입력내역</h2>
+          <div className="flex items-end gap-2">
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="text-slate-500">시작일</span>
+              <input
+                type="date"
+                value={rangeFrom}
+                onChange={(e) => setRangeFrom(e.target.value)}
+                className="border rounded-md px-2 py-1 text-xs"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="text-slate-500">종료일</span>
+              <input
+                type="date"
+                value={rangeTo}
+                onChange={(e) => setRangeTo(e.target.value)}
+                className="border rounded-md px-2 py-1 text-xs"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => loadEntries()}
+              className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-xs font-medium"
+            >
+              조회
+            </button>
+          </div>
+        </div>
         <table className="w-full text-sm mt-2">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
@@ -446,7 +488,7 @@ export default function PackingEntryPage() {
             {entries.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-3 py-8 text-center text-slate-400">
-                  최근 30일간 기록이 없습니다.
+                  해당 기간에 입력 기록이 없습니다.
                 </td>
               </tr>
             )}
