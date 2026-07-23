@@ -352,7 +352,7 @@ export default function UtilityPage() {
             { key: "summary", label: "월별 유틸리티 합계" },
             { key: "production", label: "월별생산량+누계" },
             { key: "byProduct", label: "비종별 집계" },
-            { key: "daily", label: "일자별 전력가스" },
+            { key: "daily", label: "일자별 유틸증감량" },
             { key: "monthlyYoy", label: "월별 유틸증감량" },
             { key: "yearlyYoy", label: "연도별 유틸증감량" },
           ] as const
@@ -666,6 +666,7 @@ export default function UtilityPage() {
       )}
 
       {/* 월별 유틸리티 입력 + 엑셀 업로드 (재무 데이터라 관리자만 편집 가능) */}
+      {monthlyTab === "daily" && (
       <div className="bg-white rounded-xl border p-5 flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-sm font-semibold text-slate-700">월별 금액·경유 입력 (청구서 기준)</h2>
@@ -798,6 +799,7 @@ export default function UtilityPage() {
           onNameError={() => setNameError(true)}
         />
       </div>
+      )}
     </div>
   );
 }
