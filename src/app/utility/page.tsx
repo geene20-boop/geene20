@@ -115,6 +115,7 @@ const emptyMonthlyForm = (): MonthlyForm => ({
 });
 
 export default function UtilityPage() {
+  const [monthlyTab, setMonthlyTab] = useState<"summary" | "production" | "byProduct">("summary");
   const [fromMonth, setFromMonth] = useState(shiftMonth(thisMonth(), -11));
   const [toMonth, setToMonth] = useState(thisMonth());
   const [data, setData] = useState<SheetResponse | null>(null);
@@ -341,7 +342,29 @@ export default function UtilityPage() {
         </div>
       )}
 
+      <div className="flex gap-2 border-b">
+        {(
+          [
+            { key: "summary", label: "월별 유틸리티 합계" },
+            { key: "production", label: "월별생산량+누계" },
+            { key: "byProduct", label: "비종별 집계" },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setMonthlyTab(t.key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
+              monthlyTab === t.key ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {/* 월별 통합 표 */}
+      {monthlyTab === "summary" && (
       <div className="bg-white rounded-xl border overflow-x-auto">
         <table className="text-xs border-collapse min-w-[1400px] w-full">
           <thead className="bg-slate-50 text-slate-600">
@@ -391,10 +414,11 @@ export default function UtilityPage() {
           </tbody>
         </table>
       </div>
+      )}
 
-      {/* 생산 누계 + 비종별 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl border p-4">
+      {/* 월별 생산량 + 누계 */}
+      {monthlyTab === "production" && (
+      <div className="bg-white rounded-xl border p-4">
           <h2 className="text-sm font-semibold text-slate-700 mb-3">월별 생산량 + 누계 (ton)</h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
@@ -409,8 +433,12 @@ export default function UtilityPage() {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-        </div>
-        <div className="bg-white rounded-xl border p-4 overflow-x-auto">
+      </div>
+      )}
+
+      {/* 비종별 집계 */}
+      {monthlyTab === "byProduct" && (
+      <div className="bg-white rounded-xl border p-4 overflow-x-auto">
           <h2 className="text-sm font-semibold text-slate-700 mb-3">비종별 집계 (선택 기간 합계)</h2>
           <table className="text-xs w-full tabular-nums">
             <thead className="text-slate-500">
@@ -449,8 +477,8 @@ export default function UtilityPage() {
           <p className="text-[11px] text-slate-400 mt-2">
             ※ 비종별 전력·가스는 그날 생산한 비종에 귀속해 배분한 추정치입니다(하루에 여러 비종이면 균등 분할).
           </p>
-        </div>
       </div>
+      )}
 
       {/* 전년동월 대비 (YoY) */}
       <div className="bg-white rounded-xl border p-4">
