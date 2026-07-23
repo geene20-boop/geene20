@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUtilityMonthlySheet, getUtilityYoY, monthsInRange } from "@/lib/analytics";
+import { getUtilityMonthlySheet, getUtilityYearlySummary, getUtilityYoY, monthsInRange } from "@/lib/analytics";
 
 // 월별 유틸리티 통합 시트 + 전년동월 대비(YoY)
 export async function GET(req: NextRequest) {
@@ -23,5 +23,7 @@ export async function GET(req: NextRequest) {
 
   const sheet = getUtilityMonthlySheet(months);
   const yoy = getUtilityYoY(months);
-  return NextResponse.json({ from, to, months, sheet, yoy });
+  const years = Array.from(new Set(months.map((m) => m.slice(0, 4)))).sort();
+  const yearly = getUtilityYearlySummary(years);
+  return NextResponse.json({ from, to, months, sheet, yoy, yearly });
 }

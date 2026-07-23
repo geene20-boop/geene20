@@ -17,7 +17,7 @@ import {
 } from "recharts";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import { UtilityMonthRow, MonthlyUtility, ElectricityUsage } from "@/lib/types";
-import type { MergedShiftRow } from "@/lib/analytics";
+import type { MergedShiftRow, YearlyUtilityRow } from "@/lib/analytics";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
@@ -41,6 +41,7 @@ interface SheetResponse {
   months: string[];
   sheet: UtilityMonthRow[];
   yoy: YoYRow[];
+  yearly: YearlyUtilityRow[];
 }
 
 function thisMonth(): string {
@@ -115,7 +116,9 @@ const emptyMonthlyForm = (): MonthlyForm => ({
 });
 
 export default function UtilityPage() {
-  const [monthlyTab, setMonthlyTab] = useState<"summary" | "production" | "byProduct" | "daily">("summary");
+  const [monthlyTab, setMonthlyTab] = useState<
+    "summary" | "production" | "byProduct" | "daily" | "monthlyYoy" | "yearlyYoy"
+  >("summary");
   const [fromMonth, setFromMonth] = useState(shiftMonth(thisMonth(), -11));
   const [toMonth, setToMonth] = useState(thisMonth());
   const [data, setData] = useState<SheetResponse | null>(null);
@@ -197,6 +200,7 @@ export default function UtilityPage() {
 
   const sheet = useMemo(() => data?.sheet ?? [], [data]);
   const yoy = useMemo(() => data?.yoy ?? [], [data]);
+  const yearly = useMemo(() => data?.yearly ?? [], [data]);
 
   // 비종별 집계 (기간 전체)
   const productAgg = useMemo(() => {
@@ -349,6 +353,8 @@ export default function UtilityPage() {
             { key: "production", label: "월별생산량+누계" },
             { key: "byProduct", label: "비종별 집계" },
             { key: "daily", label: "일자별 전력가스" },
+            { key: "monthlyYoy", label: "월별 유틸증감량" },
+            { key: "yearlyYoy", label: "연도별 유틸증감량" },
           ] as const
         ).map((t) => (
           <button
@@ -482,6 +488,7 @@ export default function UtilityPage() {
       )}
 
       {/* 전년동월 대비 (YoY) */}
+      {monthlyTab === "monthlyYoy" && (
       <div className="bg-white rounded-xl border p-4">
         <h2 className="text-sm font-semibold text-slate-700 mb-3">전년동월 대비 증감 (전력·LNG·경유)</h2>
         <div className="h-64 mb-4">
@@ -534,6 +541,81 @@ export default function UtilityPage() {
           ※ 작년 같은 달 데이터가 있어야 증감이 계산됩니다(과거 자료는 엑셀 업로드로 넣을 수 있습니다).
         </p>
       </div>
+      )}
+
+      {/* 연도별 유틸증감량 (YoY) */}
+      {monthlyTab === "yearlyYoy" && (
+      <div className="bg-white rounded-xl border p-4">
+        <h2 className="text-sm font-semibold text-slate-700 mb-3">연도별 전력·가스 사용량 추이</h2>
+        <div className="h-64 mb-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={yearly.map((y) => ({ year: y.year, 전력: y.elecTotalKwh, LNG: y.lngM3, 경유: y.dieselLiter }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="year" fontSize={11} />
+              <YAxis fontSize={11} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="전력" fill="#6366f1" />
+              <Bar dataKey="LNG" fill="#f59e0b" />
+              <Bar dataKey="경유" fill="#ef4444" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <h2 className="text-sm font-semibold text-slate-700 mb-3">연도별 전년대비 증감 (전력·LNG·경유)</h2>
+        <div className="h-64 mb-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={yearly.map((y) => ({ year: y.year, 전력: y.elecKwhDelta, LNG: y.lngM3Delta, 경유: y.dieselDelta }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="year" fontSize={11} />
+              <YAxis fontSize={11} />
+              <Tooltip />
+              <Legend />
+              <ReferenceLine y={0} stroke="#94a3b8" />
+              <Bar dataKey="전력" fill="#6366f1" />
+              <Bar dataKey="LNG" fill="#f59e0b" />
+              <Bar dataKey="경유" fill="#ef4444" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="text-xs w-full tabular-nums min-w-[700px]">
+            <thead className="text-slate-500">
+              <tr className="border-b">
+                <th className="text-left px-2 py-1.5">연도</th>
+                <th className="text-right px-2 py-1.5">전력 사용량(kWh)</th>
+                <th className="text-right px-2 py-1.5">전력 증감</th>
+                <th className="text-right px-2 py-1.5">전력 증감%</th>
+                <th className="text-right px-2 py-1.5">LNG 사용량(㎥)</th>
+                <th className="text-right px-2 py-1.5">LNG 증감</th>
+                <th className="text-right px-2 py-1.5">경유 사용량(ℓ)</th>
+                <th className="text-right px-2 py-1.5">경유 증감</th>
+              </tr>
+            </thead>
+            <tbody>
+              {yearly.map((y) => (
+                <tr key={y.year} className="border-b border-slate-100">
+                  <td className="text-left px-2 py-1.5 font-medium">{y.year}</td>
+                  <td className="text-right px-2 py-1.5">{fmt(y.elecTotalKwh)}</td>
+                  <td className="text-right px-2 py-1.5"><Delta value={y.elecKwhDelta} /></td>
+                  <td className="text-right px-2 py-1.5">{fmtPct(y.elecKwhPct)}</td>
+                  <td className="text-right px-2 py-1.5">{fmt(y.lngM3)}</td>
+                  <td className="text-right px-2 py-1.5"><Delta value={y.lngM3Delta} /></td>
+                  <td className="text-right px-2 py-1.5">{fmt(y.dieselLiter)}</td>
+                  <td className="text-right px-2 py-1.5"><Delta value={y.dieselDelta} /></td>
+                </tr>
+              ))}
+              {yearly.length === 0 && (
+                <tr><td colSpan={8} className="px-2 py-6 text-center text-slate-400">데이터가 없습니다.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[11px] text-slate-400 mt-2">
+          ※ 조회기간에 포함된 연도만 표시되며, 작년 데이터가 있어야 증감이 계산됩니다.
+        </p>
+      </div>
+      )}
 
       {/* 일자별 증감 그래프 */}
       {monthlyTab === "daily" && (

@@ -537,3 +537,67 @@ export function getUtilityYoY(months: string[]): YoYRow[] {
     };
   });
 }
+
+/** 연도별(달력 연도) 전력·LNG·경유 사용량 합계 + 전년대비 증감 */
+export interface YearlyUtilityRow {
+  year: string; // "YYYY"
+  elecTotalKwh: number | null;
+  lngM3: number | null;
+  dieselLiter: number | null;
+  elecKwhDelta: number | null;
+  elecKwhPct: number | null;
+  lngM3Delta: number | null;
+  lngM3Pct: number | null;
+  dieselDelta: number | null;
+  dieselPct: number | null;
+}
+
+export function getUtilityYearlySummary(years: string[]): YearlyUtilityRow[] {
+  const prevYears = years.map((y) => String(Number(y) - 1));
+  const allYears = Array.from(new Set([...years, ...prevYears]));
+  const allMonths = allYears.flatMap((y) =>
+    Array.from({ length: 12 }, (_, i) => `${y}-${String(i + 1).padStart(2, "0")}`)
+  );
+  const sheet = getUtilityMonthlySheet(allMonths);
+  const byYear = new Map<string, UtilityMonthRow[]>();
+  for (const row of sheet) {
+    const y = row.month.slice(0, 4);
+    (byYear.get(y) ?? byYear.set(y, []).get(y)!).push(row);
+  }
+
+  function sumField(rows: UtilityMonthRow[], pick: (r: UtilityMonthRow) => number | null): number | null {
+    const vals = rows.map(pick).filter((v): v is number => v != null);
+    return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) : null;
+  }
+  function yearTotals(year: string) {
+    const rows = byYear.get(year) ?? [];
+    return {
+      elecTotalKwh: sumField(rows, (r) => r.elecTotalKwh),
+      lngM3: sumField(rows, (r) => r.lngM3),
+      dieselLiter: sumField(rows, (r) => r.dieselLiter),
+    };
+  }
+  const pctDelta = (cur: number | null, prev: number | null): number | null => {
+    if (cur == null || prev == null || prev === 0) return null;
+    return (cur - prev) / prev;
+  };
+  const absDelta = (cur: number | null, prev: number | null): number | null => {
+    if (cur == null || prev == null) return null;
+    return cur - prev;
+  };
+
+  return years.map((year) => {
+    const current = yearTotals(year);
+    const prevYear = yearTotals(String(Number(year) - 1));
+    return {
+      year,
+      ...current,
+      elecKwhDelta: absDelta(current.elecTotalKwh, prevYear.elecTotalKwh),
+      elecKwhPct: pctDelta(current.elecTotalKwh, prevYear.elecTotalKwh),
+      lngM3Delta: absDelta(current.lngM3, prevYear.lngM3),
+      lngM3Pct: pctDelta(current.lngM3, prevYear.lngM3),
+      dieselDelta: absDelta(current.dieselLiter, prevYear.dieselLiter),
+      dieselPct: pctDelta(current.dieselLiter, prevYear.dieselLiter),
+    };
+  });
+}
