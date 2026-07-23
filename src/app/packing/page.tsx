@@ -42,7 +42,13 @@ const PRODUCT_CATEGORY_STYLE = [
   { category: "칼슘유황", no: "03", bg: "bg-purple-700" },
 ] as const;
 
-// 톤백 제품(category="톤백")은 세부명(sub)에 적힌 이름으로 상위 대분류에 포함시킨다
+// 실제 품목 데이터의 category/sub 앞에는 "[01]", "[A]"처럼 내부 관리번호가 붙어있을 수 있어
+// (예: "[01]석회고토", "[A]무상분") 매칭·표시 전에 앞쪽 대괄호 코드를 떼어낸다.
+function stripCode(s: string | null): string {
+  return (s ?? "").replace(/^\[[^\]]+\]\s*/, "").trim();
+}
+
+// 톤백 제품(category가 "톤백"인 품목)은 세부명(sub)에 적힌 이름으로 상위 대분류에 포함시킨다
 function tonbagParentCategory(sub: string | null): string | null {
   if (!sub) return null;
   if (sub.includes("석회고토")) return "석회고토";
@@ -86,9 +92,9 @@ export default function PackingStockPage() {
   const productGroups = useMemo(() => {
     const products = (state?.stock ?? []).filter((i) => i.kind === "product");
     return PRODUCT_CATEGORY_STYLE.map((style) => {
-      const bagRows = products.filter((p) => p.category === style.category);
+      const bagRows = products.filter((p) => stripCode(p.category) === style.category);
       const tonbagRows = products.filter(
-        (p) => p.category === "톤백" && tonbagParentCategory(p.sub) === style.category
+        (p) => stripCode(p.category) === "톤백" && tonbagParentCategory(p.sub) === style.category
       );
       const mids = [
         { label: "포장지 제품", key: `${style.category}::bag`, rows: bagRows },
@@ -211,7 +217,9 @@ export default function PackingStockPage() {
                               key={item.key}
                               className="flex items-center gap-3 px-8 py-2 text-sm border-t bg-slate-50/60"
                             >
-                              <span className="flex-1 text-slate-600">{item.sub ?? item.category}</span>
+                              <span className="flex-1 text-slate-600">
+                                {stripCode(item.sub) || stripCode(item.category) || item.key}
+                              </span>
                               <span className="tabular-nums">
                                 {fmt(item.stock)}
                                 {item.unit ?? ""}
