@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import HanilLogo from "@/components/HanilLogo";
 
 export default function SiteGate() {
   const [username, setUsername] = useState("");
@@ -29,7 +30,10 @@ export default function SiteGate() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
       <form onSubmit={submit} className="bg-white rounded-xl border p-6 w-full max-w-sm flex flex-col gap-3">
-        <h1 className="font-semibold text-slate-800 text-lg">(주)한일씨앤에스 통합정보시스템</h1>
+        <h1 className="flex items-center gap-2 font-semibold text-slate-800 text-lg">
+          <HanilLogo className="h-8 w-auto shrink-0" />
+          (주)한일씨앤에스 통합정보시스템
+        </h1>
         <p className="text-sm text-slate-500">아이디와 비밀번호를 입력해주세요.</p>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-600">아이디</span>

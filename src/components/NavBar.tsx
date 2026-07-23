@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useSiteSession } from "@/lib/useSiteSession";
+import HanilLogo from "@/components/HanilLogo";
 
 interface NavItem {
   href: string;
@@ -115,7 +116,10 @@ export default function NavBar() {
   return (
     <header className="border-b bg-white sticky top-0 z-10">
       <div className="max-w-7xl mx-auto px-4 flex items-center gap-6 h-14">
-        <span className="font-semibold text-slate-800 whitespace-nowrap">(주)한일씨앤에스 통합정보시스템</span>
+        <span className="flex items-center gap-2 font-semibold text-slate-800 whitespace-nowrap">
+          <HanilLogo className="h-7 w-auto shrink-0" />
+          (주)한일씨앤에스 통합정보시스템
+        </span>
 
         <nav ref={navRef} className="hidden md:flex gap-1 relative">
           {NAV_GROUPS.map((group) => {
