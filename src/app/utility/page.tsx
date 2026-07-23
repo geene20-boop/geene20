@@ -115,7 +115,7 @@ const emptyMonthlyForm = (): MonthlyForm => ({
 });
 
 export default function UtilityPage() {
-  const [monthlyTab, setMonthlyTab] = useState<"summary" | "production" | "byProduct">("summary");
+  const [monthlyTab, setMonthlyTab] = useState<"summary" | "production" | "byProduct" | "daily">("summary");
   const [fromMonth, setFromMonth] = useState(shiftMonth(thisMonth(), -11));
   const [toMonth, setToMonth] = useState(thisMonth());
   const [data, setData] = useState<SheetResponse | null>(null);
@@ -348,6 +348,7 @@ export default function UtilityPage() {
             { key: "summary", label: "월별 유틸리티 합계" },
             { key: "production", label: "월별생산량+누계" },
             { key: "byProduct", label: "비종별 집계" },
+            { key: "daily", label: "일자별 전력가스" },
           ] as const
         ).map((t) => (
           <button
@@ -535,6 +536,7 @@ export default function UtilityPage() {
       </div>
 
       {/* 일자별 증감 그래프 */}
+      {monthlyTab === "daily" && (
       <div className="bg-white rounded-xl border p-4">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h2 className="text-sm font-semibold text-slate-700">일자별 전력·가스 사용량 및 전일 대비 증감</h2>
@@ -579,6 +581,7 @@ export default function UtilityPage() {
           </ResponsiveContainer>
         </div>
       </div>
+      )}
 
       {/* 월별 유틸리티 입력 + 엑셀 업로드 (재무 데이터라 관리자만 편집 가능) */}
       <div className="bg-white rounded-xl border p-5 flex flex-col gap-4">
