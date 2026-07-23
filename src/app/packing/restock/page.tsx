@@ -147,7 +147,14 @@ export default function PackingRestockPage() {
           </label>
         </div>
         {message && <p className="text-sm text-slate-600">{message}</p>}
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="border rounded-md px-4 py-1.5 text-sm font-medium"
+          >
+            ↑ 맨 위로
+          </button>
           <button type="submit" disabled={saving} className="bg-slate-900 text-white rounded-md px-4 py-1.5 text-sm font-medium disabled:opacity-50">
             {saving ? "저장 중..." : "등록"}
           </button>

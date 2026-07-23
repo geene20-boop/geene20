@@ -523,6 +523,13 @@ export default function QcPage() {
           >
             새로 측정하기
           </button>
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="border rounded-md px-4 py-2 text-sm font-medium"
+          >
+            ↑ 맨 위로
+          </button>
           {message && <span className="text-sm text-slate-600">{message}</span>}
         </div>
       </form>

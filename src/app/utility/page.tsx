@@ -663,6 +663,13 @@ export default function UtilityPage() {
             <button type="submit" disabled={savingMonth} className="bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50">
               {savingMonth ? "저장 중..." : "월별 저장"}
             </button>
+            <button
+              type="button"
+              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+              className="border rounded-md px-4 py-2 text-sm font-medium"
+            >
+              ↑ 맨 위로
+            </button>
             {monthMsg && <span className="text-sm text-slate-600">{monthMsg}</span>}
           </div>
         </form>

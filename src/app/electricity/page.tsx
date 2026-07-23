@@ -300,6 +300,13 @@ export default function ElectricityPage() {
           >
             {saving ? "저장 중..." : editingKey ? "수정 저장" : "저장"}
           </button>
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            className="border rounded-md px-4 py-2 text-sm font-medium"
+          >
+            ↑ 맨 위로
+          </button>
           {message && <span className="text-sm text-slate-600">{message}</span>}
         </div>
       </form>
