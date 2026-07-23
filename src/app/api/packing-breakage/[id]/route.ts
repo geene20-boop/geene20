@@ -3,7 +3,7 @@ import { getDb } from "@/lib/db";
 import { isAdminRequest } from "@/lib/auth";
 import { PackingBreakage } from "@/lib/types";
 import { logAudit, requireActor } from "@/lib/audit";
-import { adjustStock, runInTransaction } from "@/lib/packingStock";
+import { adjustStock, packingItemAuditLabel, runInTransaction } from "@/lib/packingStock";
 
 export async function PUT(
   req: NextRequest,
@@ -45,7 +45,7 @@ export async function PUT(
 
   logAudit(
     "packing_breakage",
-    `${before.date} ${before.key}`,
+    `${before.date} ${packingItemAuditLabel(db, before.key)}`,
     "update",
     actor,
     `이전: ${before.qty} → 이후: ${newQty}`
@@ -82,6 +82,6 @@ export async function DELETE(
     db.prepare("DELETE FROM packing_breakage WHERE id = ?").run(id);
   });
 
-  logAudit("packing_breakage", `${before.date} ${before.key}`, "delete", actor, "삭제됨(재고 원복)");
+  logAudit("packing_breakage", `${before.date} ${packingItemAuditLabel(db, before.key)}`, "delete", actor, "삭제됨(재고 원복)");
   return NextResponse.json({ ok: true });
 }

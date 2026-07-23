@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { PackingRestock } from "@/lib/types";
 import { logAudit, requireActor } from "@/lib/audit";
-import { adjustStock, runInTransaction } from "@/lib/packingStock";
+import { adjustStock, packingItemAuditLabel, runInTransaction } from "@/lib/packingStock";
 
 export async function GET(req: NextRequest) {
   const db = getDb();
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: (err as Error).message }, { status: 400 });
   }
 
-  logAudit("packing_restock", `${body.date} ${body.key}`, "create", actor, `+${body.qty}`);
+  logAudit("packing_restock", `${body.date} ${packingItemAuditLabel(getDb(), body.key)}`, "create", actor, `+${body.qty}`);
   const row = getDb().prepare("SELECT * FROM packing_restock WHERE id = ?").get(id);
   return NextResponse.json(row, { status: 201 });
 }

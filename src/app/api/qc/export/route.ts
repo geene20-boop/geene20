@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
     base["미분말"] = r.fine_powder ?? "";
     base["호퍼"] = r.hopper ?? "";
     base["수분"] = r.moisture ?? "";
+    base["수분 비고"] = r.moisture_note ?? "";
     base["작업자"] = r.worker ?? "";
     return base;
   });

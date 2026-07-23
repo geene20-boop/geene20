@@ -21,6 +21,7 @@ const COLUMNS = [
   "fine_powder",
   "hopper",
   "moisture",
+  "moisture_note",
   "worker",
 ] as const;
 

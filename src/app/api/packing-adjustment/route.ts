@@ -3,7 +3,7 @@ import { getDb } from "@/lib/db";
 import { isAdminRequest } from "@/lib/auth";
 import { PackingAdjustment } from "@/lib/types";
 import { logAudit, requireActor } from "@/lib/audit";
-import { adjustStock, runInTransaction } from "@/lib/packingStock";
+import { adjustStock, packingItemAuditLabel, runInTransaction } from "@/lib/packingStock";
 
 export async function GET(req: NextRequest) {
   const db = getDb();
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
   logAudit(
     "packing_adjustment",
-    `${body.date} ${body.key}`,
+    `${body.date} ${packingItemAuditLabel(getDb(), body.key)}`,
     "create",
     actor,
     `${body.qty > 0 ? "+" : ""}${body.qty}${body.reason ? ` (${body.reason})` : ""}`

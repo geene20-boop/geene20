@@ -3,7 +3,7 @@ import { getDb } from "@/lib/db";
 import { isAdminRequest } from "@/lib/auth";
 import { PackingEntry } from "@/lib/types";
 import { logAudit, requireActor } from "@/lib/audit";
-import { applyPackEffect, runInTransaction } from "@/lib/packingStock";
+import { applyPackEffect, packingItemAuditLabel, runInTransaction } from "@/lib/packingStock";
 
 function toEffect(row: PackingEntry) {
   return {
@@ -91,7 +91,7 @@ export async function PUT(
 
   logAudit(
     "packing_entry",
-    `${updated.date} ${updated.type === "pack" ? "생산" : "출하"} ${updated.product_key}`,
+    `${updated.date} ${updated.type === "pack" ? "생산" : "출하"} ${packingItemAuditLabel(db, updated.product_key)}`,
     "update",
     actor,
     `이전: ${before.qty}${before.unit ?? ""} → 이후: ${updated.qty}${updated.unit ?? ""}`
@@ -134,7 +134,7 @@ export async function DELETE(
 
   logAudit(
     "packing_entry",
-    `${before.date} ${before.type === "pack" ? "생산" : "출하"} ${before.product_key}`,
+    `${before.date} ${before.type === "pack" ? "생산" : "출하"} ${packingItemAuditLabel(db, before.product_key)}`,
     "delete",
     actor,
     "삭제됨(재고 원복)"

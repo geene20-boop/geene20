@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
-import { ProductionLog } from "@/lib/types";
+import { ProductionLog, Worker } from "@/lib/types";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
@@ -233,6 +233,11 @@ export default function ProductionPage() {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [draftAvailable, setDraftAvailable] = useState<FormState | null>(null);
   const draftKey = `production_draft_${form.date}_${form.shift}`;
+  const [workers, setWorkers] = useState<Worker[]>([]);
+
+  useEffect(() => {
+    apiGet<Worker[]>("/api/worker").then(setWorkers);
+  }, []);
 
   useEffect(() => {
     admin.refresh();
@@ -638,13 +643,21 @@ export default function ProductionPage() {
                 <option value="주">주간조</option>
                 <option value="야">야간조</option>
               </select>
-              <input
-                type="text"
-                placeholder="작업자 이름"
+              <select
                 value={form.worker}
                 onChange={(e) => set("worker", e.target.value)}
                 className="border rounded-md px-2 py-1.5 flex-1 min-w-0"
-              />
+              >
+                <option value="">선택</option>
+                {form.worker && !workers.some((w) => w.name === form.worker) && (
+                  <option value={form.worker}>{form.worker}</option>
+                )}
+                {workers.map((w) => (
+                  <option key={w.id} value={w.name}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </label>
           <div className="flex flex-col gap-1 text-sm">
