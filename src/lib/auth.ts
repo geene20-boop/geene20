@@ -7,7 +7,7 @@ export const SITE_SESSION_COOKIE = "site_session";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12시간
 
 type Scope = "admin" | "site";
-export type AccountRole = "viewer" | "editor";
+export type AccountRole = "viewer" | "editor" | "modifier";
 
 interface TokenPayload {
   scope: Scope;
@@ -233,7 +233,43 @@ export function isEditorRequest(req: {
   cookies: { get(name: string): { value: string } | undefined };
 }): boolean {
   if (isAdminRequest(req)) return true;
-  return getUserSession(req)?.role === "editor";
+  const role = getUserSession(req)?.role;
+  return role === "editor" || role === "modifier";
+}
+
+// "수정" 권한 계정(기존 기록의 수정/삭제까지 가능한 등급). 관리자(공용 비밀번호)는 별개 개념이라
+// 여기 포함하지 않는다 — 관리자는 "승인/승인해제"만 담당하고, 승인되지 않은 기록의 수정/삭제
+// 권한은 이 "수정" 등급 계정에게 있다.
+export function isModifierRequest(req: {
+  cookies: { get(name: string): { value: string } | undefined };
+}): boolean {
+  return getUserSession(req)?.role === "modifier";
+}
+
+interface LockableRecord {
+  locked: number | boolean;
+  approved_at?: string | null;
+}
+
+// 승인(잠금)된 기록은 관리자를 포함해 누구도 수정할 수 없다 (관리자가 승인해제해야 다시 가능).
+export function canEditRecord(
+  req: { cookies: { get(name: string): { value: string } | undefined } },
+  row: LockableRecord
+): boolean {
+  if (row.locked) return false;
+  return isAdminRequest(req) || isModifierRequest(req);
+}
+
+// 삭제는 수정보다 엄격하다: 승인된 적이 있는 기록은 해제되어도 "수정"등급 계정은 삭제할 수 없다
+// (관리자는 승인 이력과 무관하게, 잠기지만 않았으면 삭제 가능).
+export function canDeleteRecord(
+  req: { cookies: { get(name: string): { value: string } | undefined } },
+  row: LockableRecord
+): boolean {
+  if (row.locked) return false;
+  if (isAdminRequest(req)) return true;
+  if (!isModifierRequest(req)) return false;
+  return !row.approved_at;
 }
 
 // ---------- 로그인 시도 제한 (무차별 대입 방지) ----------

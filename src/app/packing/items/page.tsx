@@ -133,12 +133,36 @@ export default function PackingItemsPage() {
     }
   }
 
+  async function toggleLock(item: PackingItem) {
+    if (!enteredBy.trim()) {
+      setNameError(true);
+      return;
+    }
+    try {
+      await apiPut(`/api/packing-item/${item.key}/lock`, { entered_by: enteredBy, locked: !item.locked });
+      await loadItems();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    }
+  }
+
+  const canManage = admin.loggedIn || session.isModifier;
+  function canEdit(item: PackingItem) {
+    return !item.locked && (admin.loggedIn || session.isModifier);
+  }
+  function canDelete(item: PackingItem) {
+    if (item.locked) return false;
+    if (admin.loggedIn) return true;
+    return session.isModifier && !item.approved_at;
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-bold">품목관리</h1>
         <p className="text-sm text-slate-500 mt-1">
-          제품/포장지/부자재 품목을 추가합니다. 수정·삭제는 관리자만 가능합니다.
+          제품/포장지/부자재 품목을 추가합니다. 수정은 관리자 및 수정 권한 계정이 가능하며, 관리자가
+          승인한 품목은 승인해제 전까지 아무도 수정·삭제할 수 없습니다.
         </p>
       </div>
 
@@ -226,7 +250,8 @@ export default function PackingItemsPage() {
               <th className="text-left px-3 py-2">품목명</th>
               <th className="text-left px-3 py-2">단위</th>
               <th className="text-right px-3 py-2">재고</th>
-              {admin.loggedIn && <th className="text-left px-3 py-2">관리</th>}
+              <th className="text-left px-3 py-2">상태</th>
+              {canManage && <th className="text-left px-3 py-2">관리</th>}
             </tr>
           </thead>
           <tbody>
@@ -261,9 +286,20 @@ export default function PackingItemsPage() {
                     <td className="px-3 py-2 text-right tabular-nums">{item.stock}</td>
                   </>
                 )}
-                {admin.loggedIn && (
+                <td className="px-3 py-2">
+                  {item.locked ? (
+                    <span className="text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                      승인됨
+                    </span>
+                  ) : item.approved_at ? (
+                    <span className="text-xs text-slate-400">승인해제됨</span>
+                  ) : (
+                    <span className="text-xs text-slate-300">-</span>
+                  )}
+                </td>
+                {canManage && (
                   <td className="px-3 py-2">
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       {editKey === item.key ? (
                         <>
                           <button onClick={() => saveEdit(item.key)} className="text-xs border rounded-md px-2 py-1 bg-white">
@@ -275,13 +311,22 @@ export default function PackingItemsPage() {
                         </>
                       ) : (
                         <>
-                          <button onClick={() => startEdit(item)} className="text-xs border rounded-md px-2 py-1 bg-white">
-                            수정
-                          </button>
-                          <button onClick={() => removeItem(item.key)} className="text-xs border rounded-md px-2 py-1 bg-white text-red-600">
-                            삭제
-                          </button>
+                          {canEdit(item) && (
+                            <button onClick={() => startEdit(item)} className="text-xs border rounded-md px-2 py-1 bg-white">
+                              수정
+                            </button>
+                          )}
+                          {canDelete(item) && (
+                            <button onClick={() => removeItem(item.key)} className="text-xs border rounded-md px-2 py-1 bg-white text-red-600">
+                              삭제
+                            </button>
+                          )}
                         </>
+                      )}
+                      {admin.loggedIn && (
+                        <button onClick={() => toggleLock(item)} className="text-xs border rounded-md px-2 py-1 bg-white">
+                          {item.locked ? "승인해제" : "승인"}
+                        </button>
                       )}
                     </div>
                   </td>
@@ -290,7 +335,7 @@ export default function PackingItemsPage() {
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={7} className="px-3 py-8 text-center text-slate-400">
                   등록된 품목이 없습니다.
                 </td>
               </tr>
@@ -301,7 +346,7 @@ export default function PackingItemsPage() {
 
       {!admin.loggedIn && (
         <p className="text-xs text-slate-400">
-          수정·삭제는 관리자만 가능합니다.{" "}
+          승인/승인해제는 관리자만 가능합니다.{" "}
           <button onClick={() => setShowAdminModal(true)} className="underline">
             관리자 로그인
           </button>

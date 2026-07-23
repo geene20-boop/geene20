@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AccountRole, isAdminRequest, resetAccountPassword, updateAccount } from "@/lib/auth";
 
-const VALID_ROLES: AccountRole[] = ["viewer", "editor"];
+const VALID_ROLES: AccountRole[] = ["viewer", "editor", "modifier"];
 
 export async function PUT(
   req: NextRequest,
@@ -14,7 +14,7 @@ export async function PUT(
   const body = await req.json();
 
   if (body.role !== undefined && !VALID_ROLES.includes(body.role)) {
-    return NextResponse.json({ error: "role은 viewer 또는 editor여야 합니다." }, { status: 400 });
+    return NextResponse.json({ error: "role은 viewer, editor, modifier 중 하나여야 합니다." }, { status: 400 });
   }
   if (body.newPassword) {
     const newPassword = String(body.newPassword);

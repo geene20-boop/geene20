@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { MonthlyUtility } from "@/lib/types";
-import { isAdminRequest } from "@/lib/auth";
+import { canEditRecord, isAdminRequest, isModifierRequest } from "@/lib/auth";
 import { logAudit, requireActor } from "@/lib/audit";
 
 const NUM_FIELDS = [
@@ -34,14 +34,26 @@ function numOrNull(v: unknown): number | null {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAdminRequest(req)) {
-    return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 403 });
-  }
   const db = getDb();
   const body = await req.json();
   const month = String(body.month ?? "");
   if (!/^\d{4}-\d{2}$/.test(month)) {
     return NextResponse.json({ error: "month는 YYYY-MM 형식이어야 합니다." }, { status: 400 });
+  }
+
+  const existing = db.prepare("SELECT * FROM monthly_utility WHERE month = ?").get(month) as
+    | MonthlyUtility
+    | undefined;
+
+  if (existing) {
+    if (!canEditRecord(req, existing)) {
+      const reason = existing.locked
+        ? "승인된 기록은 수정할 수 없습니다. 관리자가 승인 해제해야 합니다."
+        : "수정 권한이 없습니다.";
+      return NextResponse.json({ error: reason }, { status: 403 });
+    }
+  } else if (!isAdminRequest(req) && !isModifierRequest(req)) {
+    return NextResponse.json({ error: "입력 권한이 없습니다." }, { status: 403 });
   }
 
   const actor = requireActor(req, body);
@@ -52,8 +64,6 @@ export async function POST(req: NextRequest) {
   const values: Record<string, number | null> = {};
   for (const f of NUM_FIELDS) values[f] = numOrNull(body[f]);
   const note = body.note ?? null;
-
-  const existing = db.prepare("SELECT month FROM monthly_utility WHERE month = ?").get(month);
 
   db.prepare(
     `INSERT INTO monthly_utility

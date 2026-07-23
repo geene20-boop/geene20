@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { isAdminRequest } from "@/lib/auth";
+import { canDeleteRecord, canEditRecord } from "@/lib/auth";
 import { PackingItem } from "@/lib/types";
 import { logAudit, requireActor } from "@/lib/audit";
 
@@ -8,9 +8,6 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ key: string }> }
 ) {
-  if (!isAdminRequest(req)) {
-    return NextResponse.json({ error: "품목 수정은 관리자 로그인이 필요합니다." }, { status: 403 });
-  }
   const { key } = await params;
   const db = getDb();
   const body = await req.json();
@@ -25,6 +22,12 @@ export async function PUT(
     | undefined;
   if (!before) {
     return NextResponse.json({ error: "수정할 품목을 찾을 수 없습니다." }, { status: 404 });
+  }
+  if (!canEditRecord(req, before)) {
+    const reason = before.locked
+      ? "승인된 품목은 수정할 수 없습니다. 관리자가 승인 해제해야 합니다."
+      : "수정 권한이 없습니다.";
+    return NextResponse.json({ error: reason }, { status: 403 });
   }
 
   const category = body.category !== undefined && body.category !== "" ? body.category : before.category;
@@ -55,9 +58,6 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ key: string }> }
 ) {
-  if (!isAdminRequest(req)) {
-    return NextResponse.json({ error: "품목 삭제는 관리자 로그인이 필요합니다." }, { status: 403 });
-  }
   const { key } = await params;
   const db = getDb();
   const body = await req.json().catch(() => ({}));
@@ -79,6 +79,12 @@ export async function DELETE(
       },
       { status: 400 }
     );
+  }
+  if (!canDeleteRecord(req, before)) {
+    const reason = before.locked
+      ? "승인된 품목은 삭제할 수 없습니다. 관리자가 승인 해제해야 합니다."
+      : "삭제 권한이 없습니다.";
+    return NextResponse.json({ error: reason }, { status: 403 });
   }
 
   db.prepare("DELETE FROM packing_item WHERE key = ?").run(key);

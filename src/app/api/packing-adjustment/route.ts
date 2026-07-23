@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { isAdminRequest } from "@/lib/auth";
+import { isAdminRequest, isModifierRequest } from "@/lib/auth";
 import { PackingAdjustment } from "@/lib/types";
 import { logAudit, requireActor } from "@/lib/audit";
 import { adjustStock, packingItemAuditLabel, runInTransaction } from "@/lib/packingStock";
@@ -17,8 +17,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAdminRequest(req)) {
-    return NextResponse.json({ error: "전일재고 조정은 관리자 로그인이 필요합니다." }, { status: 403 });
+  if (!isAdminRequest(req) && !isModifierRequest(req)) {
+    return NextResponse.json({ error: "전일재고 조정 권한이 없습니다." }, { status: 403 });
   }
   const body = await req.json();
   if (!body.date || !body.key || typeof body.qty !== "number") {
