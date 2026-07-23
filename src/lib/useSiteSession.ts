@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export type AccountRole = "admin" | "editor" | "viewer";
 
@@ -12,9 +12,10 @@ export interface SiteSession {
   displayName: string | null;
   role: AccountRole | null;
   canWrite: boolean; // 개방 모드이거나 editor/admin이면 true, viewer면 false
+  refresh: () => Promise<void>;
 }
 
-const initial: SiteSession = {
+const initial: Omit<SiteSession, "refresh"> = {
   checked: false,
   loggedIn: false,
   configured: false,
@@ -25,25 +26,28 @@ const initial: SiteSession = {
 };
 
 export function useSiteSession(): SiteSession {
-  const [session, setSession] = useState<SiteSession>(initial);
+  const [session, setSession] = useState<Omit<SiteSession, "refresh">>(initial);
 
-  useEffect(() => {
-    fetch("/api/site/session")
-      .then((r) => r.json())
-      .then((d) => {
-        const configured = !!d.configured;
-        const role = d.role as AccountRole | null;
-        setSession({
-          checked: true,
-          loggedIn: !!d.loggedIn,
-          configured,
-          isAdmin: !!d.isAdmin,
-          displayName: d.displayName ?? null,
-          role,
-          canWrite: !configured || role === "editor" || role === "admin",
-        });
-      });
+  const refresh = useCallback(async () => {
+    const res = await fetch("/api/site/session");
+    const d = await res.json();
+    const configured = !!d.configured;
+    const role = d.role as AccountRole | null;
+    setSession({
+      checked: true,
+      loggedIn: !!d.loggedIn,
+      configured,
+      isAdmin: !!d.isAdmin,
+      displayName: d.displayName ?? null,
+      role,
+      canWrite: !configured || role === "editor" || role === "admin",
+    });
   }, []);
 
-  return session;
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refresh();
+  }, [refresh]);
+
+  return { ...session, refresh };
 }

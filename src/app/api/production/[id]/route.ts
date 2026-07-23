@@ -21,9 +21,15 @@ export async function DELETE(
   if (!actor) {
     return NextResponse.json({ error: "입력자명을 입력해주세요." }, { status: 400 });
   }
-  const existing = db.prepare("SELECT date, shift FROM production_log WHERE id = ?").get(id) as
-    | { date: string; shift: string }
+  const existing = db.prepare("SELECT date, shift, locked FROM production_log WHERE id = ?").get(id) as
+    | { date: string; shift: string; locked: number }
     | undefined;
+  if (existing?.locked) {
+    return NextResponse.json(
+      { error: "확정된 기록은 삭제할 수 없습니다. 관리자 로그인 후 해제해주세요." },
+      { status: 403 }
+    );
+  }
   db.prepare("DELETE FROM production_log WHERE id = ?").run(id);
   if (existing) {
     logAudit("production_log", `${existing.date} ${existing.shift}조`, "delete", actor);
@@ -81,6 +87,12 @@ export async function PUT(
     | undefined;
   if (!existing) {
     return NextResponse.json({ error: "존재하지 않는 항목입니다." }, { status: 404 });
+  }
+  if (existing.locked) {
+    return NextResponse.json(
+      { error: "확정된 기록은 수정할 수 없습니다. 관리자 로그인 후 해제해주세요." },
+      { status: 403 }
+    );
   }
 
   const merged = { ...existing, ...body } as ProductionLog & Record<string, unknown>;

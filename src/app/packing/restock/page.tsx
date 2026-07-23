@@ -207,7 +207,7 @@ export default function PackingRestockPage() {
         </p>
       )}
       {showAdminModal && (
-        <AdminLoginModal onClose={() => setShowAdminModal(false)} onSuccess={() => { admin.refresh(); setShowAdminModal(false); }} />
+        <AdminLoginModal onClose={() => setShowAdminModal(false)} onSuccess={() => { admin.refresh(); session.refresh(); setShowAdminModal(false); }} />
       )}
     </div>
   );

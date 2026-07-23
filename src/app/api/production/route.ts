@@ -67,8 +67,15 @@ export async function POST(req: NextRequest) {
   }
 
   const existing = db
-    .prepare("SELECT id FROM production_log WHERE date = ? AND shift = ?")
-    .get(body.date, body.shift) as { id: number } | undefined;
+    .prepare("SELECT id, locked FROM production_log WHERE date = ? AND shift = ?")
+    .get(body.date, body.shift) as { id: number; locked: number } | undefined;
+
+  if (existing?.locked) {
+    return NextResponse.json(
+      { error: "확정된 기록은 수정할 수 없습니다. 관리자 로그인 후 해제해주세요." },
+      { status: 403 }
+    );
+  }
 
   const feedTotal = computeFeedTotal(body.feed_mixer ?? null, body.feed_molder ?? null);
   const lineHoursTotal = computeLineHoursTotal(

@@ -6,7 +6,7 @@ import SiteGate from "@/components/SiteGate";
 import { hasAnyAccount, isSiteRequest } from "@/lib/auth";
 
 export const metadata: Metadata = {
-  title: "HANIL QC — 설비/품질 관리 시스템",
+  title: "HANIL QC — (주)한일씨앤에스 통합정보시스템",
   description: "설비가동정보 + 비료시료 강도테스트 통합 관리 앱",
   icons: {
     icon: "/icon.png",
