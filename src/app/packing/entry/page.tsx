@@ -6,7 +6,7 @@ import { PackingEntry, PackingEntryType, PackingItem, Worker } from "@/lib/types
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
-import { itemLabel } from "@/lib/packingClient";
+import { itemLabel, stripCode } from "@/lib/packingClient";
 import { useSiteSession } from "@/lib/useSiteSession";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -101,7 +101,7 @@ export default function PackingEntryPage() {
   const auxItems = useMemo(() => items.filter((i) => i.kind === "aux"), [items]);
   const itemByKey = useMemo(() => new Map(items.map((i) => [i.key, i])), [items]);
   const selectedProduct = form.productKey ? itemByKey.get(form.productKey) : undefined;
-  const isTonbag = selectedProduct?.category === "톤백";
+  const isTonbag = stripCode(selectedProduct?.category ?? null) === "톤백";
   const tonbagLinerItems = useMemo(
     () => bagmatItems.filter((i) => i.sub?.includes("톤백")),
     [bagmatItems]
