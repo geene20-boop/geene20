@@ -533,6 +533,8 @@ export default function ProductionPage() {
     }
   }
 
+  const contentLocked = !session.canWrite || locked;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -619,44 +621,43 @@ export default function ProductionPage() {
       {(tab === "condition" || tab === "material") && (
       <form
         onSubmit={onSubmit}
-        className={`flex flex-col gap-4 bg-white rounded-xl border p-5 ${
-          !session.canWrite || locked ? "opacity-50 pointer-events-none" : ""
-        }`}
+        className="flex flex-col gap-4 bg-white rounded-xl border p-5"
       >
         {tab === "condition" && (
         <>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <label className="flex flex-col gap-1 text-sm w-fit">
+          <span className="text-slate-600">날짜</span>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              className="border rounded-md px-2 text-xs"
+              onClick={() => set("date", shiftDate(form.date, -1))}
+            >
+              ◀ 전날
+            </button>
+            <input
+              type="date"
+              value={form.date}
+              onChange={(e) => set("date", e.target.value)}
+              className="border rounded-md px-2 py-1.5 flex-1 min-w-0"
+            />
+            <button
+              type="button"
+              className="border rounded-md px-2 text-xs"
+              onClick={() => set("date", shiftDate(form.date, 1))}
+            >
+              다음날 ▶
+            </button>
+          </div>
+        </label>
+
+        <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${contentLocked ? "opacity-50 pointer-events-none" : ""}`}>
           <EnteredByField
             value={enteredBy}
             onChange={setEnteredBy}
             error={nameError}
             lockedValue={session.loggedIn ? session.displayName : null}
           />
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">날짜</span>
-            <div className="flex gap-1">
-              <button
-                type="button"
-                className="border rounded-md px-2 text-xs"
-                onClick={() => set("date", shiftDate(form.date, -1))}
-              >
-                ◀ 전날
-              </button>
-              <input
-                type="date"
-                value={form.date}
-                onChange={(e) => set("date", e.target.value)}
-                className="border rounded-md px-2 py-1.5 flex-1 min-w-0"
-              />
-              <button
-                type="button"
-                className="border rounded-md px-2 text-xs"
-                onClick={() => set("date", shiftDate(form.date, 1))}
-              >
-                다음날 ▶
-              </button>
-            </div>
-          </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">조 / 작업자</span>
             <div className="flex gap-2">
@@ -735,6 +736,8 @@ export default function ProductionPage() {
             )}
           </div>
         </div>
+
+        <div className={`flex flex-col gap-4 ${contentLocked ? "opacity-50 pointer-events-none" : ""}`}>
         {currentId != null && (
           <p className="text-xs text-sky-600 bg-sky-50 border border-sky-200 rounded-md px-3 py-1.5 w-fit">
             이 날짜/조는 기존에 저장된 기록을 불러왔습니다 (ID {currentId}). 저장하면 덮어씁니다.
@@ -793,11 +796,61 @@ export default function ProductionPage() {
             placeholder={maintenanceMode ? "정비 내용을 입력하세요 (예: 압출기 스크류 교체)" : undefined}
           />
         </label>
+        </div>
         </>
         )}
 
         {tab === "material" && (
         <>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-sm w-fit">
+            <span className="text-slate-600">날짜</span>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                className="border rounded-md px-2 text-xs"
+                onClick={() => set("date", shiftDate(form.date, -1))}
+              >
+                ◀ 전날
+              </button>
+              <input
+                type="date"
+                value={form.date}
+                onChange={(e) => set("date", e.target.value)}
+                className="border rounded-md px-2 py-1.5 flex-1 min-w-0"
+              />
+              <button
+                type="button"
+                className="border rounded-md px-2 text-xs"
+                onClick={() => set("date", shiftDate(form.date, 1))}
+              >
+                다음날 ▶
+              </button>
+            </div>
+          </label>
+          <div className={`flex flex-wrap items-end gap-3 ${contentLocked ? "opacity-50 pointer-events-none" : ""}`}>
+            <div className="flex flex-col gap-1 text-sm">
+              <span className="text-slate-600">조</span>
+              <div className="border rounded-md px-3 py-1.5 bg-slate-50 text-slate-600 min-w-[80px] text-center">
+                {form.shift === "주" ? "주간조" : "야간조"}
+              </div>
+            </div>
+            <div className="flex flex-col gap-1 text-sm">
+              <span className="text-slate-600">작업자</span>
+              <div className="border rounded-md px-3 py-1.5 bg-slate-50 text-slate-600 min-w-[100px]">
+                {form.worker || "-"}
+              </div>
+            </div>
+            <div className="flex flex-col gap-1 text-sm">
+              <span className="text-slate-600">생산품목</span>
+              <div className="border rounded-md px-3 py-1.5 bg-slate-50 text-slate-600 min-w-[100px]">
+                {form.product || "-"}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className={`flex flex-col gap-4 ${contentLocked ? "opacity-50 pointer-events-none" : ""}`}>
         <Section title="원료 피딩 조건 (Hz)">
           <Field label="A호퍼" value={form.feed_hopper_a} onChange={(v) => set("feed_hopper_a", v)} />
           <Field label="B호퍼" value={form.feed_hopper_b} onChange={(v) => set("feed_hopper_b", v)} />
@@ -827,8 +880,22 @@ export default function ProductionPage() {
         <fieldset className="border rounded-lg p-4">
           <legend className="text-sm font-semibold text-slate-700 px-1">LNG 사용량 (㎥)</legend>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2">
-            <Field label="건조로 누계 (이번 조)" value={form.lng_dryer} onChange={(v) => set("lng_dryer", v)} />
-            <Field label="RTO 누계 (이번 조)" value={form.lng_rto} onChange={(v) => set("lng_rto", v)} />
+            {maintenanceMode ? (
+              <div className="flex flex-col gap-1 text-sm">
+                <span className="text-slate-600">건조로 누계 (이번 조)</span>
+                <div className="border rounded-md px-2 py-1.5 bg-slate-50 text-slate-500">0</div>
+              </div>
+            ) : (
+              <Field label="건조로 누계 (이번 조)" value={form.lng_dryer} onChange={(v) => set("lng_dryer", v)} />
+            )}
+            {maintenanceMode ? (
+              <div className="flex flex-col gap-1 text-sm">
+                <span className="text-slate-600">RTO 누계 (이번 조)</span>
+                <div className="border rounded-md px-2 py-1.5 bg-slate-50 text-slate-500">0</div>
+              </div>
+            ) : (
+              <Field label="RTO 누계 (이번 조)" value={form.lng_rto} onChange={(v) => set("lng_rto", v)} />
+            )}
             <div className="flex flex-col gap-1 text-sm">
               <span className="text-slate-600">가동시간당 사용량 (자동)</span>
               <div className="border rounded-md px-2 py-1.5 bg-slate-50 text-slate-500">
@@ -928,24 +995,27 @@ export default function ProductionPage() {
             &quot;수정&quot;으로 고칠 수 있습니다.
           </p>
         </fieldset>
+        </div>
         </>
         )}
 
         <div className="flex items-center gap-3">
-          <button
-            type="submit"
-            disabled={saving}
-            className="bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
-          >
-            {saving ? "저장 중..." : "저장 (같은 날짜/조는 덮어씀)"}
-          </button>
-          <button
-            type="button"
-            onClick={onMaintenanceDay}
-            className="border rounded-md px-4 py-2 text-sm font-medium"
-          >
-            금일 정비
-          </button>
+          <div className={`flex items-center gap-3 ${contentLocked ? "opacity-50 pointer-events-none" : ""}`}>
+            <button
+              type="submit"
+              disabled={saving}
+              className="bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
+            >
+              {saving ? "저장 중..." : "저장 (같은 날짜/조는 덮어씀)"}
+            </button>
+            <button
+              type="button"
+              onClick={onMaintenanceDay}
+              className="border rounded-md px-4 py-2 text-sm font-medium"
+            >
+              금일 정비
+            </button>
+          </div>
           {currentId != null && !locked && (
             <button
               type="button"
