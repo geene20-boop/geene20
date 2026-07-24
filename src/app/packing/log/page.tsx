@@ -49,6 +49,7 @@ function signed(v: number): string {
 }
 
 export default function PackingDailyLogPage() {
+  const [tab, setTab] = useState<"product" | "bagmat" | "aux">("product");
   const [date, setDate] = useState(today());
   const [data, setData] = useState<DailyLogResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -256,9 +257,30 @@ export default function PackingDailyLogPage() {
         {message && <span className="text-sm text-slate-600">{message}</span>}
       </div>
 
-      {renderTable(`1. ${KIND_LABELS.product} 포장 현황`, data?.products ?? [], true)}
-      {renderTable(`2. ${KIND_LABELS.bagmat} 재고 현황`, data?.bagmats ?? [], true)}
-      {renderTable(`3. ${KIND_LABELS.aux} 재고 현황`, data?.auxes ?? [], true)}
+      <div className="flex gap-2 border-b">
+        {(
+          [
+            { key: "product", label: KIND_LABELS.product },
+            { key: "bagmat", label: KIND_LABELS.bagmat },
+            { key: "aux", label: KIND_LABELS.aux },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
+              tab === t.key ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "product" && renderTable(`${KIND_LABELS.product} 포장 현황`, data?.products ?? [], true)}
+      {tab === "bagmat" && renderTable(`${KIND_LABELS.bagmat} 재고 현황`, data?.bagmats ?? [], true)}
+      {tab === "aux" && renderTable(`${KIND_LABELS.aux} 재고 현황`, data?.auxes ?? [], true)}
 
       <div className="bg-white rounded-xl border overflow-x-auto">
         <h2 className="text-sm font-semibold text-slate-700 px-4 pt-4">4. 파손(파포) 내역 ({date})</h2>
