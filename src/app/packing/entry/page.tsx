@@ -22,6 +22,7 @@ type FormState = {
   productKey: string;
   qty: string;
   bagMatQty: string;
+  tonbagLinerKey: string;
   topsheetKey: string;
   topsheetQty: string;
   wrapKey: string;
@@ -38,6 +39,7 @@ function emptyForm(): FormState {
     productKey: "",
     qty: "",
     bagMatQty: "",
+    tonbagLinerKey: "",
     topsheetKey: "",
     topsheetQty: "",
     wrapKey: "",
@@ -99,6 +101,11 @@ export default function PackingEntryPage() {
   const auxItems = useMemo(() => items.filter((i) => i.kind === "aux"), [items]);
   const itemByKey = useMemo(() => new Map(items.map((i) => [i.key, i])), [items]);
   const selectedProduct = form.productKey ? itemByKey.get(form.productKey) : undefined;
+  const isTonbag = selectedProduct?.category === "톤백";
+  const tonbagLinerItems = useMemo(
+    () => bagmatItems.filter((i) => i.sub?.includes("톤백")),
+    [bagmatItems]
+  );
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -110,6 +117,7 @@ export default function PackingEntryPage() {
       ...f,
       productKey: key,
       bagMatQty: item?.bag_mat_key ? f.qty : "",
+      tonbagLinerKey: "",
     }));
   }
 
@@ -130,8 +138,9 @@ export default function PackingEntryPage() {
         productKey: form.productKey,
         qty: n(form.qty),
         unit: selectedProduct?.unit ?? null,
-        bagMatKey: form.type === "pack" ? selectedProduct?.bag_mat_key ?? null : null,
-        bagMatQty: form.type === "pack" ? n(form.bagMatQty) : null,
+        bagMatKey:
+          form.type === "pack" ? (isTonbag ? form.tonbagLinerKey || null : selectedProduct?.bag_mat_key ?? null) : null,
+        bagMatQty: form.type === "pack" ? (isTonbag ? n(form.qty) : n(form.bagMatQty)) : null,
         topsheetKey: form.type === "pack" ? form.topsheetKey || null : null,
         topsheetQty: form.type === "pack" ? n(form.topsheetQty) : null,
         wrapKey: form.type === "pack" ? form.wrapKey || null : null,
@@ -165,6 +174,7 @@ export default function PackingEntryPage() {
       productKey: row.product_key,
       qty: String(row.qty),
       bagMatQty: row.bag_mat_qty != null ? String(row.bag_mat_qty) : "",
+      tonbagLinerKey: row.bag_mat_key ?? "",
       topsheetKey: row.topsheet_key ?? "",
       topsheetQty: row.topsheet_qty != null ? String(row.topsheet_qty) : "",
       wrapKey: row.wrap_key ?? "",
@@ -308,6 +318,26 @@ export default function PackingEntryPage() {
                 onChange={(e) => set("bagMatQty", e.target.value)}
                 className="border rounded-md px-2 py-1.5"
               />
+            </label>
+          )}
+          {form.type === "pack" && isTonbag && (
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-slate-600">톤백종류</span>
+              <select
+                value={form.tonbagLinerKey}
+                onChange={(e) => set("tonbagLinerKey", e.target.value)}
+                className="border rounded-md px-2 py-1.5"
+              >
+                <option value="">선택</option>
+                {tonbagLinerItems.map((i) => (
+                  <option key={i.key} value={i.key}>
+                    {itemLabel(i)}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[11px] text-slate-400">
+                톤백내피 사용량은 수량과 동일하게 자동 반영됩니다.
+              </span>
             </label>
           )}
         </div>
