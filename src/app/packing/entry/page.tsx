@@ -22,6 +22,8 @@ type FormState = {
   productKey: string;
   qty: string;
   bagMatQty: string;
+  tonbagLinerKey: string;
+  tonbagLinerQty: string;
   topsheetKey: string;
   topsheetQty: string;
   wrapKey: string;
@@ -38,6 +40,8 @@ function emptyForm(): FormState {
     productKey: "",
     qty: "",
     bagMatQty: "",
+    tonbagLinerKey: "",
+    tonbagLinerQty: "",
     topsheetKey: "",
     topsheetQty: "",
     wrapKey: "",
@@ -99,6 +103,11 @@ export default function PackingEntryPage() {
   const auxItems = useMemo(() => items.filter((i) => i.kind === "aux"), [items]);
   const itemByKey = useMemo(() => new Map(items.map((i) => [i.key, i])), [items]);
   const selectedProduct = form.productKey ? itemByKey.get(form.productKey) : undefined;
+  const isTonbag = selectedProduct?.category === "톤백";
+  const tonbagLinerItems = useMemo(
+    () => bagmatItems.filter((i) => i.sub?.includes("톤백")),
+    [bagmatItems]
+  );
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -110,6 +119,8 @@ export default function PackingEntryPage() {
       ...f,
       productKey: key,
       bagMatQty: item?.bag_mat_key ? f.qty : "",
+      tonbagLinerKey: "",
+      tonbagLinerQty: "",
     }));
   }
 
@@ -130,8 +141,9 @@ export default function PackingEntryPage() {
         productKey: form.productKey,
         qty: n(form.qty),
         unit: selectedProduct?.unit ?? null,
-        bagMatKey: form.type === "pack" ? selectedProduct?.bag_mat_key ?? null : null,
-        bagMatQty: form.type === "pack" ? n(form.bagMatQty) : null,
+        bagMatKey:
+          form.type === "pack" ? (isTonbag ? form.tonbagLinerKey || null : selectedProduct?.bag_mat_key ?? null) : null,
+        bagMatQty: form.type === "pack" ? (isTonbag ? n(form.tonbagLinerQty) : n(form.bagMatQty)) : null,
         topsheetKey: form.type === "pack" ? form.topsheetKey || null : null,
         topsheetQty: form.type === "pack" ? n(form.topsheetQty) : null,
         wrapKey: form.type === "pack" ? form.wrapKey || null : null,
@@ -165,6 +177,8 @@ export default function PackingEntryPage() {
       productKey: row.product_key,
       qty: String(row.qty),
       bagMatQty: row.bag_mat_qty != null ? String(row.bag_mat_qty) : "",
+      tonbagLinerKey: row.bag_mat_key ?? "",
+      tonbagLinerQty: row.bag_mat_qty != null ? String(row.bag_mat_qty) : "",
       topsheetKey: row.topsheet_key ?? "",
       topsheetQty: row.topsheet_qty != null ? String(row.topsheet_qty) : "",
       wrapKey: row.wrap_key ?? "",
@@ -309,6 +323,34 @@ export default function PackingEntryPage() {
                 className="border rounded-md px-2 py-1.5"
               />
             </label>
+          )}
+          {form.type === "pack" && isTonbag && (
+            <>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-slate-600">톤백종류</span>
+                <select
+                  value={form.tonbagLinerKey}
+                  onChange={(e) => set("tonbagLinerKey", e.target.value)}
+                  className="border rounded-md px-2 py-1.5"
+                >
+                  <option value="">선택</option>
+                  {tonbagLinerItems.map((i) => (
+                    <option key={i.key} value={i.key}>
+                      {itemLabel(i)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-slate-600">톤백내피 사용량</span>
+                <input
+                  type="number"
+                  value={form.tonbagLinerQty}
+                  onChange={(e) => set("tonbagLinerQty", e.target.value)}
+                  className="border rounded-md px-2 py-1.5"
+                />
+              </label>
+            </>
           )}
         </div>
 

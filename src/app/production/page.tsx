@@ -829,18 +829,35 @@ export default function ProductionPage() {
             </div>
           </label>
           <div className={`flex flex-wrap items-end gap-3 ${contentLocked ? "opacity-50 pointer-events-none" : ""}`}>
-            <div className="flex flex-col gap-1 text-sm">
+            <label className="flex flex-col gap-1 text-sm">
               <span className="text-slate-600">조</span>
-              <div className="border rounded-md px-3 py-1.5 bg-slate-50 text-slate-600 min-w-[80px] text-center">
-                {form.shift === "주" ? "주간조" : "야간조"}
-              </div>
-            </div>
-            <div className="flex flex-col gap-1 text-sm">
+              <select
+                value={form.shift}
+                onChange={(e) => set("shift", e.target.value as "주" | "야")}
+                className="border rounded-md px-2 py-1.5"
+              >
+                <option value="주">주간조</option>
+                <option value="야">야간조</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
               <span className="text-slate-600">작업자</span>
-              <div className="border rounded-md px-3 py-1.5 bg-slate-50 text-slate-600 min-w-[100px]">
-                {form.worker || "-"}
-              </div>
-            </div>
+              <select
+                value={form.worker}
+                onChange={(e) => set("worker", e.target.value)}
+                className="border rounded-md px-2 py-1.5 min-w-[120px]"
+              >
+                <option value="">선택</option>
+                {form.worker && !workers.some((w) => w.name === form.worker) && (
+                  <option value={form.worker}>{form.worker}</option>
+                )}
+                {workers.map((w) => (
+                  <option key={w.id} value={w.name}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="flex flex-col gap-1 text-sm">
               <span className="text-slate-600">생산품목</span>
               <div className="border rounded-md px-3 py-1.5 bg-slate-50 text-slate-600 min-w-[100px]">
@@ -880,22 +897,8 @@ export default function ProductionPage() {
         <fieldset className="border rounded-lg p-4">
           <legend className="text-sm font-semibold text-slate-700 px-1">LNG 사용량 (㎥)</legend>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2">
-            {maintenanceMode ? (
-              <div className="flex flex-col gap-1 text-sm">
-                <span className="text-slate-600">건조로 누계 (이번 조)</span>
-                <div className="border rounded-md px-2 py-1.5 bg-slate-50 text-slate-500">0</div>
-              </div>
-            ) : (
-              <Field label="건조로 누계 (이번 조)" value={form.lng_dryer} onChange={(v) => set("lng_dryer", v)} />
-            )}
-            {maintenanceMode ? (
-              <div className="flex flex-col gap-1 text-sm">
-                <span className="text-slate-600">RTO 누계 (이번 조)</span>
-                <div className="border rounded-md px-2 py-1.5 bg-slate-50 text-slate-500">0</div>
-              </div>
-            ) : (
-              <Field label="RTO 누계 (이번 조)" value={form.lng_rto} onChange={(v) => set("lng_rto", v)} />
-            )}
+            <Field label="건조로 누계 (이번 조)" value={form.lng_dryer} onChange={(v) => set("lng_dryer", v)} />
+            <Field label="RTO 누계 (이번 조)" value={form.lng_rto} onChange={(v) => set("lng_rto", v)} />
             <div className="flex flex-col gap-1 text-sm">
               <span className="text-slate-600">가동시간당 사용량 (자동)</span>
               <div className="border rounded-md px-2 py-1.5 bg-slate-50 text-slate-500">
