@@ -47,7 +47,7 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
 }
 
 export default function DashboardPage() {
-  const [tab, setTab] = useState<"summary" | "trend" | "daily" | "worker" | "spec">("summary");
+  const [tab, setTab] = useState<"summary" | "trend" | "daily" | "worker">("summary");
   const [from, setFrom] = useState(monthAgo(30));
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
   const [month, setMonth] = useState(currentMonth());
@@ -156,7 +156,6 @@ export default function DashboardPage() {
             { key: "trend", label: "추이 그래프" },
             { key: "daily", label: "일자별 기록" },
             { key: "worker", label: "작업자별 비교" },
-            { key: "spec", label: "기준값 설정" },
           ] as const
         ).map((t) => (
           <button
@@ -247,6 +246,7 @@ export default function DashboardPage() {
       )}
 
       {tab === "daily" && (
+      <>
       <div className="bg-white rounded-xl border overflow-x-auto">
         <h2 className="text-sm font-semibold text-slate-700 px-4 pt-4">일자별 통합 기록</h2>
         <table className="w-full text-sm mt-2">
@@ -301,6 +301,54 @@ export default function DashboardPage() {
           </tbody>
         </table>
       </div>
+
+      <div
+        className={`bg-white rounded-xl border p-4 ${
+          !session.canWrite ? "opacity-50 pointer-events-none" : ""
+        }`}
+      >
+        <h2 className="text-sm font-semibold text-slate-700 mb-2">품질/효율 기준값 설정</h2>
+        {!session.canWrite && (
+          <p className="text-xs text-amber-600 mb-2">조회 전용 계정은 기준값을 수정할 수 없습니다.</p>
+        )}
+        <div className="mb-3 max-w-xs">
+          <EnteredByField
+            value={enteredBy}
+            onChange={setEnteredBy}
+            error={nameError}
+            lockedValue={session.loggedIn ? session.displayName : null}
+          />
+        </div>
+        <div className="flex flex-col gap-3">
+          {["hardness", "moisture", "gas_per_hour"].map((metric) => {
+            const spec = specs.find((s) => s.metric === metric);
+            return (
+              <div key={metric} className="flex items-center gap-2 text-xs">
+                <span className="w-32 text-slate-600">{METRIC_LABEL[metric]}</span>
+                <input
+                  type="number"
+                  placeholder="최소"
+                  defaultValue={spec?.min_value ?? ""}
+                  onBlur={(e) => updateSpec(metric, "min_value", e.target.value)}
+                  className="border rounded-md px-2 py-1 w-20"
+                />
+                <span className="text-slate-400">~</span>
+                <input
+                  type="number"
+                  placeholder="최대"
+                  defaultValue={spec?.max_value ?? ""}
+                  onBlur={(e) => updateSpec(metric, "max_value", e.target.value)}
+                  className="border rounded-md px-2 py-1 w-20"
+                />
+              </div>
+            );
+          })}
+          <p className="text-[11px] text-slate-400">
+            기준 범위를 벗어나면 자동으로 이상 알림이 생성됩니다. (입력 후 다른 곳 클릭 시 저장)
+          </p>
+        </div>
+      </div>
+      </>
       )}
 
       {tab === "worker" && (
@@ -350,55 +398,6 @@ export default function DashboardPage() {
             )}
           </tbody>
         </table>
-      </div>
-      )}
-
-      {tab === "spec" && (
-      <div
-        className={`bg-white rounded-xl border p-4 ${
-          !session.canWrite ? "opacity-50 pointer-events-none" : ""
-        }`}
-      >
-        <h2 className="text-sm font-semibold text-slate-700 mb-2">품질/효율 기준값 설정</h2>
-        {!session.canWrite && (
-          <p className="text-xs text-amber-600 mb-2">조회 전용 계정은 기준값을 수정할 수 없습니다.</p>
-        )}
-        <div className="mb-3 max-w-xs">
-          <EnteredByField
-            value={enteredBy}
-            onChange={setEnteredBy}
-            error={nameError}
-            lockedValue={session.loggedIn ? session.displayName : null}
-          />
-        </div>
-        <div className="flex flex-col gap-3">
-          {["hardness", "moisture", "gas_per_hour"].map((metric) => {
-            const spec = specs.find((s) => s.metric === metric);
-            return (
-              <div key={metric} className="flex items-center gap-2 text-xs">
-                <span className="w-32 text-slate-600">{METRIC_LABEL[metric]}</span>
-                <input
-                  type="number"
-                  placeholder="최소"
-                  defaultValue={spec?.min_value ?? ""}
-                  onBlur={(e) => updateSpec(metric, "min_value", e.target.value)}
-                  className="border rounded-md px-2 py-1 w-20"
-                />
-                <span className="text-slate-400">~</span>
-                <input
-                  type="number"
-                  placeholder="최대"
-                  defaultValue={spec?.max_value ?? ""}
-                  onBlur={(e) => updateSpec(metric, "max_value", e.target.value)}
-                  className="border rounded-md px-2 py-1 w-20"
-                />
-              </div>
-            );
-          })}
-          <p className="text-[11px] text-slate-400">
-            기준 범위를 벗어나면 자동으로 이상 알림이 생성됩니다. (입력 후 다른 곳 클릭 시 저장)
-          </p>
-        </div>
       </div>
       )}
     </div>
