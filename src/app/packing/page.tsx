@@ -9,7 +9,7 @@ import {
   PackingBreakage,
   PackingReturn,
 } from "@/lib/types";
-import { groupByKind, itemLabel } from "@/lib/packingClient";
+import { groupByKind, itemLabel, stripCode } from "@/lib/packingClient";
 import ShipmentSummaryTab from "./ShipmentSummaryTab";
 
 interface PackingState {
@@ -42,12 +42,6 @@ const PRODUCT_CATEGORY_STYLE = [
   { category: "입상규산", no: "02", bg: "bg-emerald-700" },
   { category: "칼슘유황", no: "03", bg: "bg-purple-700" },
 ] as const;
-
-// 실제 품목 데이터의 category/sub 앞에는 "[01]", "[A]"처럼 내부 관리번호가 붙어있을 수 있어
-// (예: "[01]석회고토", "[A]무상분") 매칭·표시 전에 앞쪽 대괄호 코드를 떼어낸다.
-function stripCode(s: string | null): string {
-  return (s ?? "").replace(/^\[[^\]]+\]\s*/, "").trim();
-}
 
 // 톤백 제품(category가 "톤백"인 품목)은 세부명(sub)에 적힌 이름으로 상위 대분류에 포함시킨다
 function tonbagParentCategory(sub: string | null): string | null {
