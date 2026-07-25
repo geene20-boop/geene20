@@ -266,17 +266,38 @@ export default function PackingStockPage() {
   }, [state]);
 
   const recentActivity = useMemo(() => {
-    const pack: { date: string; item: string; qty: number; unit: string; tons: number }[] = [];
-    const ship: { date: string; item: string; qty: number; unit: string; tons: number }[] = [];
+    const pack: { date: string; key: string; item: string; qty: number; unit: string; tons: number }[] = [];
+    const ship: { date: string; key: string; item: string; qty: number; unit: string; tons: number }[] = [];
     for (const e of state?.entries ?? []) {
       const item = itemByKey.get(e.product_key);
       const tons = item?.bag_kg ? (e.qty * item.bag_kg) / 1000 : 0;
-      const row = { date: e.date, item: item ? itemLabel(item) : e.product_key, qty: e.qty, unit: item?.unit ?? "", tons };
+      const row = {
+        date: e.date,
+        key: e.product_key,
+        item: item ? itemLabel(item) : e.product_key,
+        qty: e.qty,
+        unit: item?.unit ?? "",
+        tons,
+      };
       if (e.type === "pack") pack.push(row);
       else ship.push(row);
     }
     return { pack, ship };
   }, [state, itemByKey]);
+
+  const activityProducts = useMemo(
+    () => (state?.stock ?? []).filter((i) => i.kind === "product"),
+    [state]
+  );
+  const [productFilter, setProductFilter] = useState("");
+
+  const filteredActivity = useMemo(() => {
+    if (!productFilter) return recentActivity;
+    return {
+      pack: recentActivity.pack.filter((r) => r.key === productFilter),
+      ship: recentActivity.ship.filter((r) => r.key === productFilter),
+    };
+  }, [recentActivity, productFilter]);
 
   function sumActivity(rows: { qty: number; unit: string; tons: number }[]) {
     let bags = 0;
@@ -287,8 +308,8 @@ export default function PackingStockPage() {
     }
     return { bags, tons };
   }
-  const packTotals = useMemo(() => sumActivity(recentActivity.pack), [recentActivity]);
-  const shipTotals = useMemo(() => sumActivity(recentActivity.ship), [recentActivity]);
+  const packTotals = useMemo(() => sumActivity(filteredActivity.pack), [filteredActivity]);
+  const shipTotals = useMemo(() => sumActivity(filteredActivity.ship), [filteredActivity]);
 
   function renderPeriodActivityCard(title: string, rows: { date: string; item: string; qty: number; unit: string; tons: number }[], totals: { bags: number; tons: number }) {
     return (
@@ -309,6 +330,18 @@ export default function PackingStockPage() {
               onChange={(e) => setRangeTo(e.target.value)}
               className="border rounded-md px-2 py-1 text-xs"
             />
+            <select
+              value={productFilter}
+              onChange={(e) => setProductFilter(e.target.value)}
+              className="border rounded-md px-2 py-1 text-xs"
+            >
+              <option value="">품목별 조회: 전체</option>
+              {activityProducts.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {itemLabel(p)}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
         <table className="w-full text-sm mt-2">
@@ -454,8 +487,8 @@ export default function PackingStockPage() {
 
       {tab === "period" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {renderPeriodActivityCard("기간별 생산누계", recentActivity.pack, packTotals)}
-          {renderPeriodActivityCard("기간별 출하누계", recentActivity.ship, shipTotals)}
+          {renderPeriodActivityCard("기간별 생산누계", filteredActivity.pack, packTotals)}
+          {renderPeriodActivityCard("기간별 출하누계", filteredActivity.ship, shipTotals)}
         </div>
       )}
 

@@ -106,6 +106,11 @@ export default function PackingEntryPage() {
     () => bagmatItems.filter((i) => i.sub?.includes("톤백")),
     [bagmatItems]
   );
+  const isVita = stripCode(selectedProduct?.category ?? null) === "생생비타";
+  const vitaContainerItems = useMemo(
+    () => auxItems.filter((i) => i.sub?.includes("10리터") || i.sub?.includes("IBC")),
+    [auxItems]
+  );
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -146,7 +151,7 @@ export default function PackingEntryPage() {
         wrapKey: form.type === "pack" ? form.wrapKey || null : null,
         wrapQty: form.type === "pack" ? n(form.wrapQty) : null,
         auxUseKey: form.type === "pack" ? form.auxUseKey || null : null,
-        auxUseQty: form.type === "pack" ? n(form.auxUseQty) : null,
+        auxUseQty: form.type === "pack" ? (isVita ? n(form.qty) : n(form.auxUseQty)) : null,
         worker: form.worker || null,
       };
       if (editingId) {
@@ -401,34 +406,55 @@ export default function PackingEntryPage() {
                 />
               </label>
             </div>
-            <div className="flex gap-2">
-              <label className="flex flex-col gap-1 text-sm flex-1">
-                <span className="text-slate-600">기타 부자재</span>
+            {isVita ? (
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-slate-600">포장용기</span>
                 <select
                   value={form.auxUseKey}
                   onChange={(e) => set("auxUseKey", e.target.value)}
                   className="border rounded-md px-2 py-1.5"
                 >
-                  <option value="">선택안함</option>
-                  {auxItems
-                    .filter((i) => !i.sub?.includes("탑시트") && !i.sub?.includes("스트레치필름"))
-                    .map((i) => (
-                      <option key={i.key} value={i.key}>
-                        {itemLabel(i)}
-                      </option>
-                    ))}
+                  <option value="">선택</option>
+                  {vitaContainerItems.map((i) => (
+                    <option key={i.key} value={i.key}>
+                      {itemLabel(i)}
+                    </option>
+                  ))}
                 </select>
+                <span className="text-[11px] text-slate-400">
+                  포장용기 사용량은 수량과 동일하게 자동 반영됩니다.
+                </span>
               </label>
-              <label className="flex flex-col gap-1 text-sm w-24">
-                <span className="text-slate-600">수량</span>
-                <input
-                  type="number"
-                  value={form.auxUseQty}
-                  onChange={(e) => set("auxUseQty", e.target.value)}
-                  className="border rounded-md px-2 py-1.5"
-                />
-              </label>
-            </div>
+            ) : (
+              <div className="flex gap-2">
+                <label className="flex flex-col gap-1 text-sm flex-1">
+                  <span className="text-slate-600">기타 부자재</span>
+                  <select
+                    value={form.auxUseKey}
+                    onChange={(e) => set("auxUseKey", e.target.value)}
+                    className="border rounded-md px-2 py-1.5"
+                  >
+                    <option value="">선택안함</option>
+                    {auxItems
+                      .filter((i) => !i.sub?.includes("탑시트") && !i.sub?.includes("스트레치필름"))
+                      .map((i) => (
+                        <option key={i.key} value={i.key}>
+                          {itemLabel(i)}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-sm w-24">
+                  <span className="text-slate-600">수량</span>
+                  <input
+                    type="number"
+                    value={form.auxUseQty}
+                    onChange={(e) => set("auxUseQty", e.target.value)}
+                    className="border rounded-md px-2 py-1.5"
+                  />
+                </label>
+              </div>
+            )}
           </div>
         )}
 

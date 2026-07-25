@@ -148,11 +148,13 @@ export default function PackingRestockPage() {
             <span className="text-slate-600">품목</span>
             <select value={key} onChange={(e) => setKey(e.target.value)} className="border rounded-md px-2 py-1.5" required>
               <option value="">선택</option>
-              {items.map((i) => (
-                <option key={i.key} value={i.key}>
-                  {itemLabel(i)}
-                </option>
-              ))}
+              {items
+                .filter((i) => i.kind !== "product")
+                .map((i) => (
+                  <option key={i.key} value={i.key}>
+                    {itemLabel(i)}
+                  </option>
+                ))}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">

@@ -375,6 +375,7 @@ export function getDb(): Database.Database {
       ["aux", "plt_wood", "", "목재PLT", "", 0, ""],
       ["aux", "plt_fumigation", "", "수출용 훈증PLT", "", 0, ""],
       ["aux", "plastic_10l", "", "10리터통", "", 0, ""],
+      ["aux", "ibc_tank", "", "IBC TANK", "", 0, ""],
       ["aux", "bib", "", "BIB", "", 0, ""],
     ];
     for (const [kind, key, category, sub, unit, bagKg, bagMatKey] of initialItems) {

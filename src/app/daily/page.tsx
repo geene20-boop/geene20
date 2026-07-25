@@ -85,6 +85,7 @@ function ShiftCard({ row }: { row: MergedShiftRow }) {
         <Field label="혼합기(Hz)" value={fmt(p?.feed_mixer)} />
         <Field label="성형기(Hz)" value={fmt(p?.feed_molder)} />
         <Field label="투입합계(Hz)" value={fmt(p?.feed_total)} />
+        <Field label="조립제 종류" value={p?.granulation_agent ?? "-"} />
         <Field label="조립제 Brix" value={fmt(p?.brix)} />
       </Section>
 
