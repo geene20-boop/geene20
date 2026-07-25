@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
-import { PackingItem, QcTest, Worker, inferShift } from "@/lib/types";
+import { PackingItem, ProductionLog, QcTest, Worker, inferShift } from "@/lib/types";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import { useSiteSession } from "@/lib/useSiteSession";
@@ -131,6 +131,37 @@ export default function QcPage() {
     loadTests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 생산일자+생산시각(→주/야 자동판별)으로 일치하는 생산일지의 설비셋팅을 생산조건에 자동 반영.
+  // 기존 기록을 수정 중일 때는 그 기록의 저장된 값을 그대로 두고 덮어쓰지 않는다.
+  useEffect(() => {
+    if (editingId != null || !form.date || !form.time) return;
+    let cancelled = false;
+    const shift = inferShift(form.time);
+    apiGet<ProductionLog[]>(`/api/production?from=${form.date}&to=${form.date}`)
+      .then((rows) => {
+        if (cancelled) return;
+        const match = rows.find((r) => r.shift === shift);
+        if (!match) return;
+        const hopperSum =
+          match.feed_hopper_a != null || match.feed_hopper_b != null
+            ? (match.feed_hopper_a ?? 0) + (match.feed_hopper_b ?? 0)
+            : null;
+        setForm((f) => ({
+          ...f,
+          granulation_brix: match.brix != null ? String(match.brix) : f.granulation_brix,
+          granulation_input: match.feed_total != null ? String(match.feed_total) : f.granulation_input,
+          fine_powder: match.feed_fine_powder != null ? String(match.feed_fine_powder) : f.fine_powder,
+          hopper: hopperSum != null ? String(hopperSum) : f.hopper,
+        }));
+      })
+      .catch(() => {
+        // 해당 날짜/조의 생산일지가 없으면 조용히 무시하고 수기 입력 그대로 둔다
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [form.date, form.time, editingId]);
 
   // 시료 No.는 해당 생산일자에 이미 등록된 최대 번호 다음 값으로 자동 생성한다 (수기입력 없음)
   const nextSampleNo = useMemo(() => {

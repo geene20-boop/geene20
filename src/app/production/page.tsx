@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import { ProductionLog, Worker } from "@/lib/types";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
@@ -297,6 +297,7 @@ export default function ProductionPage() {
   }, [dryerReal, rtoReal]);
 
   const [logsDate, setLogsDate] = useState(today());
+  const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
 
   async function loadLogs() {
     const rows = await apiGet<ProductionLog[]>(`/api/production?from=${logsDate}&to=${logsDate}`);
@@ -1097,9 +1098,12 @@ export default function ProductionPage() {
             </tr>
           </thead>
           <tbody>
-            {logs.slice(0, 30).map((row) => (
+            {logs.slice(0, 30).map((row) => {
+              const hasDowntimeDetail = (row.downtime_hours ?? 0) > 0 || !!row.note?.startsWith("정비");
+              const expanded = expandedLogId === row.id;
+              return (
+            <Fragment key={row.id}>
               <tr
-                key={row.id}
                 className="border-t hover:bg-slate-50 cursor-pointer"
                 onClick={() => {
                   setForm((f) => ({ ...f, date: row.date, shift: row.shift }));
@@ -1133,7 +1137,18 @@ export default function ProductionPage() {
                   {row.entered_by ?? "-"}
                   {row.updated_by && row.updated_by !== row.entered_by ? ` → ${row.updated_by}` : ""}
                 </td>
-                <td className="px-3 py-2 text-right">
+                <td className="px-3 py-2 text-right whitespace-nowrap">
+                  {hasDowntimeDetail && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedLogId(expanded ? null : row.id);
+                      }}
+                      className="text-slate-500 hover:underline mr-3"
+                    >
+                      {expanded ? "접기" : "상세보기"}
+                    </button>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -1146,7 +1161,21 @@ export default function ProductionPage() {
                   </button>
                 </td>
               </tr>
-            ))}
+              {expanded && (
+                <tr className="border-t bg-slate-50">
+                  <td colSpan={13} className="px-3 py-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-600">
+                      {(row.downtime_hours ?? 0) > 0 && (
+                        <span>비가동발생원인: {row.downtime_reason ?? "-"}</span>
+                      )}
+                      {row.note?.startsWith("정비") && <span>정비내역: {row.note.replace(/^정비\s*/, "") || "-"}</span>}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+              );
+            })}
             {logs.length === 0 && (
               <tr>
                 <td colSpan={13} className="px-3 py-8 text-center text-slate-400">

@@ -17,6 +17,7 @@ import { getWorkerComparison } from "@/lib/workerComparison";
 import { useSiteSession } from "@/lib/useSiteSession";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
+import { Worker } from "@/lib/types";
 
 function monthAgo(n: number) {
   const d = new Date();
@@ -51,6 +52,8 @@ export default function DashboardPage() {
   const [from, setFrom] = useState(monthAgo(30));
   const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
   const [month, setMonth] = useState(currentMonth());
+  const [workerFilter, setWorkerFilter] = useState("");
+  const [workers, setWorkers] = useState<Worker[]>([]);
   const [rows, setRows] = useState<MergedShiftRow[]>([]);
   const [summary, setSummary] = useState<MonthlySummary | null>(null);
   const [specs, setSpecs] = useState<SpecRow[]>([]);
@@ -88,8 +91,17 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from, to, month]);
 
+  useEffect(() => {
+    apiGet<Worker[]>("/api/worker").then(setWorkers);
+  }, []);
+
+  const filteredRows = useMemo(() => {
+    if (!workerFilter) return rows;
+    return rows.filter((r) => r.production?.worker === workerFilter);
+  }, [rows, workerFilter]);
+
   const chartData = useMemo(() => {
-    return [...rows]
+    return [...filteredRows]
       .sort((a, b) => (a.date + a.shift > b.date + b.shift ? 1 : -1))
       .map((r) => ({
         label: `${r.date.slice(5)} ${r.shift}`,
@@ -98,17 +110,17 @@ export default function DashboardPage() {
         gasPerHour: r.gasPerHour != null ? Number(r.gasPerHour.toFixed(1)) : null,
         packAmount: r.production?.daily_pack_amount ?? null,
       }));
-  }, [rows]);
+  }, [filteredRows]);
 
   const allAlerts = useMemo(
     () =>
-      rows
+      filteredRows
         .flatMap((r) => r.alerts.map((a) => ({ ...a, date: r.date, shift: r.shift })))
         .sort((a, b) => (a.date + a.shift < b.date + b.shift ? 1 : -1)),
-    [rows]
+    [filteredRows]
   );
 
-  const workerComparison = useMemo(() => getWorkerComparison(rows), [rows]);
+  const workerComparison = useMemo(() => getWorkerComparison(filteredRows), [filteredRows]);
 
   async function updateSpec(metric: string, field: "min_value" | "max_value", value: string) {
     if (!enteredBy.trim()) {
@@ -134,6 +146,21 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex gap-2 items-end flex-wrap">
+          <label className="flex flex-col text-xs gap-1">
+            <span className="text-slate-500">작업자 조회</span>
+            <select
+              value={workerFilter}
+              onChange={(e) => setWorkerFilter(e.target.value)}
+              className="border rounded-md px-2 py-1"
+            >
+              <option value="">전체</option>
+              {workers.map((w) => (
+                <option key={w.id} value={w.name}>
+                  {w.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="flex flex-col text-xs gap-1">
             <span className="text-slate-500">기간(부터)</span>
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="border rounded-md px-2 py-1" />
@@ -264,7 +291,7 @@ export default function DashboardPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {filteredRows.map((r) => (
               <tr key={`${r.date}-${r.shift}`} className="border-t">
                 <td className="px-3 py-2">{r.date}</td>
                 <td className="px-3 py-2">{r.shift}</td>
@@ -291,7 +318,7 @@ export default function DashboardPage() {
                 </td>
               </tr>
             ))}
-            {rows.length === 0 && !loading && (
+            {filteredRows.length === 0 && !loading && (
               <tr>
                 <td colSpan={9} className="px-3 py-8 text-center text-slate-400">
                   선택한 기간에 데이터가 없습니다.
