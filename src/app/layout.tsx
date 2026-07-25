@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
 import SiteGate from "@/components/SiteGate";
-import ConfirmationReminder from "@/components/ConfirmationReminder";
+import NoticeModal from "@/components/NoticeModal";
 import { hasAnyAccount, isSiteRequest } from "@/lib/auth";
 
 export const metadata: Metadata = {
@@ -43,7 +43,7 @@ export default async function RootLayout({
           <>
             <NavBar />
             <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-6">{children}</main>
-            <ConfirmationReminder />
+            <NoticeModal />
           </>
         )}
       </body>
