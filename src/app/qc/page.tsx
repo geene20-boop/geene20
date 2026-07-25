@@ -147,12 +147,16 @@ export default function QcPage() {
           match.feed_hopper_a != null || match.feed_hopper_b != null
             ? (match.feed_hopper_a ?? 0) + (match.feed_hopper_b ?? 0)
             : null;
+        // A라인/B라인 중 실제로 가동한(값이 적힌) 라인의 건조로 셋팅온도만 버너에 반영 (동시 가동 없음)
+        const burnerTemp = match.dryer_temp_a ?? match.dryer_temp_b ?? null;
         setForm((f) => ({
           ...f,
+          burner_temp: burnerTemp != null ? String(burnerTemp) : f.burner_temp,
           granulation_brix: match.brix != null ? String(match.brix) : f.granulation_brix,
           granulation_input: match.feed_total != null ? String(match.feed_total) : f.granulation_input,
           fine_powder: match.feed_fine_powder != null ? String(match.feed_fine_powder) : f.fine_powder,
           hopper: hopperSum != null ? String(hopperSum) : f.hopper,
+          worker: match.worker ?? f.worker,
         }));
       })
       .catch(() => {
