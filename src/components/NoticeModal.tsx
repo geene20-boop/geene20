@@ -10,6 +10,11 @@ const REMINDER_HOUR = 9; // 매일 이 시각부터 확정 여부 확인
 const CHECK_INTERVAL_MS = 5 * 60_000;
 const SHIFTS = ["주", "야"] as const;
 const SEEN_VERSION_KEY = "hiis_last_seen_update_version";
+const CONFIRM_SNOOZE_KEY = "hiis_confirm_snooze_date";
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function yesterday(): string {
   const d = new Date();
@@ -21,6 +26,9 @@ export default function NoticeModal() {
   const pathname = usePathname();
   const [confirmDate, setConfirmDate] = useState<string | null>(null);
   const [missingShifts, setMissingShifts] = useState<string[]>([]);
+  const [confirmSnoozed, setConfirmSnoozed] = useState(false);
+  const [confirmClosed, setConfirmClosed] = useState(false);
+  const [snoozeChecked, setSnoozeChecked] = useState(false);
   const [updatePending, setUpdatePending] = useState(false);
   const [updateExpanded, setUpdateExpanded] = useState(false);
 
@@ -39,10 +47,21 @@ export default function NoticeModal() {
       });
       setConfirmDate(target);
       setMissingShifts(notConfirmed);
+      // 재확인 주기마다 "닫기"로 임시로 숨긴 상태는 초기화한다 ("오늘 하루 그만보기"는 별도로 유지됨)
+      setConfirmClosed(false);
     } catch {
       // 조회 실패 시 조용히 무시 (다음 주기에 재시도)
     }
   }, []);
+
+  function closeConfirmBlock() {
+    if (snoozeChecked) {
+      localStorage.setItem(CONFIRM_SNOOZE_KEY, today());
+      setConfirmSnoozed(true);
+    } else {
+      setConfirmClosed(true);
+    }
+  }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -58,6 +77,7 @@ export default function NoticeModal() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setUpdatePending(localStorage.getItem(SEEN_VERSION_KEY) !== CURRENT_VERSION);
+    setConfirmSnoozed(localStorage.getItem(CONFIRM_SNOOZE_KEY) === today());
   }, []);
 
   function dismissUpdate() {
@@ -67,7 +87,12 @@ export default function NoticeModal() {
   }
 
   // 생산일지 화면에서는 확정 알림을 숨겨서, 실제로 확정 버튼을 누르러 온 사용자를 팝업이 가로막지 않게 한다.
-  const showConfirmBlock = missingShifts.length > 0 && confirmDate != null && pathname !== "/production";
+  const showConfirmBlock =
+    missingShifts.length > 0 &&
+    confirmDate != null &&
+    pathname !== "/production" &&
+    !confirmSnoozed &&
+    !confirmClosed;
   const showUpdateBlock = updatePending;
 
   if (!showConfirmBlock && !showUpdateBlock) return null;
@@ -87,12 +112,29 @@ export default function NoticeModal() {
                   <b className="text-slate-900">{confirmDate}</b> {missingShifts.join("/")}조가 아직 확정되지
                   않았습니다.
                 </p>
-                <a
-                  href="/production"
-                  className="inline-block mt-3.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-lg px-4 py-2.5"
-                >
-                  확정하러 가기
-                </a>
+                <div className="flex items-center gap-3 mt-3.5">
+                  <a
+                    href="/production"
+                    className="inline-block bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-lg px-4 py-2.5"
+                  >
+                    확정하러 가기
+                  </a>
+                  <button
+                    type="button"
+                    onClick={closeConfirmBlock}
+                    className="text-sm font-medium text-slate-500 hover:text-slate-700"
+                  >
+                    닫기
+                  </button>
+                </div>
+                <label className="flex items-center gap-1.5 mt-3 text-xs text-slate-500">
+                  <input
+                    type="checkbox"
+                    checked={snoozeChecked}
+                    onChange={(e) => setSnoozeChecked(e.target.checked)}
+                  />
+                  오늘 하루 그만보기
+                </label>
               </div>
             </div>
           </div>
