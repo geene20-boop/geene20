@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
   const password = String(body.password ?? "");
   const role = body.role as AccountRole;
   const displayName = body.displayName ? String(body.displayName).trim() : null;
+  const workerId = body.workerId != null ? Number(body.workerId) : null;
 
   if (!username || username.length < 2) {
     return NextResponse.json({ error: "아이디는 2자 이상이어야 합니다." }, { status: 400 });
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const account = createAccount(username, password, role, displayName);
+    const account = createAccount(username, password, role, displayName, workerId);
     return NextResponse.json(account, { status: 201 });
   } catch (e) {
     if (String(e).includes("UNIQUE")) {

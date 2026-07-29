@@ -5,14 +5,99 @@ import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 import { apiDelete, apiGet, apiPost } from "@/lib/apiClient";
 import { Worker } from "@/lib/types";
 
-function WorkerRosterCard() {
-  const [workers, setWorkers] = useState<Worker[]>([]);
-  const [name, setName] = useState("");
+interface AccountRow {
+  id: number;
+  username: string;
+  worker_id: number | null;
+  active: number;
+}
+
+function AccountIssueForm({
+  worker,
+  onDone,
+  onCancel,
+}: {
+  worker: Worker;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setMessage(null);
+    try {
+      await apiPost("/api/accounts", {
+        username: username.trim(),
+        password,
+        role: "viewer",
+        displayName: worker.name,
+        workerId: worker.id,
+      });
+      onDone();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-2 border rounded-md p-3 bg-slate-50 w-full sm:w-auto">
+      <p className="text-xs text-slate-600">{worker.name}님의 개인 로그인 계정 발급 (근태관리 조회용, 조회전용)</p>
+      <div className="flex gap-2 flex-wrap items-end">
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">아이디</span>
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="border rounded-md px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">비밀번호 (8자 이상)</span>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="border rounded-md px-2 py-1.5 text-sm"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={busy || username.trim().length < 2 || password.length < 8}
+          className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
+        >
+          발급
+        </button>
+        <button type="button" onClick={onCancel} className="text-xs text-slate-500 underline">
+          취소
+        </button>
+      </div>
+      {message && <p className="text-xs text-red-600">{message}</p>}
+    </form>
+  );
+}
+
+function WorkerRosterCard() {
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [accounts, setAccounts] = useState<AccountRow[]>([]);
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [issuingFor, setIssuingFor] = useState<number | null>(null);
+
   async function refresh() {
-    setWorkers(await apiGet<Worker[]>("/api/worker"));
+    const [workerRows, accountRows] = await Promise.all([
+      apiGet<Worker[]>("/api/worker"),
+      apiGet<AccountRow[]>("/api/accounts"),
+    ]);
+    setWorkers(workerRows);
+    setAccounts(accountRows);
   }
 
   useEffect(() => {
@@ -47,7 +132,8 @@ function WorkerRosterCard() {
       <div>
         <h2 className="font-semibold text-slate-800">근로자명부</h2>
         <p className="text-sm text-slate-500 mt-1">
-          여기에 등록한 이름이 생산/출하 입력 등 작업자 선택 드롭다운에 나타납니다.
+          여기에 등록한 이름이 생산/출하 입력 등 작업자 선택 드롭다운에 나타납니다. 각 근로자에게
+          개인 로그인 계정을 발급하면 근태관리에서 본인 연차현황·신청내역을 조회할 수 있습니다.
         </p>
       </div>
       <form onSubmit={addWorker} className="flex gap-2 items-end flex-wrap">
@@ -64,18 +150,43 @@ function WorkerRosterCard() {
         </button>
       </form>
       {message && <p className="text-sm text-slate-600">{message}</p>}
-      <div className="flex flex-wrap gap-2">
-        {workers.map((w) => (
-          <span
-            key={w.id}
-            className="flex items-center gap-1.5 border rounded-full px-3 py-1 text-sm bg-slate-50"
-          >
-            {w.name}
-            <button onClick={() => removeWorker(w)} className="text-slate-400 hover:text-red-500">
-              ✕
-            </button>
-          </span>
-        ))}
+      <div className="flex flex-col gap-2">
+        {workers.map((w) => {
+          const account = accounts.find((a) => a.worker_id === w.id);
+          return (
+            <div key={w.id} className="flex flex-col gap-2">
+              <div className="flex items-center gap-2 flex-wrap border rounded-md px-3 py-1.5 bg-slate-50 w-fit">
+                <span className="text-sm">{w.name}</span>
+                {account ? (
+                  <span className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                    계정 연동됨 ({account.username})
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIssuingFor(w.id)}
+                    className="text-[11px] text-sky-600 underline"
+                  >
+                    개인계정 발급
+                  </button>
+                )}
+                <button onClick={() => removeWorker(w)} className="text-slate-400 hover:text-red-500 text-sm">
+                  ✕
+                </button>
+              </div>
+              {issuingFor === w.id && (
+                <AccountIssueForm
+                  worker={w}
+                  onDone={() => {
+                    setIssuingFor(null);
+                    refresh();
+                  }}
+                  onCancel={() => setIssuingFor(null)}
+                />
+              )}
+            </div>
+          );
+        })}
         {workers.length === 0 && <p className="text-sm text-slate-400">등록된 근로자가 없습니다.</p>}
       </div>
     </div>

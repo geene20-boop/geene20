@@ -22,5 +22,6 @@ export async function GET(req: NextRequest) {
     username: isAdmin ? adminName : account?.username ?? null,
     displayName: isAdmin ? adminName : account?.display_name ?? account?.username ?? null,
     role: isAdmin ? "admin" : account?.role ?? null,
+    workerId: isAdmin ? null : account?.worker_id ?? null,
   });
 }
