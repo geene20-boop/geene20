@@ -7,6 +7,13 @@ export interface ChangelogEntry {
 // 새 기능을 배포할 때 배열 맨 앞에 새 항목을 추가한다 (버전 문자열은 날짜 기반 권장).
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2026.07.29",
+    date: "2026-07-29",
+    items: [
+      { title: "로고 클릭 시 메뉴 화면 이동", desc: "어디서든 좌측 상단 로고를 누르면 전체 메뉴 목록으로 돌아갑니다." },
+    ],
+  },
+  {
     version: "2026.07.25",
     date: "2026-07-25",
     items: [
