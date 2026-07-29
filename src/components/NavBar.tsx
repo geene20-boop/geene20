@@ -5,59 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useSiteSession } from "@/lib/useSiteSession";
 import HanilLogo from "@/components/HanilLogo";
-
-interface NavItem {
-  href: string;
-  label: string;
-}
-
-interface NavGroup {
-  label: string;
-  items: NavItem[];
-}
-
-const NAV_GROUPS: NavGroup[] = [
-  {
-    label: "생산가동",
-    items: [
-      { href: "/production", label: "생산일지 입력" },
-      { href: "/daily", label: "일자별 대시보드" },
-      { href: "/monthly", label: "월간 시트" },
-      { href: "/electricity", label: "전력사용량" },
-      { href: "/utility", label: "월별 유틸리티" },
-    ],
-  },
-  {
-    label: "품질관리",
-    items: [
-      { href: "/qc", label: "QC측정 입력" },
-      { href: "/dashboard", label: "통합 대시보드" },
-    ],
-  },
-  {
-    label: "제품포장",
-    items: [
-      { href: "/packing", label: "재고현황" },
-      { href: "/packing/log", label: "포장일지 조회" },
-      { href: "/packing/production-summary", label: "생산누계" },
-      { href: "/packing/entry", label: "생산/출하 입력" },
-      { href: "/packing/restock", label: "입고" },
-      { href: "/packing/breakage", label: "파손" },
-      { href: "/packing/return", label: "반품" },
-      { href: "/packing/adjustment", label: "재고조정" },
-      { href: "/packing/items", label: "품목관리" },
-    ],
-  },
-  {
-    label: "시스템관리",
-    items: [
-      { href: "/history", label: "이력 관리" },
-      { href: "/import", label: "데이터 가져오기" },
-      { href: "/worker", label: "근로자명부" },
-      { href: "/admin", label: "관리자 설정" },
-    ],
-  },
-];
+import { NAV_GROUPS, NavGroup } from "@/lib/navGroups";
 
 function isGroupActive(group: NavGroup, pathname: string): boolean {
   return group.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
@@ -118,10 +66,13 @@ export default function NavBar() {
   return (
     <header className="border-b bg-white sticky top-0 z-10">
       <div className="max-w-7xl mx-auto px-4 flex items-center gap-6 h-14">
-        <span className="flex items-center gap-2 font-semibold text-slate-800 whitespace-nowrap">
+        <Link
+          href="/"
+          className="flex items-center gap-2 font-semibold text-slate-800 whitespace-nowrap hover:opacity-80"
+        >
           <HanilLogo className="h-7 w-auto shrink-0" />
           (주)한일씨앤에스 통합정보시스템
-        </span>
+        </Link>
 
         <nav ref={navRef} className="hidden md:flex gap-1 relative">
           {NAV_GROUPS.map((group) => {
