@@ -1,14 +1,20 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BoardCategory } from "@/lib/types";
 import { BOARD_CATEGORIES as CATEGORIES } from "@/lib/boardCategory";
+import { useEnteredBy } from "@/lib/useEnteredBy";
+import EnteredByField from "@/components/EnteredByField";
+import { useSiteSession } from "@/lib/useSiteSession";
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB, 서버(/api/board)와 동일한 제한
 
 export default function BoardNewPage() {
   const router = useRouter();
+  const session = useSiteSession();
+  const { enteredBy, setEnteredBy } = useEnteredBy();
+  const [nameError, setNameError] = useState(false);
   const [category, setCategory] = useState<BoardCategory>("생산계획");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -16,6 +22,13 @@ export default function BoardNewPage() {
   const [oversizedFiles, setOversizedFiles] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (session.loggedIn && session.displayName) {
+      setEnteredBy(session.displayName);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.loggedIn, session.displayName]);
 
   function onFilesSelected(selected: File[]) {
     const ok = selected.filter((f) => f.size <= MAX_FILE_SIZE);
@@ -27,6 +40,11 @@ export default function BoardNewPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
+    if (!enteredBy.trim()) {
+      setNameError(true);
+      return;
+    }
+    setNameError(false);
     setBusy(true);
     setMessage(null);
     try {
@@ -34,6 +52,7 @@ export default function BoardNewPage() {
       form.append("category", category);
       form.append("title", title.trim());
       form.append("body", body.trim());
+      form.append("entered_by", enteredBy.trim());
       for (const f of files) form.append("files", f);
       const res = await fetch("/api/board", { method: "POST", body: form });
       const data = await res.json();
@@ -50,6 +69,12 @@ export default function BoardNewPage() {
     <div className="flex flex-col gap-4 max-w-2xl">
       <h1 className="text-xl font-bold">게시판 글쓰기</h1>
       <form onSubmit={submit} className="bg-white rounded-xl border p-5 flex flex-col gap-4">
+        <EnteredByField
+          value={enteredBy}
+          onChange={setEnteredBy}
+          error={nameError}
+          lockedValue={session.loggedIn ? session.displayName : null}
+        />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">분류</span>
