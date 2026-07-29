@@ -274,3 +274,57 @@ export interface Worker {
   active: number;
   created_at: string;
 }
+
+export type LeaveType = "연차" | "반차(오전)" | "반차(오후)" | "외출" | "조퇴";
+export type LeaveStatus = "pending" | "approved" | "rejected";
+
+export interface LeaveRequest {
+  id: number;
+  worker_id: number;
+  worker_name: string;
+  type: LeaveType;
+  start_date: string;
+  end_date: string;
+  days: number;
+  reason: string | null;
+  status: LeaveStatus;
+  requested_by: string;
+  decided_by: string | null;
+  decided_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LeaveBalance {
+  worker_id: number;
+  worker_name: string;
+  year: number;
+  hire_date: string | null;
+  accrued_days: number;
+  carried_over_days: number;
+  used_days: number;
+  remaining_days: number;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+export type BoardCategory = "생산계획" | "보수계획" | "휴무일" | "기타";
+
+export interface BoardAttachment {
+  id: number;
+  post_id: number;
+  filename: string;
+  mime_type: string | null;
+  size: number;
+}
+
+export interface BoardPost {
+  id: number;
+  category: BoardCategory;
+  title: string;
+  body: string | null;
+  author: string;
+  created_at: string;
+  updated_at: string;
+  attachments: BoardAttachment[];
+}

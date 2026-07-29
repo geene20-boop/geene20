@@ -13,6 +13,7 @@ export interface SiteSession {
   role: AccountRole | null;
   canWrite: boolean; // 개방 모드이거나 editor/modifier/admin이면 true, viewer면 false
   isModifier: boolean; // role이 modifier인지 (수정 권한: 승인 전 기록은 수정·삭제 가능)
+  workerId: number | null; // 근로자명부와 연결된 개인계정이면 그 근로자 id (근태/연차 조회용)
   refresh: () => Promise<void>;
 }
 
@@ -25,6 +26,7 @@ const initial: Omit<SiteSession, "refresh"> = {
   role: null,
   canWrite: true,
   isModifier: false,
+  workerId: null,
 };
 
 export function useSiteSession(): SiteSession {
@@ -44,6 +46,7 @@ export function useSiteSession(): SiteSession {
       role,
       canWrite: !configured || role === "editor" || role === "modifier" || role === "admin",
       isModifier: role === "modifier",
+      workerId: d.workerId ?? null,
     });
   }, []);
 

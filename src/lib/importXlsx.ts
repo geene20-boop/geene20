@@ -487,3 +487,98 @@ export function importPackingStock(buf: Buffer, actor: string): ImportResult {
 
   return result;
 }
+
+// ---------- 연차현황 엑셀 가져오기 (성명/입사일/발생연차/전년도잔여연차) ----------
+
+export function importLeaveBalance(buf: Buffer, actor: string, year: number): ImportResult {
+  const wb = XLSX.read(buf, { type: "buffer", cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    const normalized = (rows[i] ?? []).map(normalizeHeader);
+    if (normalized.some((h) => h.includes("성명") || h.includes("이름"))) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx === -1) {
+    return {
+      ...emptyResult(),
+      structureError:
+        "연차현황 형식이 아닙니다. '성명' 열이 있는 표가 필요합니다. (열 예: 성명, 입사일, 발생연차, 전년도잔여연차)",
+    };
+  }
+
+  const headers = (rows[headerIdx] ?? []).map(normalizeHeader);
+  const findCol = (include: string[], exclude: string[] = []): number =>
+    headers.findIndex((h) => matchColumn(h, include, exclude));
+
+  const col = {
+    name: headers.findIndex((h) => h.includes("성명") || h.includes("이름")),
+    hireDate: findCol(["입사일"]),
+    accrued: (() => {
+      const i = findCol(["발생"]);
+      return i;
+    })(),
+    carried: (() => {
+      let i = findCol(["전년도"], ["사용"]);
+      if (i < 0) i = findCol(["이월"]);
+      if (i < 0) i = findCol(["잔여"], ["사용가능"]);
+      return i;
+    })(),
+  };
+
+  if (col.name < 0) {
+    return { ...emptyResult(), structureError: "성명 열을 찾을 수 없습니다." };
+  }
+
+  const db = getDb();
+  const findWorker = db.prepare("SELECT id FROM worker WHERE name = ?");
+  const upsert = db.prepare(
+    `INSERT INTO leave_balance (worker_id, year, hire_date, accrued_days, carried_over_days, updated_by)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(worker_id, year) DO UPDATE SET
+       hire_date = excluded.hire_date,
+       accrued_days = excluded.accrued_days,
+       carried_over_days = excluded.carried_over_days,
+       updated_by = excluded.updated_by,
+       updated_at = datetime('now')`
+  );
+
+  const result = emptyResult();
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i] ?? [];
+    const name = str(row[col.name]);
+    if (!name) continue;
+    const worker = findWorker.get(name) as { id: number } | undefined;
+    if (!worker) {
+      result.skipped++;
+      result.skippedDetails.push(`근로자명부에 없는 이름: ${name}`);
+      continue;
+    }
+    const hireDate = col.hireDate >= 0 ? excelDateToStr(row[col.hireDate]) : null;
+    const accrued = col.accrued >= 0 ? (num(row[col.accrued]) ?? 0) : 0;
+    const carried = col.carried >= 0 ? (num(row[col.carried]) ?? 0) : 0;
+    const existing = db.prepare("SELECT id FROM leave_balance WHERE worker_id = ? AND year = ?").get(
+      worker.id,
+      year
+    );
+    upsert.run(worker.id, year, hireDate, accrued, carried, actor);
+    if (existing) result.updated++;
+    else result.inserted++;
+  }
+
+  if (result.inserted > 0 || result.updated > 0) {
+    logAudit(
+      "leave_balance",
+      `${year}년 연차현황`,
+      "update",
+      actor,
+      `신규 ${result.inserted}건, 갱신 ${result.updated}건 (엑셀 업로드)`
+    );
+  }
+
+  return result;
+}

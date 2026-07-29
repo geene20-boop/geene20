@@ -68,11 +68,12 @@ export interface UserAccount {
   display_name: string | null;
   role: AccountRole;
   active: number;
+  worker_id: number | null;
   created_at: string;
   updated_at: string;
 }
 
-const ACCOUNT_COLUMNS = "id, username, display_name, role, active, created_at, updated_at";
+const ACCOUNT_COLUMNS = "id, username, display_name, role, active, worker_id, created_at, updated_at";
 
 export function hasAnyAccount(): boolean {
   const db = getDb();
@@ -98,13 +99,16 @@ export function createAccount(
   username: string,
   password: string,
   role: AccountRole,
-  displayName: string | null
+  displayName: string | null,
+  workerId: number | null = null
 ): UserAccount {
   const db = getDb();
   const hash = bcrypt.hashSync(password, 10);
   const info = db
-    .prepare("INSERT INTO user_account (username, display_name, password_hash, role) VALUES (?, ?, ?, ?)")
-    .run(username, displayName, hash, role);
+    .prepare(
+      "INSERT INTO user_account (username, display_name, password_hash, role, worker_id) VALUES (?, ?, ?, ?, ?)"
+    )
+    .run(username, displayName, hash, role, workerId);
   return db
     .prepare(`SELECT ${ACCOUNT_COLUMNS} FROM user_account WHERE id = ?`)
     .get(info.lastInsertRowid) as UserAccount;
@@ -205,6 +209,17 @@ export function getUserSession(req: {
     | undefined;
   if (!row || !row.active) return null;
   return { accountId: parsed.accountId, role: parsed.role };
+}
+
+// 로그인한 개인계정이 근로자명부의 어느 근로자와 연결되어 있는지 (없으면 null).
+// 관리자(공용 비밀번호) 로그인은 특정 근로자와 연결되지 않으므로 항상 null.
+export function getSessionWorkerId(req: {
+  cookies: { get(name: string): { value: string } | undefined };
+}): number | null {
+  const session = getUserSession(req);
+  if (!session) return null;
+  const account = getAccountById(session.accountId);
+  return account?.worker_id ?? null;
 }
 
 export function isAdminRequest(req: {

@@ -259,6 +259,60 @@ export function getDb(): Database.Database {
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- 근태 신청 (연차/반차/외출/조퇴 등)
+    CREATE TABLE IF NOT EXISTS leave_request (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      worker_id INTEGER NOT NULL,
+      worker_name TEXT NOT NULL,
+      type TEXT NOT NULL,                 -- '연차' | '반차(오전)' | '반차(오후)' | '외출' | '조퇴'
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      days REAL NOT NULL DEFAULT 0,       -- 연차 차감 일수 (외출/조퇴는 0)
+      reason TEXT,
+      status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'approved' | 'rejected'
+      requested_by TEXT NOT NULL,
+      decided_by TEXT,
+      decided_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_leave_request_worker ON leave_request(worker_id);
+
+    -- 연차 마스터 (연도별 발생연차/전년도 이월연차, 관리자 입력·엑셀업로드)
+    CREATE TABLE IF NOT EXISTS leave_balance (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      worker_id INTEGER NOT NULL,
+      year INTEGER NOT NULL,
+      hire_date TEXT,
+      accrued_days REAL NOT NULL DEFAULT 0,
+      carried_over_days REAL NOT NULL DEFAULT 0,
+      updated_by TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(worker_id, year)
+    );
+
+    -- 게시판 (생산계획/보수계획/휴무일 등 공지)
+    CREATE TABLE IF NOT EXISTS board_post (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT,
+      author TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS board_attachment (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id INTEGER NOT NULL REFERENCES board_post(id) ON DELETE CASCADE,
+      filename TEXT NOT NULL,
+      mime_type TEXT,
+      size INTEGER NOT NULL,
+      data BLOB NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_board_attachment_post ON board_attachment(post_id);
   `);
 
   // 기존에 만들어진 DB에도 새 컬럼이 안전하게 추가되도록 마이그레이션
@@ -330,6 +384,7 @@ export function getDb(): Database.Database {
     ["approved_by", "TEXT"],
     ["approved_at", "TEXT"],
   ]);
+  migrateColumns("user_account", [["worker_id", "INTEGER"]]);
 
   const specCount = db.prepare("SELECT COUNT(*) as c FROM spec_limit").get() as { c: number };
   if (specCount.c === 0) {
