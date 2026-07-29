@@ -5,19 +5,17 @@ import { useEffect, useState } from "react";
 import { useSiteSession } from "@/lib/useSiteSession";
 import { apiDelete, apiGet } from "@/lib/apiClient";
 import { BoardCategory, BoardPost } from "@/lib/types";
+import { BOARD_CATEGORIES, BOARD_CATEGORY_STYLE } from "@/lib/boardCategory";
+import { getBoardLastSeen, markBoardSeen } from "@/lib/boardRead";
 
-const CATEGORIES: BoardCategory[] = ["생산계획", "보수계획", "휴무일", "기타"];
-const CATEGORY_STYLE: Record<BoardCategory, string> = {
-  생산계획: "bg-sky-50 text-sky-700 border-sky-200",
-  보수계획: "bg-violet-50 text-violet-700 border-violet-200",
-  휴무일: "bg-amber-50 text-amber-700 border-amber-200",
-  기타: "bg-slate-100 text-slate-600 border-slate-200",
-};
+const CATEGORIES = BOARD_CATEGORIES;
+const CATEGORY_STYLE = BOARD_CATEGORY_STYLE;
 
 export default function BoardPage() {
   const session = useSiteSession();
   const [category, setCategory] = useState<BoardCategory | "">("");
   const [posts, setPosts] = useState<BoardPost[]>([]);
+  const [lastSeen] = useState<string | null>(() => getBoardLastSeen());
 
   async function refresh() {
     const url = category ? `/api/board?category=${encodeURIComponent(category)}` : "/api/board";
@@ -27,6 +25,7 @@ export default function BoardPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
+    markBoardSeen();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [category]);
 
@@ -93,7 +92,10 @@ export default function BoardPage() {
                   </span>
                 </td>
                 <td className="px-3 py-2">
-                  <Link href={`/board/${p.id}`} className="hover:underline">
+                  <Link href={`/board/${p.id}`} className="hover:underline inline-flex items-center gap-1.5">
+                    {(lastSeen == null || p.created_at > lastSeen) && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" aria-label="안읽음" />
+                    )}
                     {p.title}
                   </Link>
                 </td>

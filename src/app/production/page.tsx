@@ -612,6 +612,168 @@ export default function ProductionPage() {
         </div>
       )}
 
+      <div className="bg-white rounded-xl border overflow-x-auto">
+        <div className="flex items-center justify-between px-3 pt-3 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-slate-700">최근 생산일지</h2>
+            <button
+              type="button"
+              onClick={() => setLogsDate((d) => shiftDate(d, -1))}
+              className="border rounded-md px-2 py-1 text-xs"
+            >
+              ◀ 전날
+            </button>
+            <input
+              type="date"
+              value={logsDate}
+              onChange={(e) => setLogsDate(e.target.value)}
+              className="border rounded-md px-2 py-1 text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => setLogsDate((d) => shiftDate(d, 1))}
+              className="border rounded-md px-2 py-1 text-xs"
+            >
+              다음날 ▶
+            </button>
+            <button
+              type="button"
+              onClick={() => setLogsDate(today())}
+              className="border rounded-md px-2 py-1 text-xs"
+            >
+              오늘
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setForm((f) => ({ ...emptyForm, date: logsDate, shift: f.shift }));
+                setTab("condition");
+              }}
+              className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-xs font-medium"
+            >
+              + 신규작성
+            </button>
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 파일 다운로드 링크(페이지 이동 아님) */}
+            <a href="/api/production/export" className="text-xs border border-slate-300 rounded-md px-3 py-1.5">
+              엑셀 다운로드 (전체)
+            </a>
+          </div>
+        </div>
+        <table className="w-full text-sm">
+          <thead className="bg-slate-100 text-slate-600">
+            <tr>
+              <th className="text-left px-3 py-2">날짜</th>
+              <th className="text-left px-3 py-2">조</th>
+              <th className="text-left px-3 py-2">작업자</th>
+              <th className="text-left px-3 py-2">품목</th>
+              <th className="text-right px-3 py-2">포장량(ton)</th>
+              <th className="text-right px-3 py-2">비가동(h)</th>
+              <th className="text-right px-3 py-2">가동(h)</th>
+              <th className="text-right px-3 py-2">가스사용(㎥)</th>
+              <th className="text-right px-3 py-2">경도</th>
+              <th className="text-right px-3 py-2">수분</th>
+              <th className="text-left px-3 py-2">비고</th>
+              <th className="text-left px-3 py-2">입력자/수정자</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {logs.slice(0, 30).map((row) => {
+              const hasDowntimeDetail =
+                (row.downtime_hours ?? 0) > 0 || !!row.note?.startsWith("정비") || !!row.note?.startsWith("휴무");
+              const expanded = expandedLogId === row.id;
+              return (
+            <Fragment key={row.id}>
+              <tr
+                className="border-t hover:bg-slate-50 cursor-pointer"
+                onClick={() => {
+                  setForm((f) => ({ ...f, date: row.date, shift: row.shift }));
+                  setTab("condition");
+                }}
+              >
+                <td className="px-3 py-2">
+                  {row.date}
+                  {row.locked ? " 🔒" : ""}
+                </td>
+                <td className="px-3 py-2">{row.shift}</td>
+                <td className="px-3 py-2">{row.worker ?? "-"}</td>
+                <td className="px-3 py-2">{row.product ?? "-"}</td>
+                <td className="px-3 py-2 text-right">{row.daily_pack_amount ?? "-"}</td>
+                <td className="px-3 py-2 text-right">
+                  {row.note?.startsWith("정비") ? (
+                    <span className="text-amber-700 font-medium">금일정비</span>
+                  ) : row.note?.startsWith("휴무") ? (
+                    <span className="text-sky-700 font-medium">휴무일</span>
+                  ) : (
+                    (row.downtime_hours ?? "-")
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right">{row.line_hours_total ?? "-"}</td>
+                <td className="px-3 py-2 text-right">
+                  {row.gas_usage_shift != null ? row.gas_usage_shift.toFixed(1) : "-"}
+                </td>
+                <td className="px-3 py-2 text-right">{row.hardness_manual ?? "-"}</td>
+                <td className="px-3 py-2 text-right">{row.moisture_manual ?? "-"}</td>
+                <td className="px-3 py-2 text-xs text-slate-600 max-w-[160px] truncate" title={row.note ?? ""}>
+                  {row.note ?? "-"}
+                </td>
+                <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
+                  {row.entered_by ?? "-"}
+                  {row.updated_by && row.updated_by !== row.entered_by ? ` → ${row.updated_by}` : ""}
+                </td>
+                <td className="px-3 py-2 text-right whitespace-nowrap">
+                  {hasDowntimeDetail && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedLogId(expanded ? null : row.id);
+                      }}
+                      className="text-slate-500 hover:underline mr-3"
+                    >
+                      {expanded ? "접기" : "상세보기"}
+                    </button>
+                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(row.id);
+                    }}
+                    disabled={!!row.locked}
+                    className="text-red-500 hover:underline disabled:text-slate-300 disabled:no-underline disabled:cursor-not-allowed"
+                  >
+                    삭제
+                  </button>
+                </td>
+              </tr>
+              {expanded && (
+                <tr className="border-t bg-slate-50">
+                  <td colSpan={13} className="px-3 py-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-600">
+                      {(row.downtime_hours ?? 0) > 0 && (
+                        <span>비가동발생원인: {row.downtime_reason ?? "-"}</span>
+                      )}
+                      {row.note?.startsWith("정비") && <span>정비내역: {row.note.replace(/^정비\s*/, "") || "-"}</span>}
+                      {row.note?.startsWith("휴무") && <span>휴무 사유: {row.note.replace(/^휴무일?\s*/, "") || "-"}</span>}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+              );
+            })}
+            {logs.length === 0 && (
+              <tr>
+                <td colSpan={13} className="px-3 py-8 text-center text-slate-400">
+                  아직 입력된 생산일지가 없습니다.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
       {(tab === "condition" || tab === "material") && (
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex gap-2 border-b flex-1">
@@ -638,7 +800,7 @@ export default function ProductionPage() {
           onClick={() => setTab("log")}
           className="text-xs text-slate-500 underline whitespace-nowrap"
         >
-          ← 생산일지 조회로 돌아가기
+          접기
         </button>
       </div>
       )}
@@ -1030,169 +1192,6 @@ export default function ProductionPage() {
       </form>
       )}
 
-      {tab === "log" && (
-      <div className="bg-white rounded-xl border overflow-x-auto">
-        <div className="flex items-center justify-between px-3 pt-3 flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-slate-700">최근 생산일지</h2>
-            <button
-              type="button"
-              onClick={() => setLogsDate((d) => shiftDate(d, -1))}
-              className="border rounded-md px-2 py-1 text-xs"
-            >
-              ◀ 전날
-            </button>
-            <input
-              type="date"
-              value={logsDate}
-              onChange={(e) => setLogsDate(e.target.value)}
-              className="border rounded-md px-2 py-1 text-xs"
-            />
-            <button
-              type="button"
-              onClick={() => setLogsDate((d) => shiftDate(d, 1))}
-              className="border rounded-md px-2 py-1 text-xs"
-            >
-              다음날 ▶
-            </button>
-            <button
-              type="button"
-              onClick={() => setLogsDate(today())}
-              className="border rounded-md px-2 py-1 text-xs"
-            >
-              오늘
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setForm((f) => ({ ...emptyForm, date: logsDate, shift: f.shift }));
-                setTab("condition");
-              }}
-              className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-xs font-medium"
-            >
-              + 신규작성
-            </button>
-            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 파일 다운로드 링크(페이지 이동 아님) */}
-            <a href="/api/production/export" className="text-xs border border-slate-300 rounded-md px-3 py-1.5">
-              엑셀 다운로드 (전체)
-            </a>
-          </div>
-        </div>
-        <table className="w-full text-sm">
-          <thead className="bg-slate-100 text-slate-600">
-            <tr>
-              <th className="text-left px-3 py-2">날짜</th>
-              <th className="text-left px-3 py-2">조</th>
-              <th className="text-left px-3 py-2">작업자</th>
-              <th className="text-left px-3 py-2">품목</th>
-              <th className="text-right px-3 py-2">포장량(ton)</th>
-              <th className="text-right px-3 py-2">비가동(h)</th>
-              <th className="text-right px-3 py-2">가동(h)</th>
-              <th className="text-right px-3 py-2">가스사용(㎥)</th>
-              <th className="text-right px-3 py-2">경도</th>
-              <th className="text-right px-3 py-2">수분</th>
-              <th className="text-left px-3 py-2">비고</th>
-              <th className="text-left px-3 py-2">입력자/수정자</th>
-              <th className="px-3 py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.slice(0, 30).map((row) => {
-              const hasDowntimeDetail =
-                (row.downtime_hours ?? 0) > 0 || !!row.note?.startsWith("정비") || !!row.note?.startsWith("휴무");
-              const expanded = expandedLogId === row.id;
-              return (
-            <Fragment key={row.id}>
-              <tr
-                className="border-t hover:bg-slate-50 cursor-pointer"
-                onClick={() => {
-                  setForm((f) => ({ ...f, date: row.date, shift: row.shift }));
-                  setTab("condition");
-                }}
-              >
-                <td className="px-3 py-2">
-                  {row.date}
-                  {row.locked ? " 🔒" : ""}
-                </td>
-                <td className="px-3 py-2">{row.shift}</td>
-                <td className="px-3 py-2">{row.worker ?? "-"}</td>
-                <td className="px-3 py-2">{row.product ?? "-"}</td>
-                <td className="px-3 py-2 text-right">{row.daily_pack_amount ?? "-"}</td>
-                <td className="px-3 py-2 text-right">
-                  {row.note?.startsWith("정비") ? (
-                    <span className="text-amber-700 font-medium">금일정비</span>
-                  ) : row.note?.startsWith("휴무") ? (
-                    <span className="text-sky-700 font-medium">휴무일</span>
-                  ) : (
-                    (row.downtime_hours ?? "-")
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">{row.line_hours_total ?? "-"}</td>
-                <td className="px-3 py-2 text-right">
-                  {row.gas_usage_shift != null ? row.gas_usage_shift.toFixed(1) : "-"}
-                </td>
-                <td className="px-3 py-2 text-right">{row.hardness_manual ?? "-"}</td>
-                <td className="px-3 py-2 text-right">{row.moisture_manual ?? "-"}</td>
-                <td className="px-3 py-2 text-xs text-slate-600 max-w-[160px] truncate" title={row.note ?? ""}>
-                  {row.note ?? "-"}
-                </td>
-                <td className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
-                  {row.entered_by ?? "-"}
-                  {row.updated_by && row.updated_by !== row.entered_by ? ` → ${row.updated_by}` : ""}
-                </td>
-                <td className="px-3 py-2 text-right whitespace-nowrap">
-                  {hasDowntimeDetail && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setExpandedLogId(expanded ? null : row.id);
-                      }}
-                      className="text-slate-500 hover:underline mr-3"
-                    >
-                      {expanded ? "접기" : "상세보기"}
-                    </button>
-                  )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(row.id);
-                    }}
-                    disabled={!!row.locked}
-                    className="text-red-500 hover:underline disabled:text-slate-300 disabled:no-underline disabled:cursor-not-allowed"
-                  >
-                    삭제
-                  </button>
-                </td>
-              </tr>
-              {expanded && (
-                <tr className="border-t bg-slate-50">
-                  <td colSpan={13} className="px-3 py-3">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-600">
-                      {(row.downtime_hours ?? 0) > 0 && (
-                        <span>비가동발생원인: {row.downtime_reason ?? "-"}</span>
-                      )}
-                      {row.note?.startsWith("정비") && <span>정비내역: {row.note.replace(/^정비\s*/, "") || "-"}</span>}
-                      {row.note?.startsWith("휴무") && <span>휴무 사유: {row.note.replace(/^휴무일?\s*/, "") || "-"}</span>}
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </Fragment>
-              );
-            })}
-            {logs.length === 0 && (
-              <tr>
-                <td colSpan={13} className="px-3 py-8 text-center text-slate-400">
-                  아직 입력된 생산일지가 없습니다.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      )}
 
       <button
         type="button"

@@ -3,8 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BoardCategory } from "@/lib/types";
-
-const CATEGORIES: BoardCategory[] = ["생산계획", "보수계획", "휴무일", "기타"];
+import { BOARD_CATEGORIES as CATEGORIES } from "@/lib/boardCategory";
 
 export default function BoardNewPage() {
   const router = useRouter();
