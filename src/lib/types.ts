@@ -268,11 +268,32 @@ export interface PackingAdjustment {
   created_at: string;
 }
 
+export type ShiftType = "day" | "night";
+export type Nationality = "domestic" | "foreign";
+
 export interface Worker {
   id: number;
   name: string;
   active: number;
+  hire_date: string | null;
+  shift_type: ShiftType | null;
+  nationality: Nationality;
   created_at: string;
+}
+
+export type DailyAttendanceStatus = "early_leave" | "comp_off" | "late" | "absent" | "other";
+
+export interface DailyAttendanceRow {
+  worker_id: number;
+  worker_name: string;
+  nationality: Nationality;
+  date: string;
+  shift: ShiftType | null;
+  statusLabel: string; // 화면에 표시할 문구 (예: "정상출근", "연차", "조퇴 16:00")
+  statusSource: "auto" | "manual" | "default"; // auto: 승인된 근태신청, manual: 관리자 직접입력, default: 정상출근
+  status: DailyAttendanceStatus | null; // manual인 경우의 상태값 (드롭다운 복원용)
+  statusDetail: string | null;
+  note: string | null; // "본인 신청 → 관리자 승인됨" 등 참고 문구
 }
 
 export type LeaveType = "연차" | "반차(오전)" | "반차(오후)" | "외출" | "조퇴";
@@ -304,6 +325,7 @@ export interface LeaveBalance {
   carried_over_days: number;
   used_days: number;
   remaining_days: number;
+  monthly_used_days: number[]; // 1월~12월 순서의 사용일수(연차/반차 합산)
   updated_by: string | null;
   updated_at: string;
 }

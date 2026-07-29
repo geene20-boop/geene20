@@ -14,6 +14,7 @@ export interface SiteSession {
   canWrite: boolean; // 개방 모드이거나 editor/modifier/admin이면 true, viewer면 false
   isModifier: boolean; // role이 modifier인지 (수정 권한: 승인 전 기록은 수정·삭제 가능)
   workerId: number | null; // 근로자명부와 연결된 개인계정이면 그 근로자 id (근태/연차 조회용)
+  isForeignWorker: boolean; // 연동된 근로자가 외국인인지 (근태관리 접근 차단 대상)
   refresh: () => Promise<void>;
 }
 
@@ -27,6 +28,7 @@ const initial: Omit<SiteSession, "refresh"> = {
   canWrite: true,
   isModifier: false,
   workerId: null,
+  isForeignWorker: false,
 };
 
 export function useSiteSession(): SiteSession {
@@ -47,6 +49,7 @@ export function useSiteSession(): SiteSession {
       canWrite: !configured || role === "editor" || role === "modifier" || role === "admin",
       isModifier: role === "modifier",
       workerId: d.workerId ?? null,
+      isForeignWorker: d.nationality === "foreign",
     });
   }, []);
 

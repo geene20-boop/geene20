@@ -21,6 +21,7 @@ function AccountBadge() {
   const session = useSiteSession();
 
   async function logout() {
+    if (!confirm("정말 로그아웃하시겠습니까?")) return;
     await fetch("/api/site/logout", { method: "POST" });
     window.location.reload();
   }
@@ -42,10 +43,15 @@ function AccountBadge() {
 
 export default function NavBar() {
   const pathname = usePathname();
+  const session = useSiteSession();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
   const navRef = useRef<HTMLDivElement>(null);
+  // 외국인 근로자와 연동된 계정은 근태관리를 이용하지 않으므로 메뉴에서 숨긴다.
+  const visibleGroups = session.isForeignWorker
+    ? NAV_GROUPS.filter((g) => g.label !== "근태관리")
+    : NAV_GROUPS;
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -75,7 +81,7 @@ export default function NavBar() {
         </Link>
 
         <nav ref={navRef} className="hidden md:flex gap-1 relative">
-          {NAV_GROUPS.map((group) => {
+          {visibleGroups.map((group) => {
             const active = isGroupActive(group, pathname);
             const open = openGroup === group.label;
             return (
@@ -135,7 +141,7 @@ export default function NavBar() {
                 닫기 ✕
               </button>
             </div>
-            {NAV_GROUPS.map((group) => {
+            {visibleGroups.map((group) => {
               const active = isGroupActive(group, pathname);
               const expanded = mobileExpanded === group.label || active;
               return (

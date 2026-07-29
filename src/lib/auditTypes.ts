@@ -15,7 +15,8 @@ export type AuditTable =
   | "worker"
   | "leave_request"
   | "leave_balance"
-  | "board_post";
+  | "board_post"
+  | "daily_attendance";
 export type AuditAction = "create" | "update" | "delete";
 
 export interface AuditLogRow {
@@ -44,6 +45,7 @@ export const TABLE_LABELS: Record<AuditTable, string> = {
   leave_request: "근태 신청",
   leave_balance: "연차 현황",
   board_post: "게시판",
+  daily_attendance: "일일 출근부",
 };
 
 export const ACTION_LABELS: Record<AuditAction, string> = {

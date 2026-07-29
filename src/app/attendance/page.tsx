@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSiteSession } from "@/lib/useSiteSession";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
-import { LeaveBalance, LeaveRequest, LeaveType } from "@/lib/types";
+import { DailyAttendanceRow, DailyAttendanceStatus, LeaveBalance, LeaveRequest, LeaveType, ShiftType } from "@/lib/types";
 import { markLeaveSeen } from "@/lib/leaveRead";
 
 const LEAVE_TYPES: LeaveType[] = ["연차", "반차(오전)", "반차(오후)", "외출", "조퇴"];
@@ -18,6 +18,7 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
+const MONTH_LABELS = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
 
 function daysBetween(start: string, end: string): number {
   const a = new Date(`${start}T00:00:00Z`).getTime();
@@ -241,7 +242,9 @@ function BalanceCard({ balance }: { balance: LeaveBalance }) {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <div className="font-semibold text-slate-800">{balance.worker_name}님의 연차현황</div>
-          <p className="text-xs text-slate-500 mt-0.5">{balance.year}년 · 오늘 기준</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {balance.year}년 · 오늘 기준{balance.hire_date ? ` · 입사일 ${balance.hire_date}` : ""}
+          </p>
         </div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
@@ -419,7 +422,314 @@ function AdminBalanceTable({ rows, onSaved }: { rows: LeaveBalance[]; onSaved: (
   );
 }
 
-function AdminApprovalTable({ rows, onChanged }: { rows: LeaveRequest[]; onChanged: () => void }) {
+function MonthlyDetailCard({ balance }: { balance: LeaveBalance }) {
+  return (
+    <div className="bg-white rounded-xl border p-5 overflow-x-auto">
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <div>
+          <div className="font-semibold text-slate-800">
+            {balance.worker_name}님의 연차현황 상세{balance.hire_date ? ` · 입사일 ${balance.hire_date}` : ""}
+          </div>
+          <p className="text-xs text-slate-500 mt-0.5">{balance.year}년 · 월별 사용일수</p>
+        </div>
+        <a
+          href={`/api/leave-balance/export?year=${balance.year}&workerId=${balance.worker_id}`}
+          className="text-xs border rounded-md px-3 py-1.5 bg-white"
+        >
+          ⬇ 엑셀 다운로드
+        </a>
+      </div>
+      <table className="w-full text-sm">
+        <thead className="bg-slate-100 text-slate-600">
+          <tr>
+            <th className="text-left px-3 py-2">구분</th>
+            {MONTH_LABELS.map((m) => (
+              <th key={m} className="text-right px-3 py-2">
+                {m}
+              </th>
+            ))}
+            <th className="text-right px-3 py-2">합계</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-t">
+            <td className="px-3 py-2">사용일</td>
+            {balance.monthly_used_days.map((d, i) => (
+              <td key={i} className="px-3 py-2 text-right">
+                {d || "-"}
+              </td>
+            ))}
+            <td className="px-3 py-2 text-right font-medium">
+              {balance.monthly_used_days.reduce((a, b) => a + b, 0)}일
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AdminMonthlyDetailTable({ rows, year }: { rows: LeaveBalance[]; year: number }) {
+  return (
+    <div className="bg-white rounded-xl border overflow-x-auto">
+      <div className="flex items-center justify-between px-3 pt-3 flex-wrap gap-2">
+        <h2 className="text-sm font-semibold text-slate-700">{year}년 연차현황 상세 (전 직원)</h2>
+        <a href={`/api/leave-balance/export?year=${year}`} className="text-xs border rounded-md px-3 py-1.5 bg-white">
+          ⬇ 엑셀 다운로드
+        </a>
+      </div>
+      <table className="w-full text-sm mt-2">
+        <thead className="bg-slate-100 text-slate-600">
+          <tr>
+            <th className="text-left px-3 py-2">이름</th>
+            <th className="text-left px-3 py-2">입사일</th>
+            {MONTH_LABELS.map((m) => (
+              <th key={m} className="text-right px-3 py-2">
+                {m}
+              </th>
+            ))}
+            <th className="text-right px-3 py-2">합계</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.worker_id} className="border-t">
+              <td className="px-3 py-2">{r.worker_name}</td>
+              <td className="px-3 py-2 text-xs text-slate-500">{r.hire_date ?? "-"}</td>
+              {r.monthly_used_days.map((d, i) => (
+                <td key={i} className="px-3 py-2 text-right">
+                  {d || "-"}
+                </td>
+              ))}
+              <td className="px-3 py-2 text-right font-medium">
+                {r.monthly_used_days.reduce((a, b) => a + b, 0)}일
+              </td>
+            </tr>
+          ))}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={15} className="px-3 py-8 text-center text-slate-400">
+                근로자명부가 비어있습니다.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const SHIFT_LABELS: Record<ShiftType, string> = { day: "주간", night: "야간" };
+type UiDailyStatus = DailyAttendanceStatus | "normal";
+const DAILY_STATUS_OPTIONS: UiDailyStatus[] = ["normal", "early_leave", "comp_off", "late", "absent", "other"];
+const DAILY_STATUS_LABELS: Record<UiDailyStatus, string> = {
+  normal: "정상출근",
+  early_leave: "조퇴",
+  comp_off: "대체휴무",
+  late: "지각",
+  absent: "결근",
+  other: "기타",
+};
+
+function addDays(date: string, delta: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function DailyRosterRow({ row, onChanged }: { row: DailyAttendanceRow; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<UiDailyStatus>(row.status ?? "normal");
+  const [detail, setDetail] = useState(row.statusDetail ?? "");
+
+  async function saveShift(shift: ShiftType) {
+    setBusy(true);
+    try {
+      await apiPut("/api/daily-attendance", { workerId: row.worker_id, date: row.date, shift });
+      onChanged();
+    } catch (err) {
+      alert(`오류: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveStatus(nextStatus: UiDailyStatus, nextDetail: string) {
+    setBusy(true);
+    try {
+      const isNormal = nextStatus === "normal";
+      await apiPut("/api/daily-attendance", {
+        workerId: row.worker_id,
+        date: row.date,
+        status: isNormal ? null : nextStatus,
+        statusDetail: isNormal ? null : nextDetail.trim() || null,
+      });
+      onChanged();
+    } catch (err) {
+      alert(`오류: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <tr className="border-t">
+      <td className="px-3 py-2">{row.worker_name}</td>
+      <td className="px-3 py-2">
+        <span
+          className={`text-xs border rounded-full px-2 py-0.5 ${
+            row.nationality === "foreign"
+              ? "bg-amber-50 text-amber-700 border-amber-200"
+              : "bg-sky-50 text-sky-700 border-sky-200"
+          }`}
+        >
+          {row.nationality === "foreign" ? "외국인" : "내국인"}
+        </span>
+      </td>
+      <td className="px-3 py-2">
+        <select
+          value={row.shift ?? "day"}
+          disabled={busy}
+          onChange={(e) => saveShift(e.target.value as ShiftType)}
+          className="border rounded-md px-2 py-1 text-sm"
+        >
+          <option value="day">{SHIFT_LABELS.day}</option>
+          <option value="night">{SHIFT_LABELS.night}</option>
+        </select>
+      </td>
+      <td className="px-3 py-2">
+        {row.statusSource === "auto" ? (
+          <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md px-2 py-1">
+            {row.statusLabel}
+          </span>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <select
+              value={status}
+              disabled={busy}
+              onChange={(e) => {
+                const next = e.target.value as UiDailyStatus;
+                setStatus(next);
+                if (next === "normal") setDetail("");
+                saveStatus(next, next === "normal" ? "" : detail);
+              }}
+              className="border rounded-md px-2 py-1 text-sm"
+            >
+              {DAILY_STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {DAILY_STATUS_LABELS[s]}
+                </option>
+              ))}
+            </select>
+            <input
+              value={detail}
+              disabled={busy || status === "normal"}
+              onChange={(e) => setDetail(e.target.value)}
+              onBlur={() => saveStatus(status, detail)}
+              placeholder="비고(예: 14:00)"
+              className="border rounded-md px-2 py-1 text-sm w-28"
+            />
+          </div>
+        )}
+      </td>
+      <td className="px-3 py-2 text-xs text-slate-500">{row.note ?? "-"}</td>
+    </tr>
+  );
+}
+
+function DailyRosterTab() {
+  const [date, setDate] = useState(today());
+  const [rows, setRows] = useState<DailyAttendanceRow[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  async function refresh() {
+    setLoading(true);
+    try {
+      const data = await apiGet<DailyAttendanceRow[]>(`/api/daily-attendance?date=${date}`);
+      setRows(data);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
+
+  const weekday = ["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T00:00:00Z`).getUTCDay()];
+
+  return (
+    <div className="bg-white rounded-xl border overflow-x-auto">
+      <div className="flex items-center justify-between px-3 pt-3 pb-2 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-slate-800 text-sm">일일 출근부</span>
+          <button
+            type="button"
+            onClick={() => setDate((d) => addDays(d, -1))}
+            className="border rounded-md px-3 py-1 text-xs bg-white"
+          >
+            ◀ 전날
+          </button>
+          <span className="text-xs text-slate-600 border rounded-md px-3 py-1">
+            {date} ({weekday})
+          </span>
+          <button
+            type="button"
+            onClick={() => setDate((d) => addDays(d, 1))}
+            className="border rounded-md px-3 py-1 text-xs bg-white"
+          >
+            다음날 ▶
+          </button>
+        </div>
+        <a href={`/api/daily-attendance/export?date=${date}`} className="text-xs border rounded-md px-3 py-1.5 bg-white">
+          ⬇ 엑셀 다운로드
+        </a>
+      </div>
+      <table className="w-full text-sm">
+        <thead className="bg-slate-100 text-slate-600">
+          <tr>
+            <th className="text-left px-3 py-2">이름</th>
+            <th className="text-left px-3 py-2">국적</th>
+            <th className="text-left px-3 py-2">근무조</th>
+            <th className="text-left px-3 py-2">근태현황</th>
+            <th className="text-left px-3 py-2">비고</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <DailyRosterRow key={r.worker_id} row={r} onChanged={refresh} />
+          ))}
+          {!loading && rows.length === 0 && (
+            <tr>
+              <td colSpan={5} className="px-3 py-8 text-center text-slate-400">
+                근로자명부가 비어있습니다.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      <p className="text-xs text-slate-500 px-3 py-3">
+        • 근무조는 근로자명부 기본값이 자동으로 채워지고, 관리자가 그날만 바꾸면 즉시 저장됩니다.
+        <br />
+        • 근태현황은 본인이 신청해 승인된 연차·반차·외출·조퇴가 있으면 자동으로 채워지고 수정할 수 없습니다(초록 표시).
+        <br />
+        • 자동반영 내용이 없는 경우(주로 외국인 근로자)에는 관리자가 드롭다운과 비고를 직접 입력·수정합니다.
+      </p>
+    </div>
+  );
+}
+
+function AdminApprovalTable({
+  rows,
+  onChanged,
+  canReject,
+}: {
+  rows: LeaveRequest[];
+  onChanged: () => void;
+  canReject: boolean;
+}) {
   const [bulkBusy, setBulkBusy] = useState(false);
 
   async function decide(id: number, status: "approved" | "rejected") {
@@ -485,7 +795,12 @@ function AdminApprovalTable({ rows, onChanged }: { rows: LeaveRequest[]; onChang
                 >
                   승인
                 </button>
-                <button onClick={() => decide(r.id, "rejected")} className="text-xs border rounded-md px-2 py-1">
+                <button
+                  onClick={() => decide(r.id, "rejected")}
+                  disabled={!canReject}
+                  title={canReject ? undefined : "반려는 관리자만 할 수 있습니다."}
+                  className="text-xs border rounded-md px-2 py-1 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
                   반려
                 </button>
               </td>
@@ -506,23 +821,25 @@ function AdminApprovalTable({ rows, onChanged }: { rows: LeaveRequest[]; onChang
 
 export default function AttendancePage() {
   const session = useSiteSession();
-  const [tab, setTab] = useState<"request" | "history" | "balance" | "approval">("request");
+  const [tab, setTab] = useState<"request" | "history" | "balance" | "detail" | "approval" | "roster">("request");
   const [myRequests, setMyRequests] = useState<LeaveRequest[]>([]);
   const [allRequests, setAllRequests] = useState<LeaveRequest[]>([]);
   const [myBalance, setMyBalance] = useState<LeaveBalance | null>(null);
   const [allBalances, setAllBalances] = useState<LeaveBalance[]>([]);
 
   const isAdmin = session.isAdmin;
+  const isModifier = session.isModifier;
+  const canApprove = isAdmin || isModifier; // 승인관리 화면 접근 (승인은 수정권한 이상, 반려는 관리자만)
   const hasWorker = session.workerId != null;
 
   async function refresh() {
-    if (isAdmin) {
-      const [reqs, balances] = await Promise.all([
-        apiGet<LeaveRequest[]>("/api/leave-request"),
-        apiGet<LeaveBalance[]>("/api/leave-balance"),
-      ]);
+    if (canApprove) {
+      const reqs = await apiGet<LeaveRequest[]>("/api/leave-request");
       setAllRequests(reqs);
-      setAllBalances(balances);
+      if (isAdmin) {
+        const balances = await apiGet<LeaveBalance[]>("/api/leave-balance");
+        setAllBalances(balances);
+      }
     } else if (hasWorker) {
       const [reqs, balances] = await Promise.all([
         apiGet<LeaveRequest[]>("/api/leave-request"),
@@ -537,10 +854,10 @@ export default function AttendancePage() {
     if (!session.checked) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
-    if (isAdmin) setTab("approval");
+    if (canApprove) setTab("approval");
     else if (hasWorker) markLeaveSeen();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.checked, isAdmin, hasWorker]);
+  }, [session.checked, isAdmin, isModifier, hasWorker]);
 
   const pendingForAdmin = useMemo(() => allRequests.filter((r) => r.status === "pending"), [allRequests]);
 
@@ -548,7 +865,25 @@ export default function AttendancePage() {
     return <p className="text-sm text-slate-400">확인 중...</p>;
   }
 
-  if (!isAdmin && !hasWorker) {
+  if (!canApprove && session.isForeignWorker) {
+    return (
+      <div className="flex flex-col gap-3">
+        <h1 className="text-xl font-bold">근태관리</h1>
+        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-4 py-3">
+          외국인 근로자는 근태관리를 직접 이용할 수 없습니다. 조퇴·대체휴무·지각 등은 관리자가 일일
+          출근부에서 직접 입력·관리합니다.
+          <br />
+          <span className="text-xs block mt-1.5">
+            Foreign workers cannot use this attendance system directly. Your manager records outings,
+            early leaves, and other attendance changes for you. / Người lao động nước ngoài không thể tự
+            sử dụng hệ thống này. Quản lý sẽ ghi nhận thông tin chấm công thay cho bạn.
+          </span>
+        </p>
+      </div>
+    );
+  }
+
+  if (!canApprove && !hasWorker) {
     return (
       <div className="flex flex-col gap-3">
         <h1 className="text-xl font-bold">근태관리</h1>
@@ -563,13 +898,21 @@ export default function AttendancePage() {
   const tabs = isAdmin
     ? ([
         { key: "approval", label: "승인 관리" },
+        { key: "roster", label: "일일 출근부" },
         { key: "history", label: "신청내역 (전체)" },
         { key: "balance", label: "연차현황 (전체)" },
+        { key: "detail", label: "연차현황 상세 (전체)" },
+      ] as const)
+    : canApprove
+    ? ([
+        { key: "approval", label: "승인 관리" },
+        { key: "history", label: "신청내역 (전체)" },
       ] as const)
     : ([
         { key: "request", label: "근태 신청" },
         { key: "history", label: "신청내역" },
         { key: "balance", label: "연차현황" },
+        { key: "detail", label: "연차현황 상세" },
       ] as const);
 
   return (
@@ -598,23 +941,30 @@ export default function AttendancePage() {
         ))}
       </div>
 
-      {!isAdmin && tab === "request" && (
+      {!canApprove && tab === "request" && (
         <RequestForm
           myBalance={myBalance}
           approvedRequests={myRequests.filter((r) => r.status === "approved")}
           onCreated={refresh}
         />
       )}
-      {!isAdmin && tab === "history" && (
+      {!canApprove && tab === "history" && (
         <RequestList rows={myRequests} showWorkerName={false} canCancel onChanged={refresh} />
       )}
-      {!isAdmin && tab === "balance" && myBalance && <BalanceCard balance={myBalance} />}
+      {!canApprove && tab === "balance" && myBalance && <BalanceCard balance={myBalance} />}
+      {!canApprove && tab === "detail" && myBalance && <MonthlyDetailCard balance={myBalance} />}
 
-      {isAdmin && tab === "approval" && <AdminApprovalTable rows={pendingForAdmin} onChanged={refresh} />}
-      {isAdmin && tab === "history" && (
+      {canApprove && tab === "approval" && (
+        <AdminApprovalTable rows={pendingForAdmin} onChanged={refresh} canReject={isAdmin} />
+      )}
+      {isAdmin && tab === "roster" && <DailyRosterTab />}
+      {canApprove && tab === "history" && (
         <RequestList rows={allRequests} showWorkerName canCancel={false} onChanged={refresh} />
       )}
       {isAdmin && tab === "balance" && <AdminBalanceTable rows={allBalances} onSaved={refresh} />}
+      {isAdmin && tab === "detail" && (
+        <AdminMonthlyDetailTable rows={allBalances} year={allBalances[0]?.year ?? new Date().getFullYear()} />
+      )}
 
       <div className="flex justify-end">
         <button

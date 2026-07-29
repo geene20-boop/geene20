@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
-import { apiDelete, apiGet, apiPost } from "@/lib/apiClient";
-import { Worker } from "@/lib/types";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
+import { Nationality, ShiftType, Worker } from "@/lib/types";
 
 interface AccountRow {
   id: number;
@@ -127,6 +127,11 @@ function WorkerRosterCard() {
     refresh();
   }
 
+  async function updateWorker(w: Worker, patch: { hireDate?: string | null; shiftType?: ShiftType | null; nationality?: Nationality }) {
+    await apiPut(`/api/worker/${w.id}`, patch);
+    refresh();
+  }
+
   return (
     <div className="bg-white rounded-xl border p-5 flex flex-col gap-4">
       <div>
@@ -134,6 +139,8 @@ function WorkerRosterCard() {
         <p className="text-sm text-slate-500 mt-1">
           여기에 등록한 이름이 생산/출하 입력 등 작업자 선택 드롭다운에 나타납니다. 각 근로자에게
           개인 로그인 계정을 발급하면 근태관리에서 본인 연차현황·신청내역을 조회할 수 있습니다.
+          국적을 &ldquo;외국인&rdquo;으로 지정하면 그 계정은 근태관리를 이용할 수 없고, 관리자가 일일
+          출근부에서 직접 근태를 관리합니다.
         </p>
       </div>
       <form onSubmit={addWorker} className="flex gap-2 items-end flex-wrap">
@@ -150,44 +157,101 @@ function WorkerRosterCard() {
         </button>
       </form>
       {message && <p className="text-sm text-slate-600">{message}</p>}
-      <div className="flex flex-col gap-2">
-        {workers.map((w) => {
-          const account = accounts.find((a) => a.worker_id === w.id);
-          return (
-            <div key={w.id} className="flex flex-col gap-2">
-              <div className="flex items-center gap-2 flex-wrap border rounded-md px-3 py-1.5 bg-slate-50 w-fit">
-                <span className="text-sm">{w.name}</span>
-                {account ? (
-                  <span className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
-                    계정 연동됨 ({account.username})
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setIssuingFor(w.id)}
-                    className="text-[11px] text-sky-600 underline"
-                  >
-                    개인계정 발급
-                  </button>
-                )}
-                <button onClick={() => removeWorker(w)} className="text-slate-400 hover:text-red-500 text-sm">
-                  ✕
-                </button>
-              </div>
-              {issuingFor === w.id && (
-                <AccountIssueForm
-                  worker={w}
-                  onDone={() => {
-                    setIssuingFor(null);
-                    refresh();
-                  }}
-                  onCancel={() => setIssuingFor(null)}
-                />
-              )}
-            </div>
-          );
-        })}
-        {workers.length === 0 && <p className="text-sm text-slate-400">등록된 근로자가 없습니다.</p>}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-100 text-slate-600">
+            <tr>
+              <th className="text-left px-3 py-2">이름</th>
+              <th className="text-left px-3 py-2">입사일</th>
+              <th className="text-left px-3 py-2">근무형태</th>
+              <th className="text-left px-3 py-2">국적</th>
+              <th className="text-left px-3 py-2">개인계정</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {workers.map((w) => {
+              const account = accounts.find((a) => a.worker_id === w.id);
+              return (
+                <Fragment key={w.id}>
+                  <tr className="border-t">
+                    <td className="px-3 py-2">{w.name}</td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="date"
+                        defaultValue={w.hire_date ?? ""}
+                        onChange={(e) => updateWorker(w, { hireDate: e.target.value || null })}
+                        className="border rounded-md px-2 py-1 text-xs"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <select
+                        value={w.shift_type ?? ""}
+                        onChange={(e) => updateWorker(w, { shiftType: (e.target.value || null) as ShiftType | null })}
+                        className="border rounded-md px-2 py-1 text-xs"
+                      >
+                        <option value="">미지정</option>
+                        <option value="day">주간</option>
+                        <option value="night">야간</option>
+                      </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <select
+                        value={w.nationality}
+                        onChange={(e) => updateWorker(w, { nationality: e.target.value as Nationality })}
+                        className="border rounded-md px-2 py-1 text-xs"
+                      >
+                        <option value="domestic">내국인</option>
+                        <option value="foreign">외국인</option>
+                      </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      {account ? (
+                        <span className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                          계정 연동됨 ({account.username})
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setIssuingFor(w.id)}
+                          className="text-[11px] text-sky-600 underline"
+                        >
+                          개인계정 발급
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button onClick={() => removeWorker(w)} className="text-slate-400 hover:text-red-500 text-sm">
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                  {issuingFor === w.id && (
+                    <tr>
+                      <td colSpan={6} className="px-3 pb-3">
+                        <AccountIssueForm
+                          worker={w}
+                          onDone={() => {
+                            setIssuingFor(null);
+                            refresh();
+                          }}
+                          onCancel={() => setIssuingFor(null)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+            {workers.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-3 py-8 text-center text-slate-400">
+                  등록된 근로자가 없습니다.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
