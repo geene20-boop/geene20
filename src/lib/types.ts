@@ -324,6 +324,7 @@ export interface BoardPost {
   title: string;
   body: string | null;
   author: string;
+  pinned: number;
   created_at: string;
   updated_at: string;
   attachments: BoardAttachment[];

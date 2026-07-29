@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useSiteSession } from "@/lib/useSiteSession";
-import { apiDelete, apiGet } from "@/lib/apiClient";
+import { apiDelete, apiGet, apiPut } from "@/lib/apiClient";
 import { BoardCategory, BoardPost } from "@/lib/types";
 import { BOARD_CATEGORIES, BOARD_CATEGORY_STYLE } from "@/lib/boardCategory";
 import { getBoardLastSeen, markBoardSeen } from "@/lib/boardRead";
@@ -32,6 +32,11 @@ export default function BoardPage() {
   async function remove(id: number) {
     if (!confirm("이 게시글을 삭제할까요?")) return;
     await apiDelete(`/api/board/${id}`);
+    refresh();
+  }
+
+  async function togglePin(p: BoardPost) {
+    await apiPut(`/api/board/${p.id}`, { pinned: p.pinned ? 0 : 1 });
     refresh();
   }
 
@@ -93,6 +98,7 @@ export default function BoardPage() {
                 </td>
                 <td className="px-3 py-2">
                   <Link href={`/board/${p.id}`} className="hover:underline inline-flex items-center gap-1.5">
+                    {p.pinned ? <span title="고정됨">📌</span> : null}
                     {(lastSeen == null || p.created_at > lastSeen) && (
                       <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" aria-label="안읽음" />
                     )}
@@ -104,11 +110,16 @@ export default function BoardPage() {
                 </td>
                 <td className="px-3 py-2">{p.author}</td>
                 <td className="px-3 py-2">{p.created_at.slice(0, 10)}</td>
-                <td className="px-3 py-2 text-right">
+                <td className="px-3 py-2 text-right whitespace-nowrap">
                   {canWrite && (
-                    <button onClick={() => remove(p.id)} className="text-red-500 hover:underline text-xs">
-                      삭제
-                    </button>
+                    <>
+                      <button onClick={() => togglePin(p)} className="text-slate-500 hover:underline text-xs mr-3">
+                        {p.pinned ? "고정해제" : "고정"}
+                      </button>
+                      <button onClick={() => remove(p.id)} className="text-red-500 hover:underline text-xs">
+                        삭제
+                      </button>
+                    </>
                   )}
                 </td>
               </tr>

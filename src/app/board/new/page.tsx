@@ -5,14 +5,24 @@ import { useState } from "react";
 import { BoardCategory } from "@/lib/types";
 import { BOARD_CATEGORIES as CATEGORIES } from "@/lib/boardCategory";
 
+const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB, 서버(/api/board)와 동일한 제한
+
 export default function BoardNewPage() {
   const router = useRouter();
   const [category, setCategory] = useState<BoardCategory>("생산계획");
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [oversizedFiles, setOversizedFiles] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  function onFilesSelected(selected: File[]) {
+    const ok = selected.filter((f) => f.size <= MAX_FILE_SIZE);
+    const tooBig = selected.filter((f) => f.size > MAX_FILE_SIZE).map((f) => f.name);
+    setFiles(ok);
+    setOversizedFiles(tooBig);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -74,14 +84,22 @@ export default function BoardNewPage() {
           />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-slate-600">첨부파일 (이미지 / PDF / 엑셀, 여러 개 가능)</span>
+          <span className="text-slate-600">첨부파일 (이미지 / PDF / 엑셀, 여러 개 가능, 파일당 15MB 이하)</span>
           <input
             type="file"
             multiple
             accept=".png,.jpg,.jpeg,.gif,.pdf,.xlsx,.xls,.csv"
-            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+            onChange={(e) => onFilesSelected(Array.from(e.target.files ?? []))}
             className="border rounded-md px-2 py-1.5 text-sm"
           />
+          {oversizedFiles.length > 0 && (
+            <p className="text-xs text-red-600">
+              15MB를 초과해 제외된 파일: {oversizedFiles.join(", ")}
+            </p>
+          )}
+          {files.length > 0 && (
+            <p className="text-xs text-slate-500">선택된 파일: {files.map((f) => f.name).join(", ")}</p>
+          )}
         </label>
         <div className="flex items-center gap-3">
           <button

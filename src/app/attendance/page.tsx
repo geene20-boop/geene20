@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSiteSession } from "@/lib/useSiteSession";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import { LeaveBalance, LeaveRequest, LeaveType } from "@/lib/types";
+import { markLeaveSeen } from "@/lib/leaveRead";
 
 const LEAVE_TYPES: LeaveType[] = ["연차", "반차(오전)", "반차(오후)", "외출", "조퇴"];
 const HALF_DAY_TYPES: LeaveType[] = ["반차(오전)", "반차(오후)"];
@@ -33,7 +34,15 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function RequestForm({ myBalance, onCreated }: { myBalance: LeaveBalance | null; onCreated: () => void }) {
+function RequestForm({
+  myBalance,
+  approvedRequests,
+  onCreated,
+}: {
+  myBalance: LeaveBalance | null;
+  approvedRequests: LeaveRequest[];
+  onCreated: () => void;
+}) {
   const [type, setType] = useState<LeaveType>("연차");
   const [startDate, setStartDate] = useState(today());
   const [endDate, setEndDate] = useState(today());
@@ -73,8 +82,20 @@ function RequestForm({ myBalance, onCreated }: { myBalance: LeaveBalance | null;
     }
   }
 
+  const upcomingApproved = [...approvedRequests]
+    .sort((a, b) => a.start_date.localeCompare(b.start_date))
+    .slice(0, 5);
+
   return (
     <form onSubmit={submit} className="bg-white rounded-xl border p-5 flex flex-col gap-4">
+      {upcomingApproved.length > 0 && (
+        <div className="text-xs text-slate-600 bg-slate-50 border rounded-md px-3 py-2">
+          <span className="font-medium">이미 승인된 내 일정: </span>
+          {upcomingApproved
+            .map((r) => `${r.start_date}${r.end_date !== r.start_date ? `~${r.end_date}` : ""}(${r.type})`)
+            .join(", ")}
+        </div>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-slate-600">신청 유형</span>
@@ -286,13 +307,40 @@ function AdminBalanceTable({ rows, onSaved }: { rows: LeaveBalance[]; onSaved: (
       setImportMsg(`오류: ${data.error ?? "실패"}`);
       return;
     }
+    const skippedDetails: string[] = Array.isArray(data.skippedDetails) ? data.skippedDetails : [];
     setImportMsg(
-      `완료: 신규 ${data.inserted}건, 갱신 ${data.updated}건${data.skipped ? `, 건너뜀 ${data.skipped}건` : ""}`
+      `완료: 신규 ${data.inserted}건, 갱신 ${data.updated}건` +
+        (data.skipped
+          ? `, 건너뜀 ${data.skipped}건${skippedDetails.length ? ` (${skippedDetails.join(", ")})` : ""}`
+          : "")
     );
     onSaved();
   }
 
+  const avgRemaining =
+    rows.length > 0 ? rows.reduce((sum, r) => sum + r.remaining_days, 0) / rows.length : 0;
+  const depletedCount = rows.filter((r) => r.remaining_days <= 0).length;
+
   return (
+    <div className="flex flex-col gap-3">
+      {rows.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="bg-white border rounded-xl p-4 text-center">
+            <div className="text-lg font-bold text-slate-800">{rows.length}</div>
+            <div className="text-xs text-slate-500 mt-1">전체 인원</div>
+          </div>
+          <div className="bg-white border rounded-xl p-4 text-center">
+            <div className="text-lg font-bold text-slate-800">{avgRemaining.toFixed(1)}</div>
+            <div className="text-xs text-slate-500 mt-1">평균 잔여연차</div>
+          </div>
+          <div className="bg-white border rounded-xl p-4 text-center">
+            <div className={`text-lg font-bold ${depletedCount > 0 ? "text-red-600" : "text-slate-800"}`}>
+              {depletedCount}
+            </div>
+            <div className="text-xs text-slate-500 mt-1">잔여연차 0 이하 인원</div>
+          </div>
+        </div>
+      )}
     <div className="bg-white rounded-xl border overflow-x-auto">
       <div className="flex items-center justify-between px-3 pt-3 flex-wrap gap-2">
         <h2 className="text-sm font-semibold text-slate-700">{year}년 연차현황 (전 직원)</h2>
@@ -367,17 +415,45 @@ function AdminBalanceTable({ rows, onSaved }: { rows: LeaveBalance[]; onSaved: (
         </tbody>
       </table>
     </div>
+    </div>
   );
 }
 
 function AdminApprovalTable({ rows, onChanged }: { rows: LeaveRequest[]; onChanged: () => void }) {
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   async function decide(id: number, status: "approved" | "rejected") {
     await apiPut(`/api/leave-request/${id}`, { status });
     onChanged();
   }
 
+  async function approveAll() {
+    if (!confirm(`대기중인 신청 ${rows.length}건을 모두 승인할까요?`)) return;
+    setBulkBusy(true);
+    try {
+      for (const r of rows) {
+        await apiPut(`/api/leave-request/${r.id}`, { status: "approved" });
+      }
+      onChanged();
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   return (
     <div className="bg-white rounded-xl border overflow-x-auto">
+      {rows.length > 0 && (
+        <div className="flex justify-end px-3 pt-3">
+          <button
+            type="button"
+            onClick={approveAll}
+            disabled={bulkBusy}
+            className="text-xs bg-slate-900 text-white rounded-md px-3 py-1.5 disabled:opacity-50"
+          >
+            전체 승인 ({rows.length}건)
+          </button>
+        </div>
+      )}
       <table className="w-full text-sm">
         <thead className="bg-slate-100 text-slate-600">
           <tr>
@@ -462,6 +538,7 @@ export default function AttendancePage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
     if (isAdmin) setTab("approval");
+    else if (hasWorker) markLeaveSeen();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.checked, isAdmin, hasWorker]);
 
@@ -521,7 +598,13 @@ export default function AttendancePage() {
         ))}
       </div>
 
-      {!isAdmin && tab === "request" && <RequestForm myBalance={myBalance} onCreated={refresh} />}
+      {!isAdmin && tab === "request" && (
+        <RequestForm
+          myBalance={myBalance}
+          approvedRequests={myRequests.filter((r) => r.status === "approved")}
+          onCreated={refresh}
+        />
+      )}
       {!isAdmin && tab === "history" && (
         <RequestList rows={myRequests} showWorkerName={false} canCancel onChanged={refresh} />
       )}

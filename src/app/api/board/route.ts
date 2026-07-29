@@ -16,8 +16,10 @@ export async function GET(req: NextRequest) {
   const category = req.nextUrl.searchParams.get("category");
   const posts = (
     category
-      ? db.prepare("SELECT * FROM board_post WHERE category = ? ORDER BY created_at DESC").all(category)
-      : db.prepare("SELECT * FROM board_post ORDER BY created_at DESC").all()
+      ? db
+          .prepare("SELECT * FROM board_post WHERE category = ? ORDER BY pinned DESC, created_at DESC")
+          .all(category)
+      : db.prepare("SELECT * FROM board_post ORDER BY pinned DESC, created_at DESC").all()
   ) as BoardPost[];
 
   const attachmentStmt = db.prepare(

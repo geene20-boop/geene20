@@ -4,9 +4,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { NAV_GROUPS } from "@/lib/navGroups";
 import { apiGet } from "@/lib/apiClient";
-import { BoardPost } from "@/lib/types";
+import { BoardPost, LeaveRequest } from "@/lib/types";
 import { BOARD_CATEGORY_STYLE } from "@/lib/boardCategory";
 import { getBoardLastSeen } from "@/lib/boardRead";
+import { getLeaveLastSeen } from "@/lib/leaveRead";
+import { useSiteSession } from "@/lib/useSiteSession";
 
 function BoardPreview() {
   const [posts, setPosts] = useState<BoardPost[]>([]);
@@ -52,7 +54,29 @@ function BoardPreview() {
   );
 }
 
+function useLeaveUnreadCount(): number {
+  const session = useSiteSession();
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (!session.checked || session.isAdmin || session.workerId == null) return;
+    const lastSeen = getLeaveLastSeen();
+    apiGet<LeaveRequest[]>("/api/leave-request")
+      .then((rows) => {
+        const n = rows.filter(
+          (r) => r.status !== "pending" && r.decided_at && (lastSeen == null || r.decided_at > lastSeen)
+        ).length;
+        setCount(n);
+      })
+      .catch(() => setCount(0));
+  }, [session.checked, session.isAdmin, session.workerId]);
+
+  return count;
+}
+
 export default function Home() {
+  const leaveUnread = useLeaveUnreadCount();
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -68,9 +92,14 @@ export default function Home() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-md px-2 py-2"
+                  className="text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-md px-2 py-2 flex items-center gap-1.5"
                 >
                   {item.label}
+                  {item.href === "/attendance" && leaveUnread > 0 && (
+                    <span className="text-[11px] bg-red-500 text-white rounded-full px-1.5 leading-4 font-medium">
+                      {leaveUnread}
+                    </span>
+                  )}
                 </Link>
               ))}
             </div>

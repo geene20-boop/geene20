@@ -385,6 +385,7 @@ export function getDb(): Database.Database {
     ["approved_at", "TEXT"],
   ]);
   migrateColumns("user_account", [["worker_id", "INTEGER"]]);
+  migrateColumns("board_post", [["pinned", "INTEGER NOT NULL DEFAULT 0"]]);
 
   const specCount = db.prepare("SELECT COUNT(*) as c FROM spec_limit").get() as { c: number };
   if (specCount.c === 0) {
