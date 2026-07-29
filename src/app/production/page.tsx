@@ -214,7 +214,7 @@ export default function ProductionPage() {
   const { enteredBy, setEnteredBy } = useEnteredBy();
   const [nameError, setNameError] = useState(false);
   const session = useSiteSession();
-  const [tab, setTab] = useState<"condition" | "material" | "log">("condition");
+  const [tab, setTab] = useState<"condition" | "material" | "log">("log");
 
   useEffect(() => {
     if (session.loggedIn && session.displayName) {
@@ -231,7 +231,7 @@ export default function ProductionPage() {
   const [pendingUnlock, setPendingUnlock] = useState(false);
 
   const [dirty, setDirty] = useState(false);
-  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [noteMode, setNoteMode] = useState<"" | "maintenance" | "holiday">("");
   const [draftAvailable, setDraftAvailable] = useState<FormState | null>(null);
   const draftKey = `production_draft_${form.date}_${form.shift}`;
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -334,7 +334,13 @@ export default function ProductionPage() {
         setCurrentId(ctx.existing.id);
         setLocked(!!ctx.existing.locked);
         setForm((f) => ({ ...fromLog(ctx.existing as ProductionLog), date: f.date, shift: f.shift }));
-        setMaintenanceMode(!!ctx.existing.note?.startsWith("정비"));
+        setNoteMode(
+          ctx.existing.note?.startsWith("정비")
+            ? "maintenance"
+            : ctx.existing.note?.startsWith("휴무")
+              ? "holiday"
+              : ""
+        );
       } else {
         setCurrentId(null);
         setLocked(false);
@@ -348,7 +354,7 @@ export default function ProductionPage() {
             ctx.packingEntryRef.totalTons > 0 ? String(ctx.packingEntryRef.totalTons) : "",
           product: ctx.packingEntryRef.suggestedProduct ?? "",
         }));
-        setMaintenanceMode(false);
+        setNoteMode("");
       }
       setDirty(false);
 
@@ -446,9 +452,9 @@ export default function ProductionPage() {
     }
   }
 
-  // 예방/돌발 정비로 생산이 없었던 날: 모든 칸을 비우되, LNG 누계만 전일재고와 동일하게
-  // 채워서 실사용량이 0으로 계산되게 한다.
-  function onMaintenanceDay() {
+  // 예방/돌발 정비 또는 휴무일로 생산이 없었던 날: 모든 칸을 비우되, LNG 누계만 전일재고와
+  // 동일하게 채워서 실사용량이 0으로 계산되게 한다.
+  function fillNonProductionDay(note: string, mode: "maintenance" | "holiday") {
     setForm((f) => ({
       ...emptyForm,
       date: f.date,
@@ -457,10 +463,18 @@ export default function ProductionPage() {
       carryover_rto: toFormValue(carryoverPreview.rto),
       lng_dryer: toFormValue(carryoverPreview.dryer),
       lng_rto: toFormValue(carryoverPreview.rto),
-      note: "정비",
+      note,
     }));
-    setMaintenanceMode(true);
+    setNoteMode(mode);
     setDirty(true);
+  }
+
+  function onMaintenanceDay() {
+    fillNonProductionDay("정비", "maintenance");
+  }
+
+  function onHolidayDay() {
+    fillNonProductionDay("휴무일", "holiday");
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -530,7 +544,7 @@ export default function ProductionPage() {
     if (id === currentId) {
       setCurrentId(null);
       setForm((f) => ({ ...emptyForm, date: f.date, shift: f.shift }));
-      setMaintenanceMode(false);
+      setNoteMode("");
     }
   }
 
@@ -598,60 +612,47 @@ export default function ProductionPage() {
         </div>
       )}
 
-      <div className="flex gap-2 border-b">
-        {(
-          [
-            { key: "condition", label: "생산조건" },
-            { key: "material", label: "원료조건" },
-            { key: "log", label: "생산일지 조회" },
-          ] as const
-        ).map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-              tab === t.key ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      {(tab === "condition" || tab === "material") && (
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex gap-2 border-b flex-1">
+          {(
+            [
+              { key: "condition", label: "① 생산조건" },
+              { key: "material", label: "② 원료조건" },
+            ] as const
+          ).map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
+                tab === t.key ? "border-slate-900 text-slate-900" : "border-transparent text-slate-400"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => setTab("log")}
+          className="text-xs text-slate-500 underline whitespace-nowrap"
+        >
+          ← 생산일지 조회로 돌아가기
+        </button>
       </div>
+      )}
 
       {(tab === "condition" || tab === "material") && (
       <form
         onSubmit={onSubmit}
         className="flex flex-col gap-4 bg-white rounded-xl border p-5"
       >
+        <div className="text-sm text-slate-600 bg-slate-50 border rounded-md px-3 py-1.5 w-fit">
+          작성 대상: <span className="font-medium text-slate-800">{form.date} · {form.shift}조</span>
+        </div>
         {tab === "condition" && (
         <>
-        <label className="flex flex-col gap-1 text-sm w-fit">
-          <span className="text-slate-600">날짜</span>
-          <div className="flex gap-1">
-            <button
-              type="button"
-              className="border rounded-md px-2 text-xs"
-              onClick={() => set("date", shiftDate(form.date, -1))}
-            >
-              ◀ 전날
-            </button>
-            <input
-              type="date"
-              value={form.date}
-              onChange={(e) => set("date", e.target.value)}
-              className="border rounded-md px-2 py-1.5 flex-1 min-w-0"
-            />
-            <button
-              type="button"
-              className="border rounded-md px-2 text-xs"
-              onClick={() => set("date", shiftDate(form.date, 1))}
-            >
-              다음날 ▶
-            </button>
-          </div>
-        </label>
-
         <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${contentLocked ? "opacity-50 pointer-events-none" : ""}`}>
           <EnteredByField
             value={enteredBy}
@@ -784,17 +785,23 @@ export default function ProductionPage() {
         </Section>
 
         <label className="flex flex-col gap-1 text-sm">
-          <span className={maintenanceMode ? "text-amber-700 font-medium" : "text-slate-600"}>
-            {maintenanceMode ? "정비내역" : "비고"}
+          <span className={noteMode ? "text-amber-700 font-medium" : "text-slate-600"}>
+            {noteMode === "maintenance" ? "정비내역" : noteMode === "holiday" ? "휴무 사유" : "비고"}
           </span>
           <textarea
             value={form.note}
             onChange={(e) => set("note", e.target.value)}
             className={`border rounded-md px-2 py-1.5 ${
-              maintenanceMode ? "border-amber-400 bg-amber-50" : ""
+              noteMode ? "border-amber-400 bg-amber-50" : ""
             }`}
             rows={2}
-            placeholder={maintenanceMode ? "정비 내용을 입력하세요 (예: 압출기 스크류 교체)" : undefined}
+            placeholder={
+              noteMode === "maintenance"
+                ? "정비 내용을 입력하세요 (예: 압출기 스크류 교체)"
+                : noteMode === "holiday"
+                  ? "휴무 사유를 입력하세요 (예: 창립기념일)"
+                  : undefined
+            }
           />
         </label>
         </div>
@@ -804,31 +811,6 @@ export default function ProductionPage() {
         {tab === "material" && (
         <>
         <div className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col gap-1 text-sm w-fit">
-            <span className="text-slate-600">날짜</span>
-            <div className="flex gap-1">
-              <button
-                type="button"
-                className="border rounded-md px-2 text-xs"
-                onClick={() => set("date", shiftDate(form.date, -1))}
-              >
-                ◀ 전날
-              </button>
-              <input
-                type="date"
-                value={form.date}
-                onChange={(e) => set("date", e.target.value)}
-                className="border rounded-md px-2 py-1.5 flex-1 min-w-0"
-              />
-              <button
-                type="button"
-                className="border rounded-md px-2 text-xs"
-                onClick={() => set("date", shiftDate(form.date, 1))}
-              >
-                다음날 ▶
-              </button>
-            </div>
-          </label>
           <div className={`flex flex-wrap items-end gap-3 ${contentLocked ? "opacity-50 pointer-events-none" : ""}`}>
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-slate-600">조</span>
@@ -1019,6 +1001,13 @@ export default function ProductionPage() {
             >
               금일 정비
             </button>
+            <button
+              type="button"
+              onClick={onHolidayDay}
+              className="border rounded-md px-4 py-2 text-sm font-medium"
+            >
+              휴무일
+            </button>
           </div>
           {currentId != null && !locked && (
             <button
@@ -1074,10 +1063,22 @@ export default function ProductionPage() {
               오늘
             </button>
           </div>
-          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 파일 다운로드 링크(페이지 이동 아님) */}
-          <a href="/api/production/export" className="text-xs border border-slate-300 rounded-md px-3 py-1.5">
-            엑셀 다운로드 (전체)
-          </a>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setForm((f) => ({ ...emptyForm, date: logsDate, shift: f.shift }));
+                setTab("condition");
+              }}
+              className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-xs font-medium"
+            >
+              + 신규작성
+            </button>
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 파일 다운로드 링크(페이지 이동 아님) */}
+            <a href="/api/production/export" className="text-xs border border-slate-300 rounded-md px-3 py-1.5">
+              엑셀 다운로드 (전체)
+            </a>
+          </div>
         </div>
         <table className="w-full text-sm">
           <thead className="bg-slate-100 text-slate-600">
@@ -1099,7 +1100,8 @@ export default function ProductionPage() {
           </thead>
           <tbody>
             {logs.slice(0, 30).map((row) => {
-              const hasDowntimeDetail = (row.downtime_hours ?? 0) > 0 || !!row.note?.startsWith("정비");
+              const hasDowntimeDetail =
+                (row.downtime_hours ?? 0) > 0 || !!row.note?.startsWith("정비") || !!row.note?.startsWith("휴무");
               const expanded = expandedLogId === row.id;
               return (
             <Fragment key={row.id}>
@@ -1107,6 +1109,7 @@ export default function ProductionPage() {
                 className="border-t hover:bg-slate-50 cursor-pointer"
                 onClick={() => {
                   setForm((f) => ({ ...f, date: row.date, shift: row.shift }));
+                  setTab("condition");
                 }}
               >
                 <td className="px-3 py-2">
@@ -1120,6 +1123,8 @@ export default function ProductionPage() {
                 <td className="px-3 py-2 text-right">
                   {row.note?.startsWith("정비") ? (
                     <span className="text-amber-700 font-medium">금일정비</span>
+                  ) : row.note?.startsWith("휴무") ? (
+                    <span className="text-sky-700 font-medium">휴무일</span>
                   ) : (
                     (row.downtime_hours ?? "-")
                   )}
@@ -1169,6 +1174,7 @@ export default function ProductionPage() {
                         <span>비가동발생원인: {row.downtime_reason ?? "-"}</span>
                       )}
                       {row.note?.startsWith("정비") && <span>정비내역: {row.note.replace(/^정비\s*/, "") || "-"}</span>}
+                      {row.note?.startsWith("휴무") && <span>휴무 사유: {row.note.replace(/^휴무일?\s*/, "") || "-"}</span>}
                     </div>
                   </td>
                 </tr>
