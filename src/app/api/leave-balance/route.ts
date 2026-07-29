@@ -19,11 +19,31 @@ function computeUsedDays(workerId: number, year: number): number {
   return row.used;
 }
 
+function computeMonthlyUsedDays(workerId: number, year: number): number[] {
+  const db = getDb();
+  const placeholders = DEDUCTING_TYPES.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT substr(start_date, 6, 2) as month, COALESCE(SUM(days), 0) as used FROM leave_request
+       WHERE worker_id = ? AND status = 'approved' AND type IN (${placeholders})
+       AND substr(start_date, 1, 4) = ?
+       GROUP BY month`
+    )
+    .all(workerId, ...DEDUCTING_TYPES, String(year)) as { month: string; used: number }[];
+  const monthly = new Array(12).fill(0);
+  for (const r of rows) {
+    const idx = Number(r.month) - 1;
+    if (idx >= 0 && idx < 12) monthly[idx] = r.used;
+  }
+  return monthly;
+}
+
 function toBalance(
   workerId: number,
   workerName: string,
+  workerHireDate: string | null,
   year: number,
-  row: { hire_date: string | null; accrued_days: number; carried_over_days: number; updated_by: string | null; updated_at: string } | undefined
+  row: { accrued_days: number; carried_over_days: number; updated_by: string | null; updated_at: string } | undefined
 ): LeaveBalance {
   const accrued = row?.accrued_days ?? 0;
   const carried = row?.carried_over_days ?? 0;
@@ -32,11 +52,12 @@ function toBalance(
     worker_id: workerId,
     worker_name: workerName,
     year,
-    hire_date: row?.hire_date ?? null,
+    hire_date: workerHireDate,
     accrued_days: accrued,
     carried_over_days: carried,
     used_days: used,
     remaining_days: accrued + carried - used,
+    monthly_used_days: computeMonthlyUsedDays(workerId, year),
     updated_by: row?.updated_by ?? null,
     updated_at: row?.updated_at ?? "",
   };
@@ -47,28 +68,27 @@ export async function GET(req: NextRequest) {
   const year = Number(req.nextUrl.searchParams.get("year") ?? new Date().getFullYear());
 
   if (isAdminRequest(req)) {
-    const workers = db.prepare("SELECT id, name FROM worker WHERE active = 1 ORDER BY name").all() as {
-      id: number;
-      name: string;
-    }[];
+    const workers = db
+      .prepare("SELECT id, name, hire_date FROM worker WHERE active = 1 ORDER BY name")
+      .all() as { id: number; name: string; hire_date: string | null }[];
     const balances = db
       .prepare("SELECT * FROM leave_balance WHERE year = ?")
       .all(year) as (LeaveBalance & { worker_id: number })[];
     const byWorker = new Map(balances.map((b) => [b.worker_id, b]));
-    const result = workers.map((w) => toBalance(w.id, w.name, year, byWorker.get(w.id)));
+    const result = workers.map((w) => toBalance(w.id, w.name, w.hire_date, year, byWorker.get(w.id)));
     return NextResponse.json(result);
   }
 
   const workerId = getSessionWorkerId(req);
   if (workerId == null) return NextResponse.json([]);
-  const worker = db.prepare("SELECT name FROM worker WHERE id = ?").get(workerId) as
-    | { name: string }
+  const worker = db.prepare("SELECT name, hire_date FROM worker WHERE id = ?").get(workerId) as
+    | { name: string; hire_date: string | null }
     | undefined;
   if (!worker) return NextResponse.json([]);
   const balanceRow = db
     .prepare("SELECT * FROM leave_balance WHERE worker_id = ? AND year = ?")
     .get(workerId, year) as (LeaveBalance & { worker_id: number }) | undefined;
-  return NextResponse.json([toBalance(workerId, worker.name, year, balanceRow)]);
+  return NextResponse.json([toBalance(workerId, worker.name, worker.hire_date, year, balanceRow)]);
 }
 
 export async function POST(req: NextRequest) {
@@ -79,12 +99,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const workerId = Number(body.workerId);
   const year = Number(body.year);
-  const hireDate = body.hireDate ? String(body.hireDate) : null;
   const accruedDays = Number(body.accruedDays ?? 0);
   const carriedOverDays = Number(body.carriedOverDays ?? 0);
 
-  const worker = db.prepare("SELECT name FROM worker WHERE id = ?").get(workerId) as
-    | { name: string }
+  const worker = db.prepare("SELECT name, hire_date FROM worker WHERE id = ?").get(workerId) as
+    | { name: string; hire_date: string | null }
     | undefined;
   if (!worker) return NextResponse.json({ error: "근로자를 찾을 수 없습니다." }, { status: 404 });
   if (!Number.isFinite(year)) {
@@ -96,12 +115,11 @@ export async function POST(req: NextRequest) {
     `INSERT INTO leave_balance (worker_id, year, hire_date, accrued_days, carried_over_days, updated_by)
      VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(worker_id, year) DO UPDATE SET
-       hire_date = excluded.hire_date,
        accrued_days = excluded.accrued_days,
        carried_over_days = excluded.carried_over_days,
        updated_by = excluded.updated_by,
        updated_at = datetime('now')`
-  ).run(workerId, year, hireDate, accruedDays, carriedOverDays, updatedBy);
+  ).run(workerId, year, worker.hire_date, accruedDays, carriedOverDays, updatedBy);
 
   logAudit(
     "leave_balance",
@@ -114,5 +132,5 @@ export async function POST(req: NextRequest) {
   const row = db.prepare("SELECT * FROM leave_balance WHERE worker_id = ? AND year = ?").get(workerId, year) as
     | (LeaveBalance & { worker_id: number })
     | undefined;
-  return NextResponse.json(toBalance(workerId, worker.name, year, row));
+  return NextResponse.json(toBalance(workerId, worker.name, worker.hire_date, year, row));
 }

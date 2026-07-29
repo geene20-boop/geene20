@@ -313,6 +313,20 @@ export function getDb(): Database.Database {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_board_attachment_post ON board_attachment(post_id);
+
+    -- 일일 출근부: 근무조(주간/야간)와, 본인 신청/승인 흐름이 없는 근태상태(주로 외국인 근로자)를
+    -- 관리자가 날짜별로 직접 입력·수정한다.
+    CREATE TABLE IF NOT EXISTS daily_attendance (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      worker_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      shift TEXT,               -- 'day' | 'night' (비어있으면 근로자명부 기본 근무형태를 사용)
+      status TEXT,              -- 'early_leave' | 'comp_off' | 'late' | 'absent' | 'other' (없으면 정상출근)
+      status_detail TEXT,
+      updated_by TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(worker_id, date)
+    );
   `);
 
   // 기존에 만들어진 DB에도 새 컬럼이 안전하게 추가되도록 마이그레이션
@@ -386,6 +400,11 @@ export function getDb(): Database.Database {
   ]);
   migrateColumns("user_account", [["worker_id", "INTEGER"]]);
   migrateColumns("board_post", [["pinned", "INTEGER NOT NULL DEFAULT 0"]]);
+  migrateColumns("worker", [
+    ["hire_date", "TEXT"],
+    ["shift_type", "TEXT"], // 'day' | 'night'
+    ["nationality", "TEXT NOT NULL DEFAULT 'domestic'"], // 'domestic' | 'foreign'
+  ]);
 
   const specCount = db.prepare("SELECT COUNT(*) as c FROM spec_limit").get() as { c: number };
   if (specCount.c === 0) {

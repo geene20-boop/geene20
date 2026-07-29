@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { getAdminName, getSessionWorkerId, isAdminRequest } from "@/lib/auth";
-import { logAudit } from "@/lib/audit";
+import { getAdminName, isAdminRequest, isModifierRequest, getSessionWorkerId } from "@/lib/auth";
+import { logAudit, requireActor } from "@/lib/audit";
 import { LeaveRequest } from "@/lib/types";
 
+// 승인은 수정 권한 이상(수정 등급 + 관리자)이 할 수 있지만, 반려는 관리자만 할 수 있다.
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!isAdminRequest(req)) {
-    return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 403 });
+  const admin = isAdminRequest(req);
+  const modifier = isModifierRequest(req);
+  if (!admin && !modifier) {
+    return NextResponse.json({ error: "수정 권한 이상만 처리할 수 있습니다." }, { status: 403 });
   }
   const { id } = await params;
   const db = getDb();
@@ -21,8 +24,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (status !== "approved" && status !== "rejected") {
     return NextResponse.json({ error: "status는 approved 또는 rejected여야 합니다." }, { status: 400 });
   }
+  if (status === "rejected" && !admin) {
+    return NextResponse.json({ error: "반려는 관리자만 할 수 있습니다." }, { status: 403 });
+  }
 
-  const decidedBy = getAdminName(req) ?? "관리자";
+  const decidedBy = admin ? getAdminName(req) ?? "관리자" : requireActor(req, {}) ?? "관리자";
   db.prepare(
     "UPDATE leave_request SET status = ?, decided_by = ?, decided_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"
   ).run(status, decidedBy, id);

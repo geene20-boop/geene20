@@ -44,10 +44,16 @@ export async function POST(req: NextRequest) {
     );
   }
   const db = getDb();
-  const worker = db.prepare("SELECT name FROM worker WHERE id = ?").get(workerId) as
-    | { name: string }
+  const worker = db.prepare("SELECT name, nationality FROM worker WHERE id = ?").get(workerId) as
+    | { name: string; nationality: string }
     | undefined;
   if (!worker) return NextResponse.json({ error: "근로자 정보를 찾을 수 없습니다." }, { status: 404 });
+  if (worker.nationality === "foreign") {
+    return NextResponse.json(
+      { error: "외국인 근로자는 근태를 직접 신청할 수 없습니다. 관리자에게 문의해주세요." },
+      { status: 403 }
+    );
+  }
 
   const body = await req.json();
   const type = body.type as LeaveType;
