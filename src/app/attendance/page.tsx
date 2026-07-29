@@ -821,6 +821,7 @@ function AdminApprovalTable({
 
 export default function AttendancePage() {
   const session = useSiteSession();
+  const [view, setView] = useState<"manage" | "mine">("manage");
   const [tab, setTab] = useState<"request" | "history" | "balance" | "detail" | "approval" | "roster">("request");
   const [myRequests, setMyRequests] = useState<LeaveRequest[]>([]);
   const [allRequests, setAllRequests] = useState<LeaveRequest[]>([]);
@@ -831,6 +832,8 @@ export default function AttendancePage() {
   const isModifier = session.isModifier;
   const canApprove = isAdmin || isModifier; // 승인관리 화면 접근 (승인은 수정권한 이상, 반려는 관리자만)
   const hasWorker = session.workerId != null;
+  // 승인권한(관리자/수정권한)이 있는 계정도 근로자명부와 연결돼 있으면 "내 근태"에서 본인 근태를 신청할 수 있다.
+  const showViewToggle = canApprove && hasWorker;
 
   async function refresh() {
     if (canApprove) {
@@ -840,10 +843,11 @@ export default function AttendancePage() {
         const balances = await apiGet<LeaveBalance[]>("/api/leave-balance");
         setAllBalances(balances);
       }
-    } else if (hasWorker) {
+    }
+    if (hasWorker) {
       const [reqs, balances] = await Promise.all([
-        apiGet<LeaveRequest[]>("/api/leave-request"),
-        apiGet<LeaveBalance[]>("/api/leave-balance"),
+        apiGet<LeaveRequest[]>("/api/leave-request?mine=1"),
+        apiGet<LeaveBalance[]>("/api/leave-balance?mine=1"),
       ]);
       setMyRequests(reqs);
       setMyBalance(balances[0] ?? null);
@@ -854,8 +858,14 @@ export default function AttendancePage() {
     if (!session.checked) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
-    if (canApprove) setTab("approval");
-    else if (hasWorker) markLeaveSeen();
+    if (canApprove) {
+      setView("manage");
+      setTab("approval");
+    } else if (hasWorker) {
+      setView("mine");
+      setTab("request");
+      markLeaveSeen();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.checked, isAdmin, isModifier, hasWorker]);
 
@@ -895,7 +905,7 @@ export default function AttendancePage() {
     );
   }
 
-  const tabs = isAdmin
+  const manageTabs = isAdmin
     ? ([
         { key: "approval", label: "승인 관리" },
         { key: "roster", label: "일일 출근부" },
@@ -903,17 +913,20 @@ export default function AttendancePage() {
         { key: "balance", label: "연차현황 (전체)" },
         { key: "detail", label: "연차현황 상세 (전체)" },
       ] as const)
-    : canApprove
-    ? ([
+    : ([
         { key: "approval", label: "승인 관리" },
         { key: "history", label: "신청내역 (전체)" },
-      ] as const)
-    : ([
-        { key: "request", label: "근태 신청" },
-        { key: "history", label: "신청내역" },
-        { key: "balance", label: "연차현황" },
-        { key: "detail", label: "연차현황 상세" },
       ] as const);
+  const mineTabs = [
+    { key: "request", label: "근태 신청" },
+    { key: "history", label: "신청내역" },
+    { key: "balance", label: "연차현황" },
+    { key: "detail", label: "연차현황 상세" },
+  ] as const;
+
+  // 승인권한 자체가 없으면 "내 근태"만 있으므로 전환 버튼 없이 바로 본인 탭을 보여준다.
+  const activeView = canApprove ? view : "mine";
+  const tabs = activeView === "manage" ? manageTabs : mineTabs;
 
   return (
     <div className="flex flex-col gap-6">
@@ -922,11 +935,38 @@ export default function AttendancePage() {
         <p className="text-sm text-slate-500 mt-1">
           {isAdmin
             ? "직원들의 근태 신청을 승인·반려하고, 연차현황을 관리합니다."
+            : canApprove
+            ? "직원들의 근태 신청을 승인하고, 본인 근태도 신청할 수 있습니다."
             : "연차·반차·외출·조퇴를 신청하고, 본인 연차현황을 확인합니다."}
         </p>
       </div>
 
-      <div className="flex gap-2 border-b">
+      {showViewToggle && (
+        <div className="inline-flex bg-slate-100 rounded-lg p-1 gap-0.5 w-fit">
+          {(
+            [
+              { key: "manage", label: "관리 업무" },
+              { key: "mine", label: "내 근태" },
+            ] as const
+          ).map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              onClick={() => {
+                setView(v.key);
+                setTab(v.key === "manage" ? "approval" : "request");
+              }}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium ${
+                activeView === v.key ? "bg-slate-900 text-white" : "text-slate-500"
+              }`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex gap-2 border-b flex-wrap">
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -941,28 +981,30 @@ export default function AttendancePage() {
         ))}
       </div>
 
-      {!canApprove && tab === "request" && (
+      {activeView === "mine" && tab === "request" && (
         <RequestForm
           myBalance={myBalance}
           approvedRequests={myRequests.filter((r) => r.status === "approved")}
           onCreated={refresh}
         />
       )}
-      {!canApprove && tab === "history" && (
+      {activeView === "mine" && tab === "history" && (
         <RequestList rows={myRequests} showWorkerName={false} canCancel onChanged={refresh} />
       )}
-      {!canApprove && tab === "balance" && myBalance && <BalanceCard balance={myBalance} />}
-      {!canApprove && tab === "detail" && myBalance && <MonthlyDetailCard balance={myBalance} />}
+      {activeView === "mine" && tab === "balance" && myBalance && <BalanceCard balance={myBalance} />}
+      {activeView === "mine" && tab === "detail" && myBalance && <MonthlyDetailCard balance={myBalance} />}
 
-      {canApprove && tab === "approval" && (
+      {activeView === "manage" && tab === "approval" && (
         <AdminApprovalTable rows={pendingForAdmin} onChanged={refresh} canReject={isAdmin} />
       )}
-      {isAdmin && tab === "roster" && <DailyRosterTab />}
-      {canApprove && tab === "history" && (
+      {activeView === "manage" && isAdmin && tab === "roster" && <DailyRosterTab />}
+      {activeView === "manage" && tab === "history" && (
         <RequestList rows={allRequests} showWorkerName canCancel={false} onChanged={refresh} />
       )}
-      {isAdmin && tab === "balance" && <AdminBalanceTable rows={allBalances} onSaved={refresh} />}
-      {isAdmin && tab === "detail" && (
+      {activeView === "manage" && isAdmin && tab === "balance" && (
+        <AdminBalanceTable rows={allBalances} onSaved={refresh} />
+      )}
+      {activeView === "manage" && isAdmin && tab === "detail" && (
         <AdminMonthlyDetailTable rows={allBalances} year={allBalances[0]?.year ?? new Date().getFullYear()} />
       )}
 
