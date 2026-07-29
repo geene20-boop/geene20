@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "제목을 입력해주세요." }, { status: 400 });
   }
 
-  const author = requireActor(req, {});
+  const author = requireActor(req, { entered_by: form.get("entered_by") });
   if (!author) return NextResponse.json({ error: "입력자명을 확인할 수 없습니다." }, { status: 400 });
 
   const files = form.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
