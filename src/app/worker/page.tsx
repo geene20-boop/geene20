@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
-import { Nationality, ShiftType, Worker } from "@/lib/types";
+import { Nationality, Worker } from "@/lib/types";
 
 interface AccountRow {
   id: number;
@@ -127,7 +127,7 @@ function WorkerRosterCard() {
     refresh();
   }
 
-  async function updateWorker(w: Worker, patch: { hireDate?: string | null; shiftType?: ShiftType | null; nationality?: Nationality }) {
+  async function updateWorker(w: Worker, patch: { hireDate?: string | null; birthDate?: string | null; nationality?: Nationality }) {
     await apiPut(`/api/worker/${w.id}`, patch);
     refresh();
   }
@@ -163,7 +163,7 @@ function WorkerRosterCard() {
             <tr>
               <th className="text-left px-3 py-2">이름</th>
               <th className="text-left px-3 py-2">입사일</th>
-              <th className="text-left px-3 py-2">근무형태</th>
+              <th className="text-left px-3 py-2">생년월일</th>
               <th className="text-left px-3 py-2">국적</th>
               <th className="text-left px-3 py-2">개인계정</th>
               <th className="px-3 py-2"></th>
@@ -185,15 +185,12 @@ function WorkerRosterCard() {
                       />
                     </td>
                     <td className="px-3 py-2">
-                      <select
-                        value={w.shift_type ?? ""}
-                        onChange={(e) => updateWorker(w, { shiftType: (e.target.value || null) as ShiftType | null })}
+                      <input
+                        type="date"
+                        defaultValue={w.birth_date ?? ""}
+                        onChange={(e) => updateWorker(w, { birthDate: e.target.value || null })}
                         className="border rounded-md px-2 py-1 text-xs"
-                      >
-                        <option value="">미지정</option>
-                        <option value="day">주간</option>
-                        <option value="night">야간</option>
-                      </select>
+                      />
                     </td>
                     <td className="px-3 py-2">
                       <select

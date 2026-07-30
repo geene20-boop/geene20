@@ -276,7 +276,7 @@ export interface Worker {
   name: string;
   active: number;
   hire_date: string | null;
-  shift_type: ShiftType | null;
+  birth_date: string | null;
   nationality: Nationality;
   created_at: string;
 }
