@@ -66,8 +66,10 @@ function toBalance(
 export async function GET(req: NextRequest) {
   const db = getDb();
   const year = Number(req.nextUrl.searchParams.get("year") ?? new Date().getFullYear());
+  // 관리자 계정이 본인 연차현황만 조회하고 싶을 때(예: "내 근태" 탭) mine=1로 요청한다.
+  const mine = req.nextUrl.searchParams.get("mine") === "1";
 
-  if (isAdminRequest(req)) {
+  if (!mine && isAdminRequest(req)) {
     const workers = db
       .prepare("SELECT id, name, hire_date FROM worker WHERE active = 1 ORDER BY name")
       .all() as { id: number; name: string; hire_date: string | null }[];
