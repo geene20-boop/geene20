@@ -6,8 +6,7 @@ const ACTOR = "한전 API 자동연동";
 const CHECK_INTERVAL_MS = 60 * 1000;
 const SYNC_HOUR_KST = 8;
 
-const BASE_URL = process.env.KEPCO_PMETER_BASE_URL ?? "https://opm.kepco.co.kr/openapi/v1";
-const USAGE_PATH = process.env.KEPCO_PMETER_USAGE_PATH ?? "/pwrUsage/daily";
+const DAY_LP_DATA_URL = "https://opm.kepco.co.kr:11080/OpenAPI/getDayLpData.do";
 
 function custNoFor(plant: Plant): string | null {
   const key = plant === "1공장" ? "KEPCO_PMETER_CUSTNO_PLANT1" : "KEPCO_PMETER_CUSTNO_PLANT2";
@@ -31,26 +30,42 @@ function kstYesterday(): string {
 }
 
 /**
- * Open P-Meter 사용량 조회 API 호출부. 한전에서 발급받은 정식 API 명세서와
- * 요청/응답 필드명이 다를 수 있어, 실제 연동 후 이 함수만 조정하면 되도록 분리해뒀다.
+ * Open P-Meter "일단위 전력소비 데이터(일반, getDayLpData)" 조회.
+ * 15분 단위 하루치 96개 값(pwr_qty0015~pwr_qty2400)을 모두 더해 하루 총 사용량을 구한다.
+ * (vld_pwr는 저압 계기의 누적 지침값이라 고압 공장에는 제공되지 않아 사용하지 않음)
  */
 async function fetchDailyUsageKwh(custNo: string, date: string): Promise<number | null> {
   const apiKey = process.env.KEPCO_PMETER_API_KEY;
   if (!apiKey) return null;
 
-  const url = new URL(USAGE_PATH, BASE_URL);
+  const url = new URL(DAY_LP_DATA_URL);
   url.searchParams.set("custNo", custNo);
-  url.searchParams.set("reqDate", date.replace(/-/g, ""));
+  url.searchParams.set("date", date.replace(/-/g, ""));
+  url.searchParams.set("serviceKey", apiKey);
+  url.searchParams.set("returnType", "02");
 
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${apiKey}`, "x-api-key": apiKey },
-  });
+  const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Open P-Meter API 응답 오류 (HTTP ${res.status})`);
   }
   const data = await res.json();
-  const usage = data?.data?.[0]?.usekWh ?? data?.data?.usekWh ?? data?.usekWh;
-  return typeof usage === "number" ? usage : null;
+  const entries = data?.dayLpDataInfoList;
+  if (!Array.isArray(entries) || entries.length === 0) return null;
+
+  let total = 0;
+  let found = false;
+  for (const entry of entries) {
+    for (const [key, value] of Object.entries(entry as Record<string, unknown>)) {
+      if (/^pwr_qty\d{4}$/.test(key)) {
+        const num = Number(value);
+        if (!Number.isNaN(num)) {
+          total += num;
+          found = true;
+        }
+      }
+    }
+  }
+  return found ? Math.round(total * 100) / 100 : null;
 }
 
 export interface PmeterSyncResult {
