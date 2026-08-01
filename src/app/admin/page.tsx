@@ -415,6 +415,97 @@ function BackupCard() {
   );
 }
 
+type PmeterResult = {
+  plant: string;
+  date: string;
+  usage_kwh: number | null;
+  status: "saved" | "skipped_manual" | "no_data" | "error";
+  error?: string;
+};
+
+const PMETER_STATUS_LABELS: Record<PmeterResult["status"], string> = {
+  saved: "저장됨",
+  skipped_manual: "수동입력 있어 건너뜀",
+  no_data: "조회된 값 없음",
+  error: "오류",
+};
+
+function PmeterCard() {
+  const [configured, setConfigured] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [results, setResults] = useState<PmeterResult[] | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function refresh() {
+    const res = await fetch("/api/admin/pmeter");
+    if (!res.ok) return;
+    const data = await res.json();
+    setConfigured(!!data.configured);
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refresh();
+  }, []);
+
+  async function runNow() {
+    setRunning(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/pmeter", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "실패했습니다.");
+      setResults(data.results);
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border p-5 flex flex-col gap-3">
+      <div>
+        <h2 className="font-semibold text-slate-800">한전 Open P-Meter 자동 연동</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          매일 오전 8시(KST)에 전일 전력사용량을 1공장·2공장 각각 자동으로 조회해 전력사용량
+          화면에 채워 넣습니다. 같은 날짜에 이미 수동 입력이 있으면 자동 값으로 덮어쓰지 않습니다.
+        </p>
+      </div>
+      {configured ? (
+        <>
+          <p className="text-xs text-emerald-600">설정되어 있습니다. 자동 연동이 활성화됩니다.</p>
+          <button
+            onClick={runNow}
+            disabled={running}
+            className="border rounded-md px-3 py-1.5 text-sm disabled:opacity-50 w-fit"
+          >
+            {running ? "동기화 중..." : "지금 동기화 실행 (전일치)"}
+          </button>
+        </>
+      ) : (
+        <p className="text-xs text-amber-600">
+          아직 설정되지 않았습니다. KEPCO_PMETER_API_KEY, KEPCO_PMETER_CUSTNO_PLANT1,
+          KEPCO_PMETER_CUSTNO_PLANT2 환경변수를 Railway 프로젝트 설정(Variables)에 추가하면
+          자동으로 활성화됩니다.
+        </p>
+      )}
+      {message && <p className="text-sm text-slate-600">{message}</p>}
+      {results && (
+        <ul className="text-xs text-slate-600 flex flex-col gap-1">
+          {results.map((r) => (
+            <li key={r.plant}>
+              {r.date} {r.plant}: {r.usage_kwh != null ? `${r.usage_kwh.toLocaleString()}kWh · ` : ""}
+              {PMETER_STATUS_LABELS[r.status]}
+              {r.error ? ` (${r.error})` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const admin = useAdminSession();
   const [showModal, setShowModal] = useState(false);
@@ -469,6 +560,7 @@ export default function AdminPage() {
       <AccountManagementCard />
       <AdminPasswordCard />
       <BackupCard />
+      <PmeterCard />
     </div>
   );
 }
