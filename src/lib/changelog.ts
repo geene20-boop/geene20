@@ -7,6 +7,13 @@ export interface ChangelogEntry {
 // 새 기능을 배포할 때 배열 맨 앞에 새 항목을 추가한다 (버전 문자열은 날짜 기반 권장).
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2026.08.01",
+    date: "2026-08-01",
+    items: [
+      { title: "전력사용량 자동 입력 연동", desc: "한전 Open P-Meter API와 연동되어 매일 오전 8시에 전일 전력사용량이 1공장·2공장 각각 자동으로 채워집니다. 값이 다르면 직접 수정할 수 있습니다." },
+    ],
+  },
+  {
     version: "2026.07.29",
     date: "2026-07-29",
     items: [
