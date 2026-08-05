@@ -229,12 +229,10 @@ interface ModulePermission {
 function ModulePermissionCard({ accounts }: { accounts: AccountRow[] }) {
   const [selectedModule, setSelectedModule] = useState<string>("시스템관리");
   const [permissions, setPermissions] = useState<ModulePermission[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
 
   const features = MODULE_FEATURES[selectedModule] || [];
 
   async function togglePermission(userId: number, feature: string, field: keyof Omit<ModulePermission, "id" | "user_id" | "module" | "feature" | "created_at" | "updated_at">) {
-    const key = `${userId}-${feature}`;
     const existing = permissions.find(p => p.user_id === userId && p.feature === feature && p.module === selectedModule);
 
     if (!existing) {

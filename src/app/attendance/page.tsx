@@ -722,12 +722,10 @@ function DailyRosterTab() {
 }
 
 function AdminApprovalTable({
-  rows,
   allRows,
   onChanged,
   canReject,
 }: {
-  rows: LeaveRequest[];
   allRows: LeaveRequest[];
   onChanged: () => void;
   canReject: boolean;
@@ -1062,7 +1060,7 @@ export default function AttendancePage() {
       {activeView === "mine" && tab === "detail" && myBalance && <MonthlyDetailCard balance={myBalance} />}
 
       {activeView === "manage" && tab === "approval" && (
-        <AdminApprovalTable rows={pendingForAdmin} allRows={allRequests} onChanged={refresh} canReject={isAdmin} />
+        <AdminApprovalTable allRows={allRequests} onChanged={refresh} canReject={isAdmin} />
       )}
       {activeView === "manage" && isAdmin && tab === "roster" && <DailyRosterTab />}
       {activeView === "manage" && tab === "history" && (

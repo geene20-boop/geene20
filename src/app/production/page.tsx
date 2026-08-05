@@ -383,8 +383,8 @@ export default function ProductionPage() {
   }, [form.date, form.shift]);
 
   // date가 변경되면 해당 날짜의 최대 sample_no를 찾아 다음 번호 자동생성
-  useEffect(() => {
-    if (currentId != null) return; // 기존 기록 수정 중이면 자동생성 안 함
+  const nextSampleNo = useMemo(() => {
+    if (currentId != null) return null; // 기존 기록 수정 중이면 자동생성 안 함
     const sameDate = logs.filter((l) => l.date === form.date);
     const maxNum = sameDate.reduce((m, l) => {
       if (!l.sample_no) return m;
@@ -392,9 +392,14 @@ export default function ProductionPage() {
       const num = match ? parseInt(match[1], 10) : 0;
       return Math.max(m, num);
     }, 0);
-    const nextNo = `${formatDateForSampleNo(form.date)}-${String(maxNum + 1).padStart(2, "0")}`;
-    setForm((f) => ({ ...f, sample_no: f.sample_no || nextNo }));
+    return `${formatDateForSampleNo(form.date)}-${String(maxNum + 1).padStart(2, "0")}`;
   }, [form.date, logs, currentId]);
+
+  useEffect(() => {
+    if (nextSampleNo && !form.sample_no) {
+      setForm((f) => ({ ...f, sample_no: nextSampleNo }));
+    }
+  }, [nextSampleNo]);
 
   // 입력 중인 내용을 잠깐 멈춘 사이(0.8초) 브라우저에 임시 저장 - 저장 안 하고 나가도 복구 가능
   useEffect(() => {
