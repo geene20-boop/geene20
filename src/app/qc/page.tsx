@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, useRef } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import { PackingItem, ProductionLog, QcTest, Worker, inferShift } from "@/lib/types";
 import { useEnteredBy } from "@/lib/useEnteredBy";
@@ -135,6 +135,20 @@ export default function QcPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 새 기록 생성 시 date가 변경되면 현재 시간으로 time/measured_time 자동 업데이트
+  const lastDate = useRef(form.date);
+  useEffect(() => {
+    if (editingId != null) return;
+    if (lastDate.current !== form.date) {
+      lastDate.current = form.date;
+      setForm((f) => ({
+        ...f,
+        time: nowHHMM(),
+        measured_time: nowHHMM(),
+      }));
+    }
+  }, [form.date, editingId]);
+
   // 생산일자+생산시각(→주/야 자동판별)으로 일치하는 생산일지의 설비셋팅을 생산조건에 자동 반영.
   // 기존 기록을 수정 중일 때는 그 기록의 저장된 값을 그대로 두고 덮어쓰지 않는다.
   useEffect(() => {
@@ -216,7 +230,11 @@ export default function QcPage() {
   }
 
   function resetForm() {
-    setForm(emptyForm());
+    setForm((f) => ({
+      ...emptyForm(),
+      date: f.date,
+      fertilizer_type: f.fertilizer_type,
+    }));
     setEditingId(null);
     setMessage(null);
     clearDraft();

@@ -300,15 +300,26 @@ function ModulePermissionCard({ accounts }: { accounts: AccountRow[] }) {
     setSaving(true);
     setMessage(null);
     try {
-      const updated: ModulePermission[] = [];
-      for (const perm of permissions) {
-        if (perm.id === -1) continue;
-        await fetch("/api/permissions", {
+      // 현재 선택된 모듈/기능의 모든 권한을 저장
+      for (const account of accounts) {
+        const perm = getPermission(account.id, selectedModule, currentFeature);
+        if (!perm) continue; // 권한이 설정되지 않은 경우는 스킵
+
+        const res = await fetch("/api/permissions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(perm),
+          body: JSON.stringify({
+            user_id: perm.user_id,
+            module: perm.module,
+            feature: perm.feature,
+            can_view: perm.can_view,
+            can_create: perm.can_create,
+            can_update: perm.can_update,
+            can_delete: perm.can_delete,
+            is_hidden: perm.is_hidden,
+          }),
         });
-        updated.push(perm);
+        if (!res.ok) throw new Error(`Failed to save permission for user ${account.id}`);
       }
       setMessage("권한이 저장되었습니다.");
       setTimeout(() => setMessage(null), 3000);
