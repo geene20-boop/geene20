@@ -37,14 +37,21 @@ type FormState = {
   moisture_manual: string;
   hardness_manual: string;
   note: string;
+  time: string;
+  sample_no: string;
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
+const nowHHMM = () => new Date().toISOString().slice(11, 16);
 
 function shiftDate(date: string, delta: number): string {
   const d = new Date(`${date}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + delta);
   return d.toISOString().slice(0, 10);
+}
+
+function formatDateForSampleNo(date: string): string {
+  return date.replace(/-/g, ".");
 }
 
 const emptyForm: FormState = {
@@ -73,6 +80,8 @@ const emptyForm: FormState = {
   moisture_manual: "",
   hardness_manual: "",
   note: "",
+  time: nowHHMM(),
+  sample_no: "",
 };
 
 function n(v: string): number | null {
@@ -112,6 +121,8 @@ function fromLog(row: ProductionLog): FormState {
     moisture_manual: toFormValue(row.moisture_manual),
     hardness_manual: toFormValue(row.hardness_manual),
     note: row.note ?? "",
+    time: row.time ?? nowHHMM(),
+    sample_no: row.sample_no ?? "",
   };
 }
 
@@ -344,10 +355,20 @@ export default function ProductionPage() {
       } else {
         setCurrentId(null);
         setLocked(false);
+        // compute next sample number for this date
+        const sameDate = logs.filter((l) => l.date === form.date);
+        const maxNum = sameDate.reduce((m, l) => {
+          if (!l.sample_no) return m;
+          const match = l.sample_no.match(/-(\d+)$/);
+          const num = match ? parseInt(match[1], 10) : 0;
+          return Math.max(m, num);
+        }, 0);
+        const nextNo = `${formatDateForSampleNo(form.date)}-${String(maxNum + 1).padStart(2, "0")}`;
         setForm((f) => ({
           ...emptyForm,
           date: f.date,
           shift: f.shift,
+          sample_no: nextNo,
           carryover_dryer: toFormValue(ctx.carryoverPreview?.dryer),
           carryover_rto: toFormValue(ctx.carryoverPreview?.rto),
           daily_pack_amount:
@@ -370,6 +391,7 @@ export default function ProductionPage() {
       cancelled = true;
     };
   }, [form.date, form.shift]);
+
 
   // 입력 중인 내용을 잠깐 멈춘 사이(0.8초) 브라우저에 임시 저장 - 저장 안 하고 나가도 복구 가능
   useEffect(() => {
@@ -512,6 +534,8 @@ export default function ProductionPage() {
         moisture_manual: n(form.moisture_manual),
         hardness_manual: n(form.hardness_manual),
         note: form.note || null,
+        time: form.time || null,
+        sample_no: form.sample_no || null,
       };
       if (carryoverUnlocked) {
         body.carryOverride = true;
@@ -815,6 +839,28 @@ export default function ProductionPage() {
         </div>
         {tab === "condition" && (
         <>
+        <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${contentLocked ? "opacity-50 pointer-events-none" : ""}`}>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-600">생산시각</span>
+            <input
+              type="time"
+              value={form.time}
+              onChange={(e) => set("time", e.target.value)}
+              className="border rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-slate-400"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-600">시료번호</span>
+            <input
+              type="text"
+              value={form.sample_no}
+              onChange={(e) => set("sample_no", e.target.value)}
+              placeholder={`${formatDateForSampleNo(form.date)}-01`}
+              className="border rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-slate-400 bg-slate-50"
+              readOnly
+            />
+          </label>
+        </div>
         <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${contentLocked ? "opacity-50 pointer-events-none" : ""}`}>
           <EnteredByField
             value={enteredBy}

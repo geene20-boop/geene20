@@ -200,6 +200,141 @@ function AccountManagementCard() {
         </tbody>
       </table>
       </div>
+
+      <ModulePermissionCard accounts={accounts} />
+    </div>
+  );
+}
+
+// 모듈별 기능 정의
+const MODULE_FEATURES: Record<string, string[]> = {
+  "시스템관리": ["이력관리", "백업관리", "관리자설정"],
+  "근태관리": ["승인관리", "근태신청", "연차현황"],
+  "생산관리": ["생산입력", "생산현황"],
+  "제품포장": ["포장입력", "출하관리", "재고현황"],
+};
+
+interface ModulePermission {
+  id: number;
+  user_id: number;
+  module: string;
+  feature: string;
+  can_view: number;
+  can_create: number;
+  can_update: number;
+  can_delete: number;
+  is_hidden: number;
+}
+
+function ModulePermissionCard({ accounts }: { accounts: AccountRow[] }) {
+  const [selectedModule, setSelectedModule] = useState<string>("시스템관리");
+  const [permissions, setPermissions] = useState<ModulePermission[]>([]);
+
+  const features = MODULE_FEATURES[selectedModule] || [];
+
+  return (
+    <div className="bg-white rounded-xl border p-5 flex flex-col gap-4">
+      <div>
+        <h2 className="font-semibold text-slate-800">모듈별 권한 관리</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          각 모듈의 기능별로 사용자별 권한(조회/입력/수정/삭제/안보이기)을 세밀하게 제어합니다.
+        </p>
+      </div>
+
+      <div style={{ display: "flex", gap: "20px", minHeight: "400px" }}>
+        {/* 좌측: 대분류 */}
+        <div style={{ width: "140px", flexShrink: 0 }}>
+          <p className="text-xs text-slate-600 font-medium mb-2">대분류</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+            {Object.keys(MODULE_FEATURES).map(module => (
+              <button
+                key={module}
+                onClick={() => setSelectedModule(module)}
+                style={{
+                  padding: "8px 12px",
+                  background: selectedModule === module ? "#0066cc" : "#f5f5f5",
+                  color: selectedModule === module ? "white" : "#333",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "13px",
+                  textAlign: "left",
+                }}
+              >
+                📁 {module}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 우측: 하위탭 및 권한설정 */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", border: "1px solid #ddd", borderRadius: "4px", overflow: "hidden" }}>
+          {/* 하위탭 */}
+          <div style={{ display: "flex", borderBottom: "1px solid #ddd", background: "#fafafa" }}>
+            {features.map(feature => (
+              <div
+                key={feature}
+                style={{
+                  padding: "10px 16px",
+                  background: "white",
+                  borderBottom: "2px solid #0066cc",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {feature}
+              </div>
+            ))}
+          </div>
+
+          {/* 권한설정 테이블 */}
+          <div style={{ flex: 1, padding: "15px", overflowY: "auto" }}>
+            <p style={{ fontSize: "12px", marginBottom: "10px", color: "#666" }}>
+              <strong>{selectedModule} &gt; {features[0]}</strong> 권한 설정
+            </p>
+            <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
+              <thead style={{ background: "#f0f0f0" }}>
+                <tr>
+                  <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>계정</th>
+                  <th style={{ textAlign: "center", padding: "8px", width: "60px", borderBottom: "1px solid #ddd" }}>조회</th>
+                  <th style={{ textAlign: "center", padding: "8px", width: "60px", borderBottom: "1px solid #ddd" }}>입력</th>
+                  <th style={{ textAlign: "center", padding: "8px", width: "60px", borderBottom: "1px solid #ddd" }}>수정</th>
+                  <th style={{ textAlign: "center", padding: "8px", width: "60px", borderBottom: "1px solid #ddd" }}>삭제</th>
+                  <th style={{ textAlign: "center", padding: "8px", width: "70px", borderBottom: "1px solid #ddd" }}>안보이기</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accounts.map(account => (
+                  <tr key={account.id} style={{ borderBottom: "1px solid #eee" }}>
+                    <td style={{ padding: "8px" }}>{account.display_name || account.username}</td>
+                    <td style={{ textAlign: "center", padding: "8px" }}>
+                      <input type="checkbox" defaultChecked style={{ cursor: "pointer" }} />
+                    </td>
+                    <td style={{ textAlign: "center", padding: "8px" }}>
+                      <input type="checkbox" style={{ cursor: "pointer" }} />
+                    </td>
+                    <td style={{ textAlign: "center", padding: "8px" }}>
+                      <input type="checkbox" style={{ cursor: "pointer" }} />
+                    </td>
+                    <td style={{ textAlign: "center", padding: "8px" }}>
+                      <input type="checkbox" style={{ cursor: "pointer" }} />
+                    </td>
+                    <td style={{ textAlign: "center", padding: "8px" }}>
+                      <input type="checkbox" style={{ cursor: "pointer" }} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+        💡 권한 관리 기능은 준비 중입니다. 향후 API 연결 시 실제 권한 제어가 활성화됩니다.
+      </p>
     </div>
   );
 }
