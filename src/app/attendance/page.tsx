@@ -934,8 +934,6 @@ export default function AttendancePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.checked, isAdmin, isModifier, hasWorker]);
 
-  const pendingForAdmin = useMemo(() => allRequests.filter((r) => r.status === "pending"), [allRequests]);
-
   if (!session.checked) {
     return <p className="text-sm text-slate-400">확인 중...</p>;
   }

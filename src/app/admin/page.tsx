@@ -232,21 +232,6 @@ function ModulePermissionCard({ accounts }: { accounts: AccountRow[] }) {
 
   const features = MODULE_FEATURES[selectedModule] || [];
 
-  async function togglePermission(userId: number, feature: string, field: keyof Omit<ModulePermission, "id" | "user_id" | "module" | "feature" | "created_at" | "updated_at">) {
-    const existing = permissions.find(p => p.user_id === userId && p.feature === feature && p.module === selectedModule);
-
-    if (!existing) {
-      // 현재는 UI만 표시, 실제 저장은 향후 API 연결 시 구현
-      return;
-    }
-
-    const updated = {
-      ...existing,
-      [field]: existing[field] ? 0 : 1,
-    };
-    setPermissions(prev => prev.map(p => p === existing ? updated : p));
-  }
-
   return (
     <div className="bg-white rounded-xl border p-5 flex flex-col gap-4">
       <div>
