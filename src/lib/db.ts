@@ -337,7 +337,7 @@ export function getDb(): Database.Database {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       worker_id INTEGER NOT NULL,
       date TEXT NOT NULL,
-      shift TEXT,               -- 'day' | 'night' (비어있으면 근로자명부 기본 근무형태를 사용)
+      shift TEXT,               -- 'day' | 'night' (비어있으면 주간을 기본값으로 사용)
       status TEXT,              -- 'early_leave' | 'comp_off' | 'late' | 'absent' | 'other' (없으면 정상출근)
       status_detail TEXT,
       updated_by TEXT,
@@ -421,8 +421,8 @@ export function getDb(): Database.Database {
   migrateColumns("board_post", [["pinned", "INTEGER NOT NULL DEFAULT 0"]]);
   migrateColumns("worker", [
     ["hire_date", "TEXT"],
-    ["shift_type", "TEXT"], // 'day' | 'night'
     ["nationality", "TEXT NOT NULL DEFAULT 'domestic'"], // 'domestic' | 'foreign'
+    ["birth_date", "TEXT"],
   ]);
 
   const specCount = db.prepare("SELECT COUNT(*) as c FROM spec_limit").get() as { c: number };

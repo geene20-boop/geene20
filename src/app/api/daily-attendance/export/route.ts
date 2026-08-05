@@ -23,8 +23,8 @@ export async function GET(req: NextRequest) {
 
   const db = getDb();
   const workers = db
-    .prepare("SELECT id, name, nationality, shift_type FROM worker WHERE active = 1 ORDER BY name")
-    .all() as { id: number; name: string; nationality: Nationality; shift_type: ShiftType | null }[];
+    .prepare("SELECT id, name, nationality FROM worker WHERE active = 1 ORDER BY name")
+    .all() as { id: number; name: string; nationality: Nationality }[];
 
   const dailyRows = db
     .prepare("SELECT worker_id, shift, status, status_detail FROM daily_attendance WHERE date = ?")
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
   const sheetRows = workers.map((w) => {
     const daily = dailyByWorker.get(w.id);
     const leave = leaveByWorker.get(w.id);
-    const shift = (daily?.shift ?? w.shift_type ?? "day") as ShiftType;
+    const shift = (daily?.shift ?? "day") as ShiftType;
     const status = leave
       ? `${leave.type} (자동반영)`
       : daily?.status
