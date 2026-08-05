@@ -252,6 +252,23 @@ export function getDb(): Database.Database {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- 모듈별 기능별 세부 권한 (대분류 > 하위탭 > 권한)
+    CREATE TABLE IF NOT EXISTS module_permission (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES user_account(id) ON DELETE CASCADE,
+      module TEXT NOT NULL,             -- '시스템관리' | '근태관리' | '생산관리' 등
+      feature TEXT NOT NULL,            -- '이력관리' | '백업관리' | '관리자설정' 등
+      can_view INTEGER NOT NULL DEFAULT 0,   -- 1: 조회 가능
+      can_create INTEGER NOT NULL DEFAULT 0, -- 1: 입력 가능
+      can_update INTEGER NOT NULL DEFAULT 0, -- 1: 수정 가능
+      can_delete INTEGER NOT NULL DEFAULT 0, -- 1: 삭제 가능
+      is_hidden INTEGER NOT NULL DEFAULT 0,  -- 1: 화면에 표시 안 함
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, module, feature)
+    );
+    CREATE INDEX IF NOT EXISTS idx_module_permission_user ON module_permission(user_id);
+
     -- 근로자명부 (생산/출하 입력 등에서 작업자를 드롭다운으로 선택하기 위한 목록)
     CREATE TABLE IF NOT EXISTS worker (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -352,6 +369,8 @@ export function getDb(): Database.Database {
     ["entered_by", "TEXT"],
     ["updated_by", "TEXT"],
     ["locked", "INTEGER NOT NULL DEFAULT 0"],
+    ["time", "TEXT"],
+    ["sample_no", "TEXT"],
   ]);
   migrateColumns("qc_test", [
     ["entered_by", "TEXT"],
