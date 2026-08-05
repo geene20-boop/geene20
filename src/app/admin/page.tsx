@@ -126,14 +126,6 @@ function AccountManagementCard() {
             className="border rounded-md px-2 py-1.5 text-sm"
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs">
-          <span className="text-slate-500">권한</span>
-          <select value={role} onChange={(e) => setRole(e.target.value as AccountRole)} className="border rounded-md px-2 py-1.5 text-sm">
-            <option value="editor">입력 가능(editor)</option>
-            <option value="modifier">수정·삭제 가능(modifier)</option>
-            <option value="viewer">조회만(viewer)</option>
-          </select>
-        </label>
         <button
           type="submit"
           disabled={busy || !username.trim() || password.length < 8}

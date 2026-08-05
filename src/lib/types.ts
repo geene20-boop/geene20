@@ -43,7 +43,7 @@ export interface ProductionLog {
 
 export interface QcTest {
   id: number;
-  sample_no: number | null;
+  sample_no: string | null;
   fertilizer_type: string | null;
   date: string;
   shift: Shift;

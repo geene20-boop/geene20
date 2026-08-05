@@ -14,6 +14,9 @@ const daysAgo = (n: number) => {
   d.setDate(d.getDate() - n);
   return d.toISOString().slice(0, 10);
 };
+const formatDateForSampleNo = (dateStr: string) => {
+  return dateStr.replace(/-/g, ".");
+};
 
 type FormState = {
   sample_no: string;
@@ -167,11 +170,16 @@ export default function QcPage() {
     };
   }, [form.date, form.time, editingId]);
 
-  // 시료 No.는 해당 생산일자에 이미 등록된 최대 번호 다음 값으로 자동 생성한다 (수기입력 없음)
+  // 시료 No.는 해당 생산일자에 이미 등록된 최대 번호 다음 값으로 자동 생성한다 (YYYY.MM.DD-01 형식)
   const nextSampleNo = useMemo(() => {
     const sameDate = tests.filter((t) => t.date === form.date);
-    const maxNo = sameDate.reduce((m, t) => Math.max(m, t.sample_no ?? 0), 0);
-    return maxNo + 1;
+    const noStrings = sameDate
+      .map((t) => t.sample_no)
+      .filter((s): s is string => typeof s === "string" && s.includes("-"))
+      .map((s) => parseInt(s.split("-")[1], 10));
+    const maxNo = noStrings.length > 0 ? Math.max(...noStrings) : 0;
+    const nextNum = (maxNo + 1).toString().padStart(2, "0");
+    return `${formatDateForSampleNo(form.date)}-${nextNum}`;
   }, [tests, form.date]);
 
   const effectiveSampleNo = editingId != null ? form.sample_no : String(nextSampleNo);
@@ -243,7 +251,7 @@ export default function QcPage() {
     setMessage(null);
     try {
       const body: Record<string, unknown> = {
-        sample_no: n(effectiveSampleNo),
+        sample_no: effectiveSampleNo || null,
         fertilizer_type: form.fertilizer_type || null,
         date: form.date,
         shift: inferShift(form.time),
