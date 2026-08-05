@@ -132,6 +132,12 @@ export default function QcPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTests();
+    // 페이지 로드 시 현재 시간 자동입력
+    setForm((f) => ({
+      ...f,
+      time: f.time || nowHHMM(),
+      measured_time: f.measured_time || nowHHMM(),
+    }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
