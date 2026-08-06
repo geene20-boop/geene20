@@ -7,6 +7,14 @@ export interface ChangelogEntry {
 // 새 기능을 배포할 때 배열 맨 앞에 새 항목을 추가한다 (버전 문자열은 날짜 기반 권장).
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2026.08.06",
+    date: "2026-08-06",
+    items: [
+      { title: "QC 측정 시각 자동입력 수정", desc: "측정기록 입력 화면 로드 시 생산시각과 측정시각에 현재 시간이 자동으로 채워집니다." },
+      { title: "계정관리에 저장 오류 알림 추가", desc: "권한 변경이나 상태 변경 시 성공 또는 오류 메시지로 결과를 표시합니다." },
+    ],
+  },
+  {
     version: "2026.07.29",
     date: "2026-07-29",
     items: [

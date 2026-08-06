@@ -123,13 +123,22 @@ function WorkerRosterCard() {
 
   async function removeWorker(w: Worker) {
     if (!confirm(`${w.name}님을 근로자명부에서 삭제할까요?`)) return;
-    await apiDelete(`/api/worker/${w.id}`);
-    refresh();
+    try {
+      await apiDelete(`/api/worker/${w.id}`);
+      setMessage("근로자가 삭제되었습니다.");
+      refresh();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    }
   }
 
   async function updateWorker(w: Worker, patch: { hireDate?: string | null; shiftType?: ShiftType | null; nationality?: Nationality }) {
-    await apiPut(`/api/worker/${w.id}`, patch);
-    refresh();
+    try {
+      await apiPut(`/api/worker/${w.id}`, patch);
+      refresh();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    }
   }
 
   return (

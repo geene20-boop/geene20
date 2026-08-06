@@ -57,21 +57,39 @@ function AccountManagementCard() {
   }
 
   async function changeRole(id: number, newRole: AccountRole) {
-    await fetch(`/api/accounts/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: newRole }),
-    });
-    refresh();
+    try {
+      const res = await fetch(`/api/accounts/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: newRole }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "권한 변경 실패");
+      }
+      setMessage("권한이 변경되었습니다.");
+      refresh();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    }
   }
 
   async function toggleActive(account: AccountRow) {
-    await fetch(`/api/accounts/${account.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ active: account.active ? false : true }),
-    });
-    refresh();
+    try {
+      const res = await fetch(`/api/accounts/${account.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: account.active ? false : true }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "상태 변경 실패");
+      }
+      setMessage(account.active ? "계정이 비활성화되었습니다." : "계정이 활성화되었습니다.");
+      refresh();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    }
   }
 
   async function resetPassword(id: number) {
