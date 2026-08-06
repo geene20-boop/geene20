@@ -30,9 +30,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { user_id, module, feature, can_view, can_create, can_update, can_delete, is_hidden } = body;
+    const { user_id, module: moduleName, feature, can_view, can_create, can_update, can_delete, is_hidden } = body;
 
-    if (!user_id || !module || !feature) {
+    if (!user_id || !moduleName || !feature) {
       return NextResponse.json(
         { error: "user_id, module, and feature are required" },
         { status: 400 }
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
     ).run(
       user_id,
-      module,
+      moduleName,
       feature,
       can_view ? 1 : 0,
       can_create ? 1 : 0,
@@ -69,10 +69,10 @@ export async function DELETE(req: NextRequest) {
   try {
     const url = new URL(req.url);
     const user_id = url.searchParams.get("user_id");
-    const module = url.searchParams.get("module");
+    const moduleName = url.searchParams.get("module");
     const feature = url.searchParams.get("feature");
 
-    if (!user_id || !module || !feature) {
+    if (!user_id || !moduleName || !feature) {
       return NextResponse.json(
         { error: "user_id, module, and feature are required" },
         { status: 400 }
@@ -82,7 +82,7 @@ export async function DELETE(req: NextRequest) {
     const db = getDb();
     db.prepare(
       `DELETE FROM module_permission WHERE user_id = ? AND module = ? AND feature = ?`
-    ).run(user_id, module, feature);
+    ).run(user_id, moduleName, feature);
 
     return NextResponse.json({ success: true });
   } catch (err) {

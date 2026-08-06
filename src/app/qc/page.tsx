@@ -54,12 +54,6 @@ const emptyForm = (): FormState => ({
   worker: "",
 });
 
-const resetWithCurrentTime = (currentForm: FormState): FormState => ({
-  ...currentForm,
-  time: nowHHMM(),
-  measured_time: nowHHMM(),
-});
-
 const DRAFT_KEY = "qc_draft";
 
 function n(v: string): number | null {
@@ -92,12 +86,6 @@ export default function QcPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.loggedIn, session.displayName]);
-
-  useEffect(() => {
-    if (editingId == null && !form.time) {
-      setForm((f) => resetWithCurrentTime(f));
-    }
-  }, []);
 
   useEffect(() => {
     apiGet<PackingItem[]>("/api/packing-item").then((items) => {
