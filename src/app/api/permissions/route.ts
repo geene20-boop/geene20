@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     const db = getDb();
     const permissions = db
       .prepare(
-        `SELECT * FROM module_permission WHERE user_id = ? ORDER BY module, feature`
+        `SELECT * FROM module_permission WHERE user_id = ? ORDER BY module`
       )
       .all(userId);
 
@@ -30,11 +30,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { user_id, module: moduleName, feature, can_view, can_create, can_update, can_delete, is_hidden } = body;
+    const { user_id, module: moduleName, can_view, can_create, can_update, can_delete, is_hidden } = body;
 
-    if (!user_id || !moduleName || !feature) {
+    if (!user_id || !moduleName) {
       return NextResponse.json(
-        { error: "user_id, module, and feature are required" },
+        { error: "user_id and module are required" },
         { status: 400 }
       );
     }
@@ -42,12 +42,11 @@ export async function POST(req: NextRequest) {
     const db = getDb();
     db.prepare(
       `INSERT OR REPLACE INTO module_permission
-       (user_id, module, feature, can_view, can_create, can_update, can_delete, is_hidden, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+       (user_id, module, can_view, can_create, can_update, can_delete, is_hidden, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`
     ).run(
       user_id,
       moduleName,
-      feature,
       can_view ? 1 : 0,
       can_create ? 1 : 0,
       can_update ? 1 : 0,
@@ -70,19 +69,18 @@ export async function DELETE(req: NextRequest) {
     const url = new URL(req.url);
     const user_id = url.searchParams.get("user_id");
     const moduleName = url.searchParams.get("module");
-    const feature = url.searchParams.get("feature");
 
-    if (!user_id || !moduleName || !feature) {
+    if (!user_id || !moduleName) {
       return NextResponse.json(
-        { error: "user_id, module, and feature are required" },
+        { error: "user_id and module are required" },
         { status: 400 }
       );
     }
 
     const db = getDb();
     db.prepare(
-      `DELETE FROM module_permission WHERE user_id = ? AND module = ? AND feature = ?`
-    ).run(user_id, moduleName, feature);
+      `DELETE FROM module_permission WHERE user_id = ? AND module = ?`
+    ).run(user_id, moduleName);
 
     return NextResponse.json({ success: true });
   } catch (err) {

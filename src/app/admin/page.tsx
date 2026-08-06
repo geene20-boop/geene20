@@ -228,7 +228,6 @@ interface ModulePermission {
   id: number;
   user_id: number;
   module: string;
-  feature: string;
   can_view: number;
   can_create: number;
   can_update: number;
@@ -237,15 +236,10 @@ interface ModulePermission {
 }
 
 function ModulePermissionCard({ accounts }: { accounts: AccountRow[] }) {
-  const [selectedModule, setSelectedModule] = useState<string>("시스템관리");
-  const [selectedFeature, setSelectedFeature] = useState<string>("");
   const [permissions, setPermissions] = useState<ModulePermission[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
-  const features = MODULE_FEATURES[selectedModule] || [];
-  const currentFeature = selectedFeature || features[0];
 
   const loadPermissions = useCallback(async () => {
     setLoading(true);
@@ -268,28 +262,21 @@ function ModulePermissionCard({ accounts }: { accounts: AccountRow[] }) {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelectedFeature("");
-  }, [selectedModule]);
-
-  useEffect(() => {
-    if (!currentFeature) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadPermissions();
-  }, [selectedModule, currentFeature, loadPermissions]);
+  }, [loadPermissions]);
 
-  function getPermission(user_id: number, module: string, feature: string) {
+  function getPermission(user_id: number, module: string) {
     return permissions.find(
-      (p) => p.user_id === user_id && p.module === module && p.feature === feature
+      (p) => p.user_id === user_id && p.module === module
     );
   }
 
   function togglePermission(
     user_id: number,
     module: string,
-    feature: string,
     permission: "can_view" | "can_create" | "can_update" | "can_delete" | "is_hidden"
   ) {
-    const perm = getPermission(user_id, module, feature);
+    const perm = getPermission(user_id, module);
     const newValue = perm ? !perm[permission] : true;
 
     if (perm) {
@@ -305,7 +292,6 @@ function ModulePermissionCard({ accounts }: { accounts: AccountRow[] }) {
           id: -1,
           user_id,
           module,
-          feature,
           can_view: permission === "can_view" ? 1 : 0,
           can_create: permission === "can_create" ? 1 : 0,
           can_update: permission === "can_update" ? 1 : 0,
@@ -320,26 +306,26 @@ function ModulePermissionCard({ accounts }: { accounts: AccountRow[] }) {
     setSaving(true);
     setMessage(null);
     try {
-      // 현재 선택된 모듈/기능의 모든 권한을 저장
-      for (const account of accounts) {
-        const perm = getPermission(account.id, selectedModule, currentFeature);
-        if (!perm) continue; // 권한이 설정되지 않은 경우는 스킵
+      for (const module of Object.keys(MODULE_FEATURES)) {
+        for (const account of accounts) {
+          const perm = getPermission(account.id, module);
+          if (!perm) continue;
 
-        const res = await fetch("/api/permissions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_id: perm.user_id,
-            module: perm.module,
-            feature: perm.feature,
-            can_view: perm.can_view,
-            can_create: perm.can_create,
-            can_update: perm.can_update,
-            can_delete: perm.can_delete,
-            is_hidden: perm.is_hidden,
-          }),
-        });
-        if (!res.ok) throw new Error(`Failed to save permission for user ${account.id}`);
+          const res = await fetch("/api/permissions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: perm.user_id,
+              module: perm.module,
+              can_view: perm.can_view,
+              can_create: perm.can_create,
+              can_update: perm.can_update,
+              can_delete: perm.can_delete,
+              is_hidden: perm.is_hidden,
+            }),
+          });
+          if (!res.ok) throw new Error(`Failed to save permission for user ${account.id}`);
+        }
       }
       setMessage("권한이 저장되었습니다.");
       setTimeout(() => setMessage(null), 3000);
@@ -356,172 +342,116 @@ function ModulePermissionCard({ accounts }: { accounts: AccountRow[] }) {
       <div>
         <h2 className="font-semibold text-slate-800">모듈별 권한 관리</h2>
         <p className="text-sm text-slate-500 mt-1">
-          각 모듈의 기능별로 사용자별 권한(조회/입력/수정/삭제/안보이기)을 세밀하게 제어합니다.
+          각 모듈별로 사용자에게 권한(조회/입력/수정/삭제/안보이기)을 제어합니다. 모듈에 부여된 권한은 그 모듈의 모든 기능에 동일하게 적용됩니다.
         </p>
       </div>
 
-      <div style={{ display: "flex", gap: "20px", minHeight: "400px" }}>
-        {/* 좌측: 대분류 */}
-        <div style={{ width: "140px", flexShrink: 0 }}>
-          <p className="text-xs text-slate-600 font-medium mb-2">대분류</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+      <div style={{ overflowX: "auto", marginBottom: "12px" }}>
+        <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
+          <thead style={{ background: "#f0f0f0" }}>
+            <tr>
+              <th style={{ textAlign: "left", padding: "10px", borderBottom: "1px solid #ddd", minWidth: "120px" }}>모듈</th>
+              {accounts.map((account) => (
+                <th key={account.id} style={{ textAlign: "center", padding: "10px", borderBottom: "1px solid #ddd", minWidth: "140px" }}>
+                  {account.display_name || account.username}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
             {Object.keys(MODULE_FEATURES).map((module) => (
-              <button
-                key={module}
-                onClick={() => setSelectedModule(module)}
-                style={{
-                  padding: "8px 12px",
-                  background: selectedModule === module ? "#0066cc" : "#f5f5f5",
-                  color: selectedModule === module ? "white" : "#333",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  fontSize: "13px",
-                  textAlign: "left",
-                }}
-              >
-                📁 {module}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* 우측: 하위탭 및 권한설정 */}
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            border: "1px solid #ddd",
-            borderRadius: "4px",
-            overflow: "hidden",
-          }}
-        >
-          {/* 하위탭 */}
-          <div style={{ display: "flex", borderBottom: "1px solid #ddd", background: "#fafafa", flexWrap: "wrap" }}>
-            {features.map((feature) => (
-              <button
-                key={feature}
-                onClick={() => setSelectedFeature(feature)}
-                style={{
-                  padding: "10px 16px",
-                  background: currentFeature === feature ? "white" : "#fafafa",
-                  borderBottom: currentFeature === feature ? "2px solid #0066cc" : "2px solid transparent",
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: "12px",
-                  fontWeight: "bold",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {feature}
-              </button>
-            ))}
-          </div>
-
-          {/* 권한설정 테이블 */}
-          <div style={{ flex: 1, padding: "15px", display: "flex", flexDirection: "column" }}>
-            <p style={{ fontSize: "12px", marginBottom: "10px", color: "#666" }}>
-              <strong>
-                {selectedModule} &gt; {currentFeature}
-              </strong>{" "}
-              권한 설정
-            </p>
-            <div style={{ flex: 1, overflowY: "auto", marginBottom: "12px" }}>
-              <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
-                <thead style={{ background: "#f0f0f0" }}>
-                  <tr>
-                    <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>계정</th>
-                    <th style={{ textAlign: "center", padding: "8px", width: "60px", borderBottom: "1px solid #ddd" }}>조회</th>
-                    <th style={{ textAlign: "center", padding: "8px", width: "60px", borderBottom: "1px solid #ddd" }}>입력</th>
-                    <th style={{ textAlign: "center", padding: "8px", width: "60px", borderBottom: "1px solid #ddd" }}>수정</th>
-                    <th style={{ textAlign: "center", padding: "8px", width: "60px", borderBottom: "1px solid #ddd" }}>삭제</th>
-                    <th style={{ textAlign: "center", padding: "8px", width: "70px", borderBottom: "1px solid #ddd" }}>안보이기</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {accounts.map((account) => {
-                    const perm = getPermission(account.id, selectedModule, currentFeature);
-                    return (
-                      <tr key={account.id} style={{ borderBottom: "1px solid #eee" }}>
-                        <td style={{ padding: "8px" }}>{account.display_name || account.username}</td>
-                        <td style={{ textAlign: "center", padding: "8px" }}>
+              <tr key={module} style={{ borderBottom: "1px solid #eee" }}>
+                <td style={{ padding: "10px", fontWeight: "500", background: "#fafafa" }}>
+                  📁 {module}
+                </td>
+                {accounts.map((account) => {
+                  const perm = getPermission(account.id, module);
+                  return (
+                    <td key={account.id} style={{ padding: "8px", borderRight: "1px solid #eee" }}>
+                      <div style={{ display: "flex", gap: "6px", justifyContent: "center", flexWrap: "wrap" }}>
+                        <label title="조회" style={{ display: "flex", alignItems: "center", gap: "2px", fontSize: "11px" }}>
                           <input
                             type="checkbox"
                             checked={!!perm?.can_view}
-                            onChange={() => togglePermission(account.id, selectedModule, currentFeature, "can_view")}
+                            onChange={() => togglePermission(account.id, module, "can_view")}
                             disabled={loading}
                             style={{ cursor: loading ? "default" : "pointer" }}
                           />
-                        </td>
-                        <td style={{ textAlign: "center", padding: "8px" }}>
+                          <span>조회</span>
+                        </label>
+                        <label title="입력" style={{ display: "flex", alignItems: "center", gap: "2px", fontSize: "11px" }}>
                           <input
                             type="checkbox"
                             checked={!!perm?.can_create}
-                            onChange={() => togglePermission(account.id, selectedModule, currentFeature, "can_create")}
+                            onChange={() => togglePermission(account.id, module, "can_create")}
                             disabled={loading}
                             style={{ cursor: loading ? "default" : "pointer" }}
                           />
-                        </td>
-                        <td style={{ textAlign: "center", padding: "8px" }}>
+                          <span>입력</span>
+                        </label>
+                        <label title="수정" style={{ display: "flex", alignItems: "center", gap: "2px", fontSize: "11px" }}>
                           <input
                             type="checkbox"
                             checked={!!perm?.can_update}
-                            onChange={() => togglePermission(account.id, selectedModule, currentFeature, "can_update")}
+                            onChange={() => togglePermission(account.id, module, "can_update")}
                             disabled={loading}
                             style={{ cursor: loading ? "default" : "pointer" }}
                           />
-                        </td>
-                        <td style={{ textAlign: "center", padding: "8px" }}>
+                          <span>수정</span>
+                        </label>
+                        <label title="삭제" style={{ display: "flex", alignItems: "center", gap: "2px", fontSize: "11px" }}>
                           <input
                             type="checkbox"
                             checked={!!perm?.can_delete}
-                            onChange={() => togglePermission(account.id, selectedModule, currentFeature, "can_delete")}
+                            onChange={() => togglePermission(account.id, module, "can_delete")}
                             disabled={loading}
                             style={{ cursor: loading ? "default" : "pointer" }}
                           />
-                        </td>
-                        <td style={{ textAlign: "center", padding: "8px" }}>
+                          <span>삭제</span>
+                        </label>
+                        <label title="안보이기" style={{ display: "flex", alignItems: "center", gap: "2px", fontSize: "11px" }}>
                           <input
                             type="checkbox"
                             checked={!!perm?.is_hidden}
-                            onChange={() => togglePermission(account.id, selectedModule, currentFeature, "is_hidden")}
+                            onChange={() => togglePermission(account.id, module, "is_hidden")}
                             disabled={loading}
                             style={{ cursor: loading ? "default" : "pointer" }}
                           />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center", borderTop: "1px solid #ddd", paddingTop: "12px" }}>
-              <button
-                onClick={saveAll}
-                disabled={saving}
-                style={{
-                  padding: "8px 16px",
-                  background: "#0066cc",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "4px",
-                  cursor: saving ? "default" : "pointer",
-                  fontSize: "12px",
-                  fontWeight: "bold",
-                  opacity: saving ? 0.6 : 1,
-                }}
-              >
-                {saving ? "저장 중..." : "저장"}
-              </button>
-              {message && (
-                <span style={{ fontSize: "12px", color: message.includes("실패") ? "#d32f2f" : "#388e3c" }}>
-                  {message}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
+                          <span>숨김</span>
+                        </label>
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+        <button
+          onClick={saveAll}
+          disabled={saving}
+          style={{
+            padding: "8px 16px",
+            background: "#0066cc",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: saving ? "default" : "pointer",
+            fontSize: "12px",
+            fontWeight: "bold",
+            opacity: saving ? 0.6 : 1,
+          }}
+        >
+          {saving ? "저장 중..." : "저장"}
+        </button>
+        {message && (
+          <span style={{ fontSize: "12px", color: message.includes("실패") ? "#d32f2f" : "#388e3c" }}>
+            {message}
+          </span>
+        )}
       </div>
     </div>
   );
