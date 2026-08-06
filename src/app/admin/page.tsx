@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
+import { TabVisibility } from "@/lib/types";
 
 type AccountRole = "viewer" | "editor" | "modifier";
 
@@ -705,6 +706,173 @@ const PMETER_STATUS_LABELS: Record<PmeterResult["status"], string> = {
   error: "오류",
 };
 
+function TabVisibilityCard() {
+  const [tabs, setTabs] = useState<TabVisibility[]>([]);
+  const [module, setModule] = useState("");
+  const [feature, setFeature] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function refresh() {
+    try {
+      const res = await fetch("/api/tab-visibility");
+      if (res.ok) {
+        setTabs(await res.json());
+      }
+    } catch (err) {
+      console.error("Failed to load tab visibility:", err);
+    }
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refresh();
+  }, []);
+
+  async function addTab(e: React.FormEvent) {
+    e.preventDefault();
+    if (!module.trim() || !feature.trim()) return;
+    setLoading(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/tab-visibility", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ module: module.trim(), feature: feature.trim(), visible: 1 }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "실패했습니다.");
+      setModule("");
+      setFeature("");
+      setMessage("탭이 추가되었습니다.");
+      refresh();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function toggleVisibility(tab: TabVisibility) {
+    try {
+      const res = await fetch(`/api/tab-visibility/${encodeURIComponent(tab.module)}/${encodeURIComponent(tab.feature)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visible: tab.visible ? 0 : 1 }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "실패했습니다.");
+      setMessage(tab.visible ? "탭이 숨겨졌습니다." : "탭이 표시됩니다.");
+      refresh();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    }
+  }
+
+  async function deleteTab(tab: TabVisibility) {
+    if (!confirm(`'${tab.feature}' 탭을 삭제하시겠습니까?`)) return;
+    try {
+      const res = await fetch(`/api/tab-visibility/${encodeURIComponent(tab.module)}/${encodeURIComponent(tab.feature)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "실패했습니다.");
+      setMessage("탭이 삭제되었습니다.");
+      refresh();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border p-5 flex flex-col gap-4">
+      <div>
+        <h2 className="font-semibold text-slate-800">탭 표시 여부</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          시스템 전체 사용자에게 일괄 적용되는 탭 표시/숨김 설정입니다. 특정 탭을 모든 사용자에게 숨길 수 있습니다.
+        </p>
+      </div>
+
+      <form onSubmit={addTab} className="flex gap-2 items-end flex-wrap">
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">모듈</span>
+          <input
+            value={module}
+            onChange={(e) => setModule(e.target.value)}
+            placeholder="예: 생산관리"
+            className="border rounded-md px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">탭 이름</span>
+          <input
+            value={feature}
+            onChange={(e) => setFeature(e.target.value)}
+            placeholder="예: 백업관리"
+            className="border rounded-md px-2 py-1.5 text-sm"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={loading || !module.trim() || !feature.trim()}
+          className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
+        >
+          추가
+        </button>
+      </form>
+      {message && <p className="text-sm text-slate-600">{message}</p>}
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-100 text-slate-600">
+            <tr>
+              <th className="text-left px-3 py-2">모듈</th>
+              <th className="text-left px-3 py-2">탭 이름</th>
+              <th className="text-left px-3 py-2">상태</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {tabs.map((tab) => (
+              <tr key={`${tab.module}-${tab.feature}`} className="border-t">
+                <td className="px-3 py-2">{tab.module}</td>
+                <td className="px-3 py-2">{tab.feature}</td>
+                <td className="px-3 py-2">
+                  {tab.visible ? (
+                    <span className="text-emerald-600 text-xs font-medium">표시</span>
+                  ) : (
+                    <span className="text-slate-400 text-xs font-medium">숨김</span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => toggleVisibility(tab)}
+                      className="text-xs border rounded-md px-2 py-1 bg-white hover:bg-slate-50"
+                    >
+                      {tab.visible ? "숨기기" : "표시"}
+                    </button>
+                    <button
+                      onClick={() => deleteTab(tab)}
+                      className="text-xs border rounded-md px-2 py-1 bg-white text-red-600 hover:bg-red-50"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {tabs.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-3 py-8 text-center text-slate-400">
+                  등록된 탭이 없습니다.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function PmeterCard() {
   const [configured, setConfigured] = useState(false);
   const [running, setRunning] = useState(false);
@@ -834,6 +1002,7 @@ export default function AdminPage() {
 
       <AccountManagementCard />
       <AdminPasswordCard />
+      <TabVisibilityCard />
       <BackupCard />
       <PmeterCard />
       {/* 모듈별 권한관리는 제거됨 */}

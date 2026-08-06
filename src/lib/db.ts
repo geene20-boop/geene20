@@ -343,6 +343,17 @@ export function getDb(): Database.Database {
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(worker_id, date)
     );
+
+    -- 탭 표시 여부 설정 (시스템 전체 사용자에게 일괄 적용)
+    CREATE TABLE IF NOT EXISTS tab_visibility (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      module TEXT NOT NULL,      -- '생산관리' | '생산가동' | '생산/출하입력' 등
+      feature TEXT NOT NULL,     -- 'backup' | 'maintenance' 등 - 탭 이름
+      visible INTEGER NOT NULL DEFAULT 1, -- 1: 표시, 0: 숨김
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(module, feature)
+    );
   `);
 
   // 기존에 만들어진 DB에도 새 컬럼이 안전하게 추가되도록 마이그레이션
@@ -422,6 +433,7 @@ export function getDb(): Database.Database {
     ["hire_date", "TEXT"],
     ["nationality", "TEXT NOT NULL DEFAULT 'domestic'"], // 'domestic' | 'foreign'
     ["birth_date", "TEXT"],
+    ["foreign_country", "TEXT"], // 'cambodia' | 'nepal' (외국인일 때만 사용)
   ]);
 
   const specCount = db.prepare("SELECT COUNT(*) as c FROM spec_limit").get() as { c: number };

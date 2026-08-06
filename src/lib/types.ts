@@ -280,6 +280,7 @@ export interface Worker {
   hire_date: string | null;
   birth_date: string | null;
   nationality: Nationality;
+  foreign_country: string | null; // 'cambodia' | 'nepal'
   created_at: string;
 }
 
@@ -352,4 +353,13 @@ export interface BoardPost {
   created_at: string;
   updated_at: string;
   attachments: BoardAttachment[];
+}
+
+export interface TabVisibility {
+  id: number;
+  module: string; // '생산관리' | '생산가동' | '생산/출하입력' | '품질관리' | '재고관리' 등
+  feature: string; // 'backup' | 'maintenance' 등 - 탭 이름
+  visible: number; // 1: 표시, 0: 숨김
+  created_at: string;
+  updated_at: string;
 }

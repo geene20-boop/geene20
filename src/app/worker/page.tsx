@@ -132,7 +132,7 @@ function WorkerRosterCard() {
     }
   }
 
-  async function updateWorker(w: Worker, patch: { hireDate?: string | null; birthDate?: string | null; nationality?: Nationality }) {
+  async function updateWorker(w: Worker, patch: { hireDate?: string | null; birthDate?: string | null; nationality?: Nationality; foreignCountry?: string | null }) {
     try {
       await apiPut(`/api/worker/${w.id}`, patch);
       refresh();
@@ -174,6 +174,7 @@ function WorkerRosterCard() {
               <th className="text-left px-3 py-2">입사일</th>
               <th className="text-left px-3 py-2">생년월일</th>
               <th className="text-left px-3 py-2">국적</th>
+              <th className="text-left px-3 py-2">외국인 지역</th>
               <th className="text-left px-3 py-2">개인계정</th>
               <th className="px-3 py-2"></th>
             </tr>
@@ -212,6 +213,19 @@ function WorkerRosterCard() {
                       </select>
                     </td>
                     <td className="px-3 py-2">
+                      {w.nationality === "foreign" ? (
+                        <select
+                          value={w.foreign_country ?? ""}
+                          onChange={(e) => updateWorker(w, { foreignCountry: e.target.value || null })}
+                          className="border rounded-md px-2 py-1 text-xs"
+                        >
+                          <option value="">선택</option>
+                          <option value="cambodia">캄보디아</option>
+                          <option value="nepal">네팔</option>
+                        </select>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-2">
                       {account ? (
                         <span className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
                           계정 연동됨 ({account.username})
@@ -234,7 +248,7 @@ function WorkerRosterCard() {
                   </tr>
                   {issuingFor === w.id && (
                     <tr>
-                      <td colSpan={6} className="px-3 pb-3">
+                      <td colSpan={7} className="px-3 pb-3">
                         <AccountIssueForm
                           worker={w}
                           onDone={() => {
@@ -251,7 +265,7 @@ function WorkerRosterCard() {
             })}
             {workers.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={7} className="px-3 py-8 text-center text-slate-400">
                   등록된 근로자가 없습니다.
                 </td>
               </tr>
