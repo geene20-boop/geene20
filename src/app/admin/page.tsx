@@ -144,14 +144,6 @@ function AccountManagementCard() {
             className="border rounded-md px-2 py-1.5 text-sm"
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs">
-          <span className="text-slate-500">권한</span>
-          <select value={role} onChange={(e) => setRole(e.target.value as AccountRole)} className="border rounded-md px-2 py-1.5 text-sm">
-            <option value="editor">입력 가능(editor)</option>
-            <option value="modifier">수정·삭제 가능(modifier)</option>
-            <option value="viewer">조회만(viewer)</option>
-          </select>
-        </label>
         <button
           type="submit"
           disabled={busy || !username.trim() || password.length < 8}
@@ -217,6 +209,317 @@ function AccountManagementCard() {
           )}
         </tbody>
       </table>
+      </div>
+
+      <ModulePermissionCard accounts={accounts} />
+    </div>
+  );
+}
+
+// 모듈별 기능 정의
+const MODULE_FEATURES: Record<string, string[]> = {
+  "시스템관리": ["이력관리", "백업관리", "관리자설정"],
+  "근태관리": ["승인관리", "근태신청", "연차현황"],
+  "생산관리": ["생산입력", "생산현황"],
+  "제품포장": ["포장입력", "출하관리", "재고현황"],
+};
+
+interface ModulePermission {
+  id: number;
+  user_id: number;
+  module: string;
+  feature: string;
+  can_view: number;
+  can_create: number;
+  can_update: number;
+  can_delete: number;
+  is_hidden: number;
+}
+
+function ModulePermissionCard({ accounts }: { accounts: AccountRow[] }) {
+  const [selectedModule, setSelectedModule] = useState<string>("시스템관리");
+  const [selectedFeature, setSelectedFeature] = useState<string>("");
+  const [permissions, setPermissions] = useState<ModulePermission[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const features = MODULE_FEATURES[selectedModule] || [];
+  const currentFeature = selectedFeature || features[0];
+
+  useEffect(() => {
+    setSelectedFeature("");
+  }, [selectedModule]);
+
+  useEffect(() => {
+    if (!currentFeature) return;
+    loadPermissions();
+  }, [selectedModule, currentFeature]);
+
+  async function loadPermissions() {
+    setLoading(true);
+    try {
+      const allPerms: ModulePermission[] = [];
+      for (const account of accounts) {
+        const res = await fetch(`/api/permissions?user_id=${account.id}`);
+        if (res.ok) {
+          const userPerms = await res.json();
+          allPerms.push(...userPerms);
+        }
+      }
+      setPermissions(allPerms);
+    } catch (err) {
+      console.error("Failed to load permissions:", err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function getPermission(user_id: number, module: string, feature: string) {
+    return permissions.find(
+      (p) => p.user_id === user_id && p.module === module && p.feature === feature
+    );
+  }
+
+  function togglePermission(
+    user_id: number,
+    module: string,
+    feature: string,
+    permission: "can_view" | "can_create" | "can_update" | "can_delete" | "is_hidden"
+  ) {
+    const perm = getPermission(user_id, module, feature);
+    const newValue = perm ? !perm[permission] : true;
+
+    if (perm) {
+      setPermissions(
+        permissions.map((p) =>
+          p.id === perm.id ? { ...p, [permission]: newValue ? 1 : 0 } : p
+        )
+      );
+    } else {
+      setPermissions([
+        ...permissions,
+        {
+          id: -1,
+          user_id,
+          module,
+          feature,
+          can_view: permission === "can_view" ? 1 : 0,
+          can_create: permission === "can_create" ? 1 : 0,
+          can_update: permission === "can_update" ? 1 : 0,
+          can_delete: permission === "can_delete" ? 1 : 0,
+          is_hidden: permission === "is_hidden" ? 1 : 0,
+        },
+      ]);
+    }
+  }
+
+  async function saveAll() {
+    setSaving(true);
+    setMessage(null);
+    try {
+      // 현재 선택된 모듈/기능의 모든 권한을 저장
+      for (const account of accounts) {
+        const perm = getPermission(account.id, selectedModule, currentFeature);
+        if (!perm) continue; // 권한이 설정되지 않은 경우는 스킵
+
+        const res = await fetch("/api/permissions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: perm.user_id,
+            module: perm.module,
+            feature: perm.feature,
+            can_view: perm.can_view,
+            can_create: perm.can_create,
+            can_update: perm.can_update,
+            can_delete: perm.can_delete,
+            is_hidden: perm.is_hidden,
+          }),
+        });
+        if (!res.ok) throw new Error(`Failed to save permission for user ${account.id}`);
+      }
+      setMessage("권한이 저장되었습니다.");
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      console.error("Failed to save permissions:", err);
+      setMessage("권한 저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border p-5 flex flex-col gap-4">
+      <div>
+        <h2 className="font-semibold text-slate-800">모듈별 권한 관리</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          각 모듈의 기능별로 사용자별 권한(조회/입력/수정/삭제/안보이기)을 세밀하게 제어합니다.
+        </p>
+      </div>
+
+      <div style={{ display: "flex", gap: "20px", minHeight: "400px" }}>
+        {/* 좌측: 대분류 */}
+        <div style={{ width: "140px", flexShrink: 0 }}>
+          <p className="text-xs text-slate-600 font-medium mb-2">대분류</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+            {Object.keys(MODULE_FEATURES).map((module) => (
+              <button
+                key={module}
+                onClick={() => setSelectedModule(module)}
+                style={{
+                  padding: "8px 12px",
+                  background: selectedModule === module ? "#0066cc" : "#f5f5f5",
+                  color: selectedModule === module ? "white" : "#333",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontSize: "13px",
+                  textAlign: "left",
+                }}
+              >
+                📁 {module}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 우측: 하위탭 및 권한설정 */}
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            border: "1px solid #ddd",
+            borderRadius: "4px",
+            overflow: "hidden",
+          }}
+        >
+          {/* 하위탭 */}
+          <div style={{ display: "flex", borderBottom: "1px solid #ddd", background: "#fafafa", flexWrap: "wrap" }}>
+            {features.map((feature) => (
+              <button
+                key={feature}
+                onClick={() => setSelectedFeature(feature)}
+                style={{
+                  padding: "10px 16px",
+                  background: currentFeature === feature ? "white" : "#fafafa",
+                  borderBottom: currentFeature === feature ? "2px solid #0066cc" : "2px solid transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {feature}
+              </button>
+            ))}
+          </div>
+
+          {/* 권한설정 테이블 */}
+          <div style={{ flex: 1, padding: "15px", display: "flex", flexDirection: "column" }}>
+            <p style={{ fontSize: "12px", marginBottom: "10px", color: "#666" }}>
+              <strong>
+                {selectedModule} &gt; {currentFeature}
+              </strong>{" "}
+              권한 설정
+            </p>
+            <div style={{ flex: 1, overflowY: "auto", marginBottom: "12px" }}>
+              <table style={{ width: "100%", fontSize: "12px", borderCollapse: "collapse" }}>
+                <thead style={{ background: "#f0f0f0" }}>
+                  <tr>
+                    <th style={{ textAlign: "left", padding: "8px", borderBottom: "1px solid #ddd" }}>계정</th>
+                    <th style={{ textAlign: "center", padding: "8px", width: "60px", borderBottom: "1px solid #ddd" }}>조회</th>
+                    <th style={{ textAlign: "center", padding: "8px", width: "60px", borderBottom: "1px solid #ddd" }}>입력</th>
+                    <th style={{ textAlign: "center", padding: "8px", width: "60px", borderBottom: "1px solid #ddd" }}>수정</th>
+                    <th style={{ textAlign: "center", padding: "8px", width: "60px", borderBottom: "1px solid #ddd" }}>삭제</th>
+                    <th style={{ textAlign: "center", padding: "8px", width: "70px", borderBottom: "1px solid #ddd" }}>안보이기</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {accounts.map((account) => {
+                    const perm = getPermission(account.id, selectedModule, currentFeature);
+                    return (
+                      <tr key={account.id} style={{ borderBottom: "1px solid #eee" }}>
+                        <td style={{ padding: "8px" }}>{account.display_name || account.username}</td>
+                        <td style={{ textAlign: "center", padding: "8px" }}>
+                          <input
+                            type="checkbox"
+                            checked={!!perm?.can_view}
+                            onChange={() => togglePermission(account.id, selectedModule, currentFeature, "can_view")}
+                            disabled={loading}
+                            style={{ cursor: loading ? "default" : "pointer" }}
+                          />
+                        </td>
+                        <td style={{ textAlign: "center", padding: "8px" }}>
+                          <input
+                            type="checkbox"
+                            checked={!!perm?.can_create}
+                            onChange={() => togglePermission(account.id, selectedModule, currentFeature, "can_create")}
+                            disabled={loading}
+                            style={{ cursor: loading ? "default" : "pointer" }}
+                          />
+                        </td>
+                        <td style={{ textAlign: "center", padding: "8px" }}>
+                          <input
+                            type="checkbox"
+                            checked={!!perm?.can_update}
+                            onChange={() => togglePermission(account.id, selectedModule, currentFeature, "can_update")}
+                            disabled={loading}
+                            style={{ cursor: loading ? "default" : "pointer" }}
+                          />
+                        </td>
+                        <td style={{ textAlign: "center", padding: "8px" }}>
+                          <input
+                            type="checkbox"
+                            checked={!!perm?.can_delete}
+                            onChange={() => togglePermission(account.id, selectedModule, currentFeature, "can_delete")}
+                            disabled={loading}
+                            style={{ cursor: loading ? "default" : "pointer" }}
+                          />
+                        </td>
+                        <td style={{ textAlign: "center", padding: "8px" }}>
+                          <input
+                            type="checkbox"
+                            checked={!!perm?.is_hidden}
+                            onChange={() => togglePermission(account.id, selectedModule, currentFeature, "is_hidden")}
+                            disabled={loading}
+                            style={{ cursor: loading ? "default" : "pointer" }}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center", borderTop: "1px solid #ddd", paddingTop: "12px" }}>
+              <button
+                onClick={saveAll}
+                disabled={saving}
+                style={{
+                  padding: "8px 16px",
+                  background: "#0066cc",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: saving ? "default" : "pointer",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                  opacity: saving ? 0.6 : 1,
+                }}
+              >
+                {saving ? "저장 중..." : "저장"}
+              </button>
+              {message && (
+                <span style={{ fontSize: "12px", color: message.includes("실패") ? "#d32f2f" : "#388e3c" }}>
+                  {message}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -433,6 +736,97 @@ function BackupCard() {
   );
 }
 
+type PmeterResult = {
+  plant: string;
+  date: string;
+  usage_kwh: number | null;
+  status: "saved" | "skipped_manual" | "no_data" | "error";
+  error?: string;
+};
+
+const PMETER_STATUS_LABELS: Record<PmeterResult["status"], string> = {
+  saved: "저장됨",
+  skipped_manual: "수동입력 있어 건너뜀",
+  no_data: "조회된 값 없음",
+  error: "오류",
+};
+
+function PmeterCard() {
+  const [configured, setConfigured] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [results, setResults] = useState<PmeterResult[] | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function refresh() {
+    const res = await fetch("/api/admin/pmeter");
+    if (!res.ok) return;
+    const data = await res.json();
+    setConfigured(!!data.configured);
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refresh();
+  }, []);
+
+  async function runNow() {
+    setRunning(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/pmeter", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "실패했습니다.");
+      setResults(data.results);
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border p-5 flex flex-col gap-3">
+      <div>
+        <h2 className="font-semibold text-slate-800">한전 Open P-Meter 자동 연동</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          매일 오전 8시(KST)에 전일 전력사용량을 1공장·2공장 각각 자동으로 조회해 전력사용량
+          화면에 채워 넣습니다. 같은 날짜에 이미 수동 입력이 있으면 자동 값으로 덮어쓰지 않습니다.
+        </p>
+      </div>
+      {configured ? (
+        <>
+          <p className="text-xs text-emerald-600">설정되어 있습니다. 자동 연동이 활성화됩니다.</p>
+          <button
+            onClick={runNow}
+            disabled={running}
+            className="border rounded-md px-3 py-1.5 text-sm disabled:opacity-50 w-fit"
+          >
+            {running ? "동기화 중..." : "지금 동기화 실행 (전일치)"}
+          </button>
+        </>
+      ) : (
+        <p className="text-xs text-amber-600">
+          아직 설정되지 않았습니다. KEPCO_PMETER_API_KEY, KEPCO_PMETER_CUSTNO_PLANT1,
+          KEPCO_PMETER_CUSTNO_PLANT2 환경변수를 Railway 프로젝트 설정(Variables)에 추가하면
+          자동으로 활성화됩니다.
+        </p>
+      )}
+      {message && <p className="text-sm text-slate-600">{message}</p>}
+      {results && (
+        <ul className="text-xs text-slate-600 flex flex-col gap-1">
+          {results.map((r) => (
+            <li key={r.plant}>
+              {r.date} {r.plant}: {r.usage_kwh != null ? `${r.usage_kwh.toLocaleString()}kWh · ` : ""}
+              {PMETER_STATUS_LABELS[r.status]}
+              {r.error ? ` (${r.error})` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const admin = useAdminSession();
   const [showModal, setShowModal] = useState(false);
@@ -487,6 +881,7 @@ export default function AdminPage() {
       <AccountManagementCard />
       <AdminPasswordCard />
       <BackupCard />
+      <PmeterCard />
     </div>
   );
 }

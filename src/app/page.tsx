@@ -1,5 +1,6 @@
 "use client";
 
+// Build version: 0.1.2 - Version check marker
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { NAV_GROUPS } from "@/lib/navGroups";
