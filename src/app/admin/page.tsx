@@ -107,6 +107,25 @@ function AccountManagementCard() {
     setMessage("비밀번호가 재설정되었습니다.");
   }
 
+  async function deleteAccount(account: AccountRow) {
+    if (!confirm(`'${account.display_name || account.username}' 계정을 정말 삭제하시겠습니까?\n(이 작업은 취소할 수 없습니다)`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/accounts/${account.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "계정 삭제 실패");
+      }
+      setMessage("계정이 삭제되었습니다.");
+      refresh();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    }
+  }
+
   return (
     <div className="bg-white rounded-xl border p-5 flex flex-col gap-4">
       <div>
@@ -195,6 +214,9 @@ function AccountManagementCard() {
                   </button>
                   <button onClick={() => toggleActive(a)} className="text-xs border rounded-md px-2 py-1 bg-white">
                     {a.active ? "비활성화" : "활성화"}
+                  </button>
+                  <button onClick={() => deleteAccount(a)} className="text-xs border rounded-md px-2 py-1 bg-white text-red-600 hover:bg-red-50">
+                    삭제
                   </button>
                 </div>
               </td>
@@ -814,6 +836,7 @@ export default function AdminPage() {
       <AdminPasswordCard />
       <BackupCard />
       <PmeterCard />
+      {/* 모듈별 권한관리는 제거됨 */}
     </div>
   );
 }

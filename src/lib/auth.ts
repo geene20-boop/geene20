@@ -141,6 +141,12 @@ export function resetAccountPassword(id: number, newPassword: string): void {
   if (info.changes === 0) throw new Error("계정을 찾을 수 없습니다.");
 }
 
+export function deleteAccount(id: number): void {
+  const db = getDb();
+  const info = db.prepare("DELETE FROM user_account WHERE id = ?").run(id);
+  if (info.changes === 0) throw new Error("계정을 찾을 수 없습니다.");
+}
+
 export function verifyAccountLogin(
   username: string,
   password: string
