@@ -514,3 +514,12 @@ export function setSetting(key: string, value: string): void {
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
   ).run(key, value);
 }
+
+export function isTabVisible(module: string, feature: string): boolean {
+  const db = getDb();
+  const row = db.prepare("SELECT visible FROM tab_visibility WHERE module = ? AND feature = ?").get(module, feature) as
+    | { visible: number }
+    | undefined;
+  // 기본값은 표시(1)
+  return row ? row.visible === 1 : true;
+}
