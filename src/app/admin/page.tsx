@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 
 type AccountRole = "viewer" | "editor" | "modifier";
@@ -18,7 +18,7 @@ function AccountManagementCard() {
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<AccountRole>("editor");
+  const role: AccountRole = "editor";
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -247,16 +247,7 @@ function ModulePermissionCard({ accounts }: { accounts: AccountRow[] }) {
   const features = MODULE_FEATURES[selectedModule] || [];
   const currentFeature = selectedFeature || features[0];
 
-  useEffect(() => {
-    setSelectedFeature("");
-  }, [selectedModule]);
-
-  useEffect(() => {
-    if (!currentFeature) return;
-    loadPermissions();
-  }, [selectedModule, currentFeature]);
-
-  async function loadPermissions() {
+  const loadPermissions = useCallback(async () => {
     setLoading(true);
     try {
       const allPerms: ModulePermission[] = [];
@@ -273,7 +264,18 @@ function ModulePermissionCard({ accounts }: { accounts: AccountRow[] }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [accounts]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedFeature("");
+  }, [selectedModule]);
+
+  useEffect(() => {
+    if (!currentFeature) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadPermissions();
+  }, [selectedModule, currentFeature, loadPermissions]);
 
   function getPermission(user_id: number, module: string, feature: string) {
     return permissions.find(
