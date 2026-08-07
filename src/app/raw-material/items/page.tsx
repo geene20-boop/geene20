@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
-import { RawMaterial, RawMaterialForm, RawMaterialSupplier, RAW_MATERIAL_FORM_LABELS } from "@/lib/types";
+import { RawMaterial, RawMaterialForm, RAW_MATERIAL_FORM_LABELS } from "@/lib/types";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
@@ -44,9 +44,7 @@ function emptyDisclosureForm(): DisclosureForm {
 
 export default function RawMaterialItemsPage() {
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
-  const [suppliers, setSuppliers] = useState<RawMaterialSupplier[]>([]);
   const [form, setForm] = useState<NewMaterialForm>(emptyMaterialForm());
-  const [supplierForm, setSupplierForm] = useState({ name: "", address: "", phone: "", country: "" });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const { enteredBy, setEnteredBy } = useEnteredBy();
@@ -55,8 +53,6 @@ export default function RawMaterialItemsPage() {
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [editKey, setEditKey] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: "", category: "", unit: "", submitTo: "", stock: "" });
-  const [editSupplierId, setEditSupplierId] = useState<number | null>(null);
-  const [editSupplierForm, setEditSupplierForm] = useState({ name: "", address: "", phone: "", country: "" });
   const [disclosureKey, setDisclosureKey] = useState<string | null>(null);
   const [disclosureForm, setDisclosureForm] = useState<DisclosureForm>(emptyDisclosureForm());
   const session = useSiteSession();
@@ -72,14 +68,10 @@ export default function RawMaterialItemsPage() {
   async function loadMaterials() {
     setMaterials(await apiGet<RawMaterial[]>("/api/raw-material"));
   }
-  async function loadSuppliers() {
-    setSuppliers(await apiGet<RawMaterialSupplier[]>("/api/raw-material-supplier"));
-  }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadMaterials();
-    loadSuppliers();
     admin.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -173,32 +165,6 @@ export default function RawMaterialItemsPage() {
     }
   }
 
-  async function submitSupplier(e: React.FormEvent) {
-    e.preventDefault();
-    if (!enteredBy.trim()) {
-      setNameError(true);
-      return;
-    }
-    try {
-      await apiPost("/api/raw-material-supplier", {
-        entered_by: enteredBy,
-        name: supplierForm.name,
-        address: supplierForm.address || null,
-        phone: supplierForm.phone || null,
-        country: supplierForm.country || null,
-      });
-      setSupplierForm({ name: "", address: "", phone: "", country: "" });
-      await loadSuppliers();
-    } catch (err) {
-      setMessage(`오류: ${(err as Error).message}`);
-    }
-  }
-
-  function startEditSupplier(s: RawMaterialSupplier) {
-    setEditSupplierId(s.id);
-    setEditSupplierForm({ name: s.name, address: s.address ?? "", phone: s.phone ?? "", country: s.country ?? "" });
-  }
-
   function startEditDisclosure(item: RawMaterial) {
     setDisclosureKey(item.key);
     setDisclosureForm({
@@ -225,34 +191,6 @@ export default function RawMaterialItemsPage() {
     }
   }
 
-  async function saveEditSupplier(id: number) {
-    if (!enteredBy.trim()) {
-      setNameError(true);
-      return;
-    }
-    try {
-      await apiPut(`/api/raw-material-supplier/${id}`, { entered_by: enteredBy, ...editSupplierForm });
-      setEditSupplierId(null);
-      await loadSuppliers();
-    } catch (err) {
-      setMessage(`오류: ${(err as Error).message}`);
-    }
-  }
-
-  async function removeSupplier(id: number) {
-    if (!enteredBy.trim()) {
-      setNameError(true);
-      return;
-    }
-    if (!confirm("이 거래처를 삭제할까요?")) return;
-    try {
-      await apiDelete(`/api/raw-material-supplier/${id}`, { entered_by: enteredBy });
-      await loadSuppliers();
-    } catch (err) {
-      setMessage(`오류: ${(err as Error).message}`);
-    }
-  }
-
   const canManage = admin.loggedIn || session.isModifier;
   function canEdit(item: RawMaterial) {
     return !item.locked && (admin.loggedIn || session.isModifier);
@@ -268,8 +206,12 @@ export default function RawMaterialItemsPage() {
       <div>
         <h1 className="text-xl font-bold">품목관리 (원재료 마스터)</h1>
         <p className="text-sm text-slate-500 mt-1">
-          원재료 코드·거래처·단위·제출처를 등록하면 입고검수·입력부터 부적합이력·양식출력까지
-          전체 화면의 드롭다운 소스로 사용됩니다. 관리자가 승인(잠금)하면 수정할 수 없습니다.
+          원재료 코드·단위·제출처를 등록하면 입고검수·입력부터 부적합이력·양식출력까지 전체 화면의
+          드롭다운 소스로 사용됩니다. 관리자가 승인(잠금)하면 수정할 수 없습니다. 공급처는{" "}
+          <a href="/raw-material/suppliers" className="underline text-sky-700">
+            공급처 관리대장
+          </a>
+          에서 별도로 관리합니다.
         </p>
       </div>
 
@@ -560,132 +502,6 @@ export default function RawMaterialItemsPage() {
               <tr>
                 <td colSpan={9} className="px-3 py-8 text-center text-slate-400">
                   등록된 원재료가 없습니다.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <form
-        onSubmit={submitSupplier}
-        className={`flex flex-col gap-4 bg-white rounded-xl border p-5 ${
-          !session.canWrite ? "opacity-50 pointer-events-none" : ""
-        }`}
-      >
-        <h2 className="text-sm font-semibold text-slate-700">거래처 등록 (주소·전화번호·생산국가는 양식출력에 자동 반영됩니다)</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">거래처명</span>
-            <input
-              value={supplierForm.name}
-              onChange={(e) => setSupplierForm((f) => ({ ...f, name: e.target.value }))}
-              className="border rounded-md px-2 py-1.5"
-              required
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">주소</span>
-            <input
-              value={supplierForm.address}
-              onChange={(e) => setSupplierForm((f) => ({ ...f, address: e.target.value }))}
-              className="border rounded-md px-2 py-1.5"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">전화번호</span>
-            <input
-              value={supplierForm.phone}
-              onChange={(e) => setSupplierForm((f) => ({ ...f, phone: e.target.value }))}
-              className="border rounded-md px-2 py-1.5"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">생산국가 (별지19호의2용)</span>
-            <input
-              value={supplierForm.country}
-              onChange={(e) => setSupplierForm((f) => ({ ...f, country: e.target.value }))}
-              className="border rounded-md px-2 py-1.5"
-              placeholder="한국"
-            />
-          </label>
-        </div>
-        <div className="flex justify-end">
-          <button type="submit" className="bg-slate-900 text-white rounded-md px-4 py-1.5 text-sm font-medium">
-            + 거래처 추가
-          </button>
-        </div>
-      </form>
-
-      <div className="bg-white rounded-xl border overflow-x-auto">
-        <h2 className="text-sm font-semibold text-slate-700 px-4 pt-4">등록된 거래처 목록</h2>
-        <table className="w-full text-sm mt-2">
-          <thead className="bg-slate-100 text-slate-600">
-            <tr>
-              <th className="text-left px-3 py-2">거래처명</th>
-              <th className="text-left px-3 py-2">주소</th>
-              <th className="text-left px-3 py-2">전화번호</th>
-              <th className="text-left px-3 py-2">생산국가</th>
-              {canManage && <th className="text-left px-3 py-2">관리</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {suppliers.map((s) => (
-              <tr key={s.id} className="border-t">
-                {editSupplierId === s.id ? (
-                  <>
-                    <td className="px-3 py-2">
-                      <input value={editSupplierForm.name} onChange={(e) => setEditSupplierForm((f) => ({ ...f, name: e.target.value }))} className="border rounded-md px-2 py-1 w-32" />
-                    </td>
-                    <td className="px-3 py-2">
-                      <input value={editSupplierForm.address} onChange={(e) => setEditSupplierForm((f) => ({ ...f, address: e.target.value }))} className="border rounded-md px-2 py-1 w-56" />
-                    </td>
-                    <td className="px-3 py-2">
-                      <input value={editSupplierForm.phone} onChange={(e) => setEditSupplierForm((f) => ({ ...f, phone: e.target.value }))} className="border rounded-md px-2 py-1 w-32" />
-                    </td>
-                    <td className="px-3 py-2">
-                      <input value={editSupplierForm.country} onChange={(e) => setEditSupplierForm((f) => ({ ...f, country: e.target.value }))} className="border rounded-md px-2 py-1 w-20" />
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td className="px-3 py-2">{s.name}</td>
-                    <td className="px-3 py-2">{s.address ?? "-"}</td>
-                    <td className="px-3 py-2">{s.phone ?? "-"}</td>
-                    <td className="px-3 py-2">{s.country ?? "-"}</td>
-                  </>
-                )}
-                {canManage && (
-                  <td className="px-3 py-2">
-                    <div className="flex gap-2 flex-wrap">
-                      {editSupplierId === s.id ? (
-                        <>
-                          <button onClick={() => saveEditSupplier(s.id)} className="text-xs border rounded-md px-2 py-1 bg-white">
-                            저장
-                          </button>
-                          <button onClick={() => setEditSupplierId(null)} className="text-xs border rounded-md px-2 py-1 bg-white">
-                            취소
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button onClick={() => startEditSupplier(s)} className="text-xs border rounded-md px-2 py-1 bg-white">
-                            수정
-                          </button>
-                          <button onClick={() => removeSupplier(s.id)} className="text-xs border rounded-md px-2 py-1 bg-white text-red-600">
-                            삭제
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                )}
-              </tr>
-            ))}
-            {suppliers.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-slate-400">
-                  등록된 거래처가 없습니다.
                 </td>
               </tr>
             )}

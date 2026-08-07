@@ -45,7 +45,9 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/raw-material/entry", label: "입고검수·입력" },
       { href: "/raw-material/ledger", label: "입고대장" },
+      { href: "/raw-material/inbound-summary", label: "입고누계" },
       { href: "/raw-material/items", label: "품목관리" },
+      { href: "/raw-material/suppliers", label: "공급처관리" },
       { href: "/raw-material/nonconformance", label: "부적합이력" },
       { href: "/raw-material/price-history", label: "단가이력" },
       { href: "/raw-material/documents", label: "양식출력" },
