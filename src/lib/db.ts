@@ -240,6 +240,89 @@ export function getDb(): Database.Database {
 
     CREATE INDEX IF NOT EXISTS idx_packing_adjustment_date ON packing_adjustment(date);
 
+    -- ---------- 원재료관리 ----------
+    CREATE TABLE IF NOT EXISTS raw_material (
+      key TEXT PRIMARY KEY,               -- 코드 (예: A01)
+      name TEXT NOT NULL,                 -- 원재료명
+      form TEXT NOT NULL DEFAULT 'solid', -- 'solid'(고상) | 'liquid'(액상)
+      category TEXT,
+      unit TEXT,
+      submit_to TEXT,                     -- 제출처
+      last_price REAL,                    -- 최근 단가 (입고입력 기본값으로 자동 채워짐)
+      stock REAL NOT NULL DEFAULT 0,
+      locked INTEGER NOT NULL DEFAULT 0,
+      approved_by TEXT,
+      approved_at TEXT,
+      entered_by TEXT,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS raw_material_supplier (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      address TEXT,
+      phone TEXT,
+      entered_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS raw_material_inbound (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      material_key TEXT NOT NULL,
+      supplier_id INTEGER,
+      supplier_name TEXT,          -- 입력 시점 공급처명 스냅샷
+      qty REAL NOT NULL,
+      unit TEXT,
+      unit_price REAL,
+      amount REAL,
+      vehicle_no TEXT,             -- 비고(차량번호)
+      judgment TEXT NOT NULL DEFAULT 'OK', -- 'OK' | 'NG'
+      problem TEXT,
+      reason TEXT,
+      action_taken TEXT,
+      judged_by TEXT,
+      locked INTEGER NOT NULL DEFAULT 0,
+      approved_by TEXT,
+      approved_at TEXT,
+      entered_by TEXT,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_raw_material_inbound_date ON raw_material_inbound(date);
+    CREATE INDEX IF NOT EXISTS idx_raw_material_inbound_material ON raw_material_inbound(material_key);
+
+    CREATE TABLE IF NOT EXISTS raw_material_price_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      material_key TEXT NOT NULL,
+      effective_date TEXT NOT NULL,
+      old_price REAL,
+      new_price REAL NOT NULL,
+      changed_by TEXT,
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_raw_material_price_history_key ON raw_material_price_history(material_key);
+
+    -- 양식출력에서 저장한 문서(성적서 발급 이력처럼 다시 조회/다운로드 가능)
+    CREATE TABLE IF NOT EXISTS raw_material_document (
+      id TEXT PRIMARY KEY,
+      doc_type TEXT NOT NULL,      -- 'form19_2' | 'form40' | 'inbound_certificate' | 'product_certificate'
+      title TEXT,
+      target_material TEXT,
+      period_from TEXT,
+      period_to TEXT,
+      data_json TEXT NOT NULL,     -- 생성 시점 데이터 스냅샷(JSON)
+      memo TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_raw_material_document_created ON raw_material_document(created_at);
+
     -- 개인별 계정 (아이디/비밀번호 + 조회/입력 권한). 관리자 비밀번호(admin_auth)와는 별개.
     CREATE TABLE IF NOT EXISTS user_account (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
