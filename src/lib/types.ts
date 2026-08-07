@@ -35,13 +35,15 @@ export interface ProductionLog {
   locked: number;
   entered_by: string | null;
   updated_by: string | null;
+  time: string | null;
+  sample_no: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface QcTest {
   id: number;
-  sample_no: number | null;
+  sample_no: string | null;
   fertilizer_type: string | null;
   date: string;
   shift: Shift;
@@ -276,8 +278,9 @@ export interface Worker {
   name: string;
   active: number;
   hire_date: string | null;
-  shift_type: ShiftType | null;
+  birth_date: string | null;
   nationality: Nationality;
+  foreign_country: string | null; // 'cambodia' | 'nepal'
   created_at: string;
 }
 
@@ -296,7 +299,7 @@ export interface DailyAttendanceRow {
   note: string | null; // "본인 신청 → 관리자 승인됨" 등 참고 문구
 }
 
-export type LeaveType = "연차" | "반차(오전)" | "반차(오후)" | "외출" | "조퇴";
+export type LeaveType = "연차" | "반차(오전)" | "반차(오후)" | "외출" | "조퇴" | "무급휴무" | "유급휴무";
 export type LeaveStatus = "pending" | "approved" | "rejected";
 
 export interface LeaveRequest {
@@ -350,4 +353,13 @@ export interface BoardPost {
   created_at: string;
   updated_at: string;
   attachments: BoardAttachment[];
+}
+
+export interface TabVisibility {
+  id: number;
+  module: string; // '생산관리' | '생산가동' | '생산/출하입력' | '품질관리' | '재고관리' 등
+  feature: string; // 'backup' | 'maintenance' 등 - 탭 이름
+  visible: number; // 1: 표시, 0: 숨김
+  created_at: string;
+  updated_at: string;
 }

@@ -6,9 +6,9 @@ import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import { DailyAttendanceRow, DailyAttendanceStatus, LeaveBalance, LeaveRequest, LeaveType, ShiftType } from "@/lib/types";
 import { markLeaveSeen } from "@/lib/leaveRead";
 
-const LEAVE_TYPES: LeaveType[] = ["연차", "반차(오전)", "반차(오후)", "외출", "조퇴"];
+const LEAVE_TYPES: LeaveType[] = ["연차", "반차(오전)", "반차(오후)", "외출", "조퇴", "무급휴무", "유급휴무"];
 const HALF_DAY_TYPES: LeaveType[] = ["반차(오전)", "반차(오후)"];
-const NO_DEDUCTION_TYPES: LeaveType[] = ["외출", "조퇴"];
+const NO_DEDUCTION_TYPES: LeaveType[] = ["외출", "조퇴", "무급휴무", "유급휴무"];
 
 const STATUS_LABEL: Record<string, string> = { pending: "대기중", approved: "승인", rejected: "반려" };
 const STATUS_STYLE: Record<string, string> = {
@@ -711,7 +711,7 @@ function DailyRosterTab() {
         </tbody>
       </table>
       <p className="text-xs text-slate-500 px-3 py-3">
-        • 근무조는 근로자명부 기본값이 자동으로 채워지고, 관리자가 그날만 바꾸면 즉시 저장됩니다.
+        • 근무조는 기본값(주간)이 자동으로 채워지고, 관리자가 그날만 바꾸면 즉시 저장됩니다.
         <br />
         • 근태현황은 본인이 신청해 승인된 연차·반차·외출·조퇴가 있으면 자동으로 채워지고 수정할 수 없습니다(초록 표시).
         <br />
@@ -722,26 +722,51 @@ function DailyRosterTab() {
 }
 
 function AdminApprovalTable({
-  rows,
+  allRows,
   onChanged,
   canReject,
 }: {
-  rows: LeaveRequest[];
+  allRows: LeaveRequest[];
   onChanged: () => void;
   canReject: boolean;
 }) {
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [rangeFrom, setRangeFrom] = useState(today());
+  const [rangeTo, setRangeTo] = useState(today());
+  const [showPendingOnly, setShowPendingOnly] = useState(true);
+
+  const filteredRows = useMemo(() => {
+    return allRows.filter((r) => {
+      const dateOk = r.start_date >= rangeFrom && r.start_date <= rangeTo;
+      const statusOk = showPendingOnly ? r.status === "pending" : true;
+      return dateOk && statusOk;
+    });
+  }, [allRows, rangeFrom, rangeTo, showPendingOnly]);
 
   async function decide(id: number, status: "approved" | "rejected") {
+    const req = allRows.find((r) => r.id === id);
+    if (!req) return;
+
+    if (status === "rejected" && req.status === "approved") {
+      if (!confirm("이미 승인된 신청을 반려하면 해당 근태 일정이 취소됩니다. 계속 진행하시겠습니까?")) {
+        return;
+      }
+    }
+
     await apiPut(`/api/leave-request/${id}`, { status });
     onChanged();
   }
 
   async function approveAll() {
-    if (!confirm(`대기중인 신청 ${rows.length}건을 모두 승인할까요?`)) return;
+    const pending = filteredRows.filter((r) => r.status === "pending");
+    if (pending.length === 0) {
+      alert("승인할 신청이 없습니다.");
+      return;
+    }
+    if (!confirm(`대기중인 신청 ${pending.length}건을 모두 승인할까요?`)) return;
     setBulkBusy(true);
     try {
-      for (const r of rows) {
+      for (const r of pending) {
         await apiPut(`/api/leave-request/${r.id}`, { status: "approved" });
       }
       onChanged();
@@ -750,20 +775,54 @@ function AdminApprovalTable({
     }
   }
 
+  const pendingCount = filteredRows.filter((r) => r.status === "pending").length;
+
   return (
     <div className="bg-white rounded-xl border overflow-x-auto">
-      {rows.length > 0 && (
-        <div className="flex justify-end px-3 pt-3">
-          <button
-            type="button"
-            onClick={approveAll}
-            disabled={bulkBusy}
-            className="text-xs bg-slate-900 text-white rounded-md px-3 py-1.5 disabled:opacity-50"
-          >
-            전체 승인 ({rows.length}건)
-          </button>
+      <div className="px-4 py-4 border-b flex flex-col gap-3">
+        <div className="flex gap-2 items-end flex-wrap">
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-slate-600">기간 (신청일)</span>
+            <input
+              type="date"
+              value={rangeFrom}
+              onChange={(e) => setRangeFrom(e.target.value)}
+              className="border rounded-md px-2 py-1.5 text-sm"
+            />
+          </label>
+          <span className="text-slate-400">~</span>
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-slate-600">종료</span>
+            <input
+              type="date"
+              value={rangeTo}
+              onChange={(e) => setRangeTo(e.target.value)}
+              className="border rounded-md px-2 py-1.5 text-sm"
+            />
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={showPendingOnly}
+              onChange={(e) => setShowPendingOnly(e.target.checked)}
+              className="rounded"
+            />
+            <span className="text-xs text-slate-600">대기중만 보기</span>
+          </label>
         </div>
-      )}
+        {pendingCount > 0 && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={approveAll}
+              disabled={bulkBusy}
+              className="text-xs bg-slate-900 text-white rounded-md px-3 py-1.5 disabled:opacity-50"
+            >
+              전체 승인 ({pendingCount}건)
+            </button>
+          </div>
+        )}
+      </div>
       <table className="w-full text-sm">
         <thead className="bg-slate-100 text-slate-600">
           <tr>
@@ -771,30 +830,36 @@ function AdminApprovalTable({
             <th className="text-left px-3 py-2">유형</th>
             <th className="text-left px-3 py-2">기간</th>
             <th className="text-right px-3 py-2">일수</th>
+            <th className="text-left px-3 py-2">상태</th>
             <th className="text-left px-3 py-2">사유</th>
             <th className="px-3 py-2"></th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {filteredRows.map((r) => (
             <tr key={r.id} className="border-t">
               <td className="px-3 py-2">{r.worker_name}</td>
               <td className="px-3 py-2">{r.type}</td>
-              <td className="px-3 py-2">
+              <td className="px-3 py-2 text-sm">
                 {r.start_date}
                 {r.end_date !== r.start_date ? ` ~ ${r.end_date}` : ""}
               </td>
               <td className="px-3 py-2 text-right">{r.days}</td>
+              <td className="px-3 py-2">
+                <StatusBadge status={r.status} />
+              </td>
               <td className="px-3 py-2 text-xs text-slate-600 max-w-[200px] truncate" title={r.reason ?? ""}>
                 {r.reason ?? "-"}
               </td>
-              <td className="px-3 py-2 text-right whitespace-nowrap">
-                <button
-                  onClick={() => decide(r.id, "approved")}
-                  className="text-xs bg-slate-900 text-white rounded-md px-2 py-1 mr-2"
-                >
-                  승인
-                </button>
+              <td className="px-3 py-2 text-right whitespace-nowrap flex gap-1 justify-end">
+                {r.status !== "approved" && (
+                  <button
+                    onClick={() => decide(r.id, "approved")}
+                    className="text-xs bg-slate-900 text-white rounded-md px-2 py-1"
+                  >
+                    승인
+                  </button>
+                )}
                 <button
                   onClick={() => decide(r.id, "rejected")}
                   disabled={!canReject}
@@ -806,10 +871,10 @@ function AdminApprovalTable({
               </td>
             </tr>
           ))}
-          {rows.length === 0 && (
+          {filteredRows.length === 0 && (
             <tr>
-              <td colSpan={6} className="px-3 py-8 text-center text-slate-400">
-                대기중인 신청이 없습니다.
+              <td colSpan={7} className="px-3 py-8 text-center text-slate-400">
+                해당 기간의 신청이 없습니다.
               </td>
             </tr>
           )}
@@ -868,8 +933,6 @@ export default function AttendancePage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.checked, isAdmin, isModifier, hasWorker]);
-
-  const pendingForAdmin = useMemo(() => allRequests.filter((r) => r.status === "pending"), [allRequests]);
 
   if (!session.checked) {
     return <p className="text-sm text-slate-400">확인 중...</p>;
@@ -995,7 +1058,7 @@ export default function AttendancePage() {
       {activeView === "mine" && tab === "detail" && myBalance && <MonthlyDetailCard balance={myBalance} />}
 
       {activeView === "manage" && tab === "approval" && (
-        <AdminApprovalTable rows={pendingForAdmin} onChanged={refresh} canReject={isAdmin} />
+        <AdminApprovalTable allRows={allRequests} onChanged={refresh} canReject={isAdmin} />
       )}
       {activeView === "manage" && isAdmin && tab === "roster" && <DailyRosterTab />}
       {activeView === "manage" && tab === "history" && (

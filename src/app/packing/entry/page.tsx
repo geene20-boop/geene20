@@ -8,6 +8,7 @@ import EnteredByField from "@/components/EnteredByField";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 import { itemLabel, stripCode } from "@/lib/packingClient";
 import { useSiteSession } from "@/lib/useSiteSession";
+import { getLabel, PACKING_LABELS } from "@/lib/i18n";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const daysAgo = (n: number) => {
@@ -71,6 +72,19 @@ export default function PackingEntryPage() {
   const [rangeFrom, setRangeFrom] = useState(daysAgo(30));
   const [rangeTo, setRangeTo] = useState(today());
   const session = useSiteSession();
+
+  const labels = useMemo(() => {
+    const lang = session.language as "ko" | "cambodia" | "nepal" | undefined;
+    return {
+      date: getLabel(PACKING_LABELS, lang, "date"),
+      type: getLabel(PACKING_LABELS, lang, "type"),
+      product_key: getLabel(PACKING_LABELS, lang, "product_key"),
+      qty: getLabel(PACKING_LABELS, lang, "qty"),
+      unit: getLabel(PACKING_LABELS, lang, "unit"),
+      worker: getLabel(PACKING_LABELS, lang, "worker"),
+      note: getLabel(PACKING_LABELS, lang, "note"),
+    };
+  }, [session.language]);
 
   useEffect(() => {
     if (session.loggedIn && session.displayName) {
@@ -248,7 +262,7 @@ export default function PackingEntryPage() {
             lockedValue={session.loggedIn ? session.displayName : null}
           />
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">날짜</span>
+            <span className="text-slate-600">{labels.date}</span>
             <input
               type="date"
               value={form.date}
@@ -257,7 +271,7 @@ export default function PackingEntryPage() {
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">구분</span>
+            <span className="text-slate-600">{labels.type}</span>
             <select
               value={form.type}
               onChange={(e) => set("type", e.target.value as PackingEntryType)}
@@ -268,7 +282,7 @@ export default function PackingEntryPage() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">작업자</span>
+            <span className="text-slate-600">{labels.worker}</span>
             <select
               value={form.worker}
               onChange={(e) => set("worker", e.target.value)}
@@ -289,7 +303,7 @@ export default function PackingEntryPage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">제품</span>
+            <span className="text-slate-600">{labels.product_key}</span>
             <select
               value={form.productKey}
               onChange={(e) => selectProduct(e.target.value)}
@@ -305,7 +319,7 @@ export default function PackingEntryPage() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">수량{selectedProduct?.unit ? ` (${selectedProduct.unit})` : ""}</span>
+            <span className="text-slate-600">{labels.qty}{selectedProduct?.unit ? ` (${selectedProduct.unit})` : ""}</span>
             <input
               type="number"
               value={form.qty}
@@ -523,11 +537,11 @@ export default function PackingEntryPage() {
         <table className="w-full text-sm mt-2">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
-              <th className="text-left px-3 py-2">날짜</th>
-              <th className="text-left px-3 py-2">구분</th>
-              <th className="text-left px-3 py-2">제품</th>
-              <th className="text-right px-3 py-2">수량</th>
-              <th className="text-left px-3 py-2">작업자</th>
+              <th className="text-left px-3 py-2">{labels.date}</th>
+              <th className="text-left px-3 py-2">{labels.type}</th>
+              <th className="text-left px-3 py-2">{labels.product_key}</th>
+              <th className="text-right px-3 py-2">{labels.qty}</th>
+              <th className="text-left px-3 py-2">{labels.worker}</th>
               <th className="text-left px-3 py-2">입력자</th>
               <th className="text-left px-3 py-2">상태</th>
               {canManage && <th className="text-left px-3 py-2">관리</th>}
