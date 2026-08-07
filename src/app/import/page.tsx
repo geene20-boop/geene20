@@ -347,6 +347,35 @@ function PackingStockImportCard() {
 }
 
 export default function ImportPage() {
+  const session = useSiteSession();
+  const [showAdminModal, setShowAdminModal] = useState(false);
+
+  if (session.checked && !session.isAdmin) {
+    return (
+      <div className="flex flex-col gap-4 items-start">
+        <div>
+          <h1 className="text-xl font-bold">데이터 가져오기</h1>
+          <p className="text-sm text-slate-500 mt-1">이 페이지는 관리자만 접근할 수 있습니다.</p>
+        </div>
+        <button
+          onClick={() => setShowAdminModal(true)}
+          className="bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium"
+        >
+          관리자 로그인
+        </button>
+        {showAdminModal && (
+          <AdminLoginModal
+            onClose={() => setShowAdminModal(false)}
+            onSuccess={() => {
+              session.refresh();
+              setShowAdminModal(false);
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div>

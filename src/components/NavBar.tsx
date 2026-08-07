@@ -49,9 +49,16 @@ export default function NavBar() {
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
   const navRef = useRef<HTMLDivElement>(null);
   // 외국인 근로자와 연동된 계정은 근태관리를 이용하지 않으므로 메뉴에서 숨긴다.
-  const visibleGroups = session.isForeignWorker
-    ? NAV_GROUPS.filter((g) => g.label !== "근태관리")
-    : NAV_GROUPS;
+  const visibleGroups = NAV_GROUPS.map((group) => {
+    if (group.label === "시스템관리") {
+      // 관리자만 "데이터 가져오기" 볼 수 있음
+      return {
+        ...group,
+        items: group.items.filter((item) => session.isAdmin || item.label !== "데이터 가져오기"),
+      };
+    }
+    return group;
+  }).filter((g) => !(session.isForeignWorker && g.label === "근태관리"));
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
