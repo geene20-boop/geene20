@@ -84,6 +84,7 @@ export default function RawMaterialDocumentsPage() {
     apiGet<RawMaterialInbound[]>(`/api/raw-material-inbound?from=${shiftDate(todayStr(), -90)}&to=${todayStr()}`).then(
       setRecentInbound
     );
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadDocuments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

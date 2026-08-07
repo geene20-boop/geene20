@@ -313,9 +313,12 @@ export default function RawMaterialItemsPage() {
       <div className="bg-white rounded-xl border overflow-x-auto">
         <div className="flex items-center justify-between px-4 pt-4">
           <h2 className="text-sm font-semibold text-slate-700">등록된 원재료 목록</h2>
-          <a href="/api/raw-material/export" className="bg-emerald-700 text-white rounded-md px-3 py-1.5 text-xs font-semibold">
+          <button
+            onClick={() => (window.location.href = "/api/raw-material/export")}
+            className="bg-emerald-700 text-white rounded-md px-3 py-1.5 text-xs font-semibold"
+          >
             ⬇ 엑셀 다운로드
-          </a>
+          </button>
         </div>
         <table className="w-full text-sm mt-2">
           <thead className="bg-slate-100 text-slate-600">
