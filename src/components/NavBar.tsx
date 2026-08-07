@@ -98,9 +98,19 @@ export default function NavBar() {
   const canApprove = session.isAdmin || session.isModifier;
   const pendingCount = usePendingApprovalCount(canApprove, pathname);
   // 외국인 근로자와 연동된 계정은 근태관리를 이용하지 않으므로 메뉴에서 숨긴다.
-  const visibleGroups = session.isForeignWorker
-    ? NAV_GROUPS.filter((g) => g.label !== "근태관리")
-    : NAV_GROUPS;
+  // 관리자만 이력관리를 볼 수 있다.
+  const visibleGroups = NAV_GROUPS.map((group) => {
+    if (group.label === "시스템관리" && !session.isAdmin) {
+      return {
+        ...group,
+        items: group.items.filter((item) => item.href !== "/history"),
+      };
+    }
+    if (session.isForeignWorker && group.label === "근태관리") {
+      return null;
+    }
+    return group;
+  }).filter((g): g is typeof NAV_GROUPS[0] => g !== null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

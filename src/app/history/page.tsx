@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiGet } from "@/lib/apiClient";
 import { AuditLogRow, AuditTable, TABLE_LABELS, ACTION_LABELS } from "@/lib/auditTypes";
 import { formatKst } from "@/lib/kst";
+import { useSiteSession } from "@/lib/useSiteSession";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -37,12 +38,24 @@ const ACTION_BADGE: Record<string, string> = {
 };
 
 export default function HistoryPage() {
+  const session = useSiteSession();
   const [table, setTable] = useState<AuditTable | "">("");
   const [actor, setActor] = useState("");
   const [from, setFrom] = useState(daysAgo(30));
   const [to, setTo] = useState(today());
   const [rows, setRows] = useState<AuditLogRow[]>([]);
   const [loading, setLoading] = useState(false);
+
+  if (!session.isAdmin) {
+    return (
+      <div className="flex flex-col gap-4 items-start">
+        <div>
+          <h1 className="text-xl font-bold">이력 관리</h1>
+          <p className="text-sm text-slate-500 mt-1">이 화면은 관리자만 접근할 수 있습니다.</p>
+        </div>
+      </div>
+    );
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
