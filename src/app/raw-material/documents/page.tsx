@@ -142,6 +142,7 @@ export default function RawMaterialDocumentsPage() {
                 onClick={() => {
                   setDocType(t);
                   setRows([]);
+                  setInboundId("");
                 }}
                 className={`text-left border rounded-lg px-3 py-2 ${
                   docType === t ? "border-slate-900 bg-slate-50" : "border-slate-200"
@@ -189,20 +190,45 @@ export default function RawMaterialDocumentsPage() {
               </div>
             </>
           ) : (
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-slate-600">대상 입고 건 (최근 90일)</span>
-              <select value={inboundId} onChange={(e) => setInboundId(e.target.value)} className="border rounded-md px-2 py-1.5">
-                <option value="">선택</option>
-                {recentInbound.map((r) => {
-                  const material = materialByKey.get(r.material_key);
-                  return (
-                    <option key={r.id} value={r.id}>
-                      {r.date} · {material ? materialLabel(material) : r.material_key} · {r.supplier_name ?? "-"} ({r.judgment})
+            <>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-slate-600">원재료로 조회 (목록 좁히기)</span>
+                <select
+                  value={materialKey}
+                  onChange={(e) => {
+                    setMaterialKey(e.target.value);
+                    setInboundId("");
+                  }}
+                  className="border rounded-md px-2 py-1.5"
+                >
+                  <option value="">전체</option>
+                  {materials.map((m) => (
+                    <option key={m.key} value={m.key}>
+                      {materialLabel(m)}
                     </option>
-                  );
-                })}
-              </select>
-            </label>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-slate-600">대상 입고 건 (최근 90일)</span>
+                <select value={inboundId} onChange={(e) => setInboundId(e.target.value)} className="border rounded-md px-2 py-1.5">
+                  <option value="">선택</option>
+                  {recentInbound
+                    .filter((r) => !materialKey || r.material_key === materialKey)
+                    .map((r) => {
+                      const material = materialByKey.get(r.material_key);
+                      return (
+                        <option key={r.id} value={r.id}>
+                          {r.date} · {material ? materialLabel(material) : r.material_key} · {r.supplier_name ?? "-"} ({r.judgment})
+                        </option>
+                      );
+                    })}
+                </select>
+                {materialKey && recentInbound.filter((r) => r.material_key === materialKey).length === 0 && (
+                  <span className="text-[11px] text-amber-600">선택한 원재료의 최근 90일 입고 건이 없습니다.</span>
+                )}
+              </label>
+            </>
           )}
 
           <button onClick={preview} className="bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium">
