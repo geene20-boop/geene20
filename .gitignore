@@ -46,3 +46,6 @@ next-env.d.ts
 /data/*.db-wal
 /data/*.db-shm
 /data/backups/
+
+# test results
+test-results/

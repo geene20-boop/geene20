@@ -240,6 +240,89 @@ export function getDb(): Database.Database {
 
     CREATE INDEX IF NOT EXISTS idx_packing_adjustment_date ON packing_adjustment(date);
 
+    -- ---------- 원재료관리 ----------
+    CREATE TABLE IF NOT EXISTS raw_material (
+      key TEXT PRIMARY KEY,               -- 코드 (예: A01)
+      name TEXT NOT NULL,                 -- 원재료명
+      form TEXT NOT NULL DEFAULT 'solid', -- 'solid'(고상) | 'liquid'(액상)
+      category TEXT,
+      unit TEXT,
+      submit_to TEXT,                     -- 제출처
+      last_price REAL,                    -- 최근 단가 (입고입력 기본값으로 자동 채워짐)
+      stock REAL NOT NULL DEFAULT 0,
+      locked INTEGER NOT NULL DEFAULT 0,
+      approved_by TEXT,
+      approved_at TEXT,
+      entered_by TEXT,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS raw_material_supplier (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      address TEXT,
+      phone TEXT,
+      entered_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS raw_material_inbound (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      material_key TEXT NOT NULL,
+      supplier_id INTEGER,
+      supplier_name TEXT,          -- 입력 시점 공급처명 스냅샷
+      qty REAL NOT NULL,
+      unit TEXT,
+      unit_price REAL,
+      amount REAL,
+      vehicle_no TEXT,             -- 비고(차량번호)
+      judgment TEXT NOT NULL DEFAULT 'OK', -- 'OK' | 'NG'
+      problem TEXT,
+      reason TEXT,
+      action_taken TEXT,
+      judged_by TEXT,
+      locked INTEGER NOT NULL DEFAULT 0,
+      approved_by TEXT,
+      approved_at TEXT,
+      entered_by TEXT,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_raw_material_inbound_date ON raw_material_inbound(date);
+    CREATE INDEX IF NOT EXISTS idx_raw_material_inbound_material ON raw_material_inbound(material_key);
+
+    CREATE TABLE IF NOT EXISTS raw_material_price_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      material_key TEXT NOT NULL,
+      effective_date TEXT NOT NULL,
+      old_price REAL,
+      new_price REAL NOT NULL,
+      changed_by TEXT,
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_raw_material_price_history_key ON raw_material_price_history(material_key);
+
+    -- 양식출력에서 저장한 문서(성적서 발급 이력처럼 다시 조회/다운로드 가능)
+    CREATE TABLE IF NOT EXISTS raw_material_document (
+      id TEXT PRIMARY KEY,
+      doc_type TEXT NOT NULL,      -- 'form19_2' | 'form40' | 'inbound_certificate' | 'product_certificate'
+      title TEXT,
+      target_material TEXT,
+      period_from TEXT,
+      period_to TEXT,
+      data_json TEXT NOT NULL,     -- 생성 시점 데이터 스냅샷(JSON)
+      memo TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_raw_material_document_created ON raw_material_document(created_at);
+
     -- 개인별 계정 (아이디/비밀번호 + 조회/입력 권한). 관리자 비밀번호(admin_auth)와는 별개.
     CREATE TABLE IF NOT EXISTS user_account (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -251,6 +334,22 @@ export function getDb(): Database.Database {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- 모듈별 대분류 권한 (대분류 수준에서 해당 모듈의 모든 기능에 동일하게 적용)
+    CREATE TABLE IF NOT EXISTS module_permission (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES user_account(id) ON DELETE CASCADE,
+      module TEXT NOT NULL,             -- '시스템관리' | '근태관리' | '생산관리' 등
+      can_view INTEGER NOT NULL DEFAULT 0,   -- 1: 조회 가능
+      can_create INTEGER NOT NULL DEFAULT 0, -- 1: 입력 가능
+      can_update INTEGER NOT NULL DEFAULT 0, -- 1: 수정 가능
+      can_delete INTEGER NOT NULL DEFAULT 0, -- 1: 삭제 가능
+      is_hidden INTEGER NOT NULL DEFAULT 0,  -- 1: 화면에 표시 안 함
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, module)
+    );
+    CREATE INDEX IF NOT EXISTS idx_module_permission_user ON module_permission(user_id);
 
     -- 근로자명부 (생산/출하 입력 등에서 작업자를 드롭다운으로 선택하기 위한 목록)
     CREATE TABLE IF NOT EXISTS worker (
@@ -320,12 +419,23 @@ export function getDb(): Database.Database {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       worker_id INTEGER NOT NULL,
       date TEXT NOT NULL,
-      shift TEXT,               -- 'day' | 'night' (비어있으면 근로자명부 기본 근무형태를 사용)
+      shift TEXT,               -- 'day' | 'night' (비어있으면 주간을 기본값으로 사용)
       status TEXT,              -- 'early_leave' | 'comp_off' | 'late' | 'absent' | 'other' (없으면 정상출근)
       status_detail TEXT,
       updated_by TEXT,
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(worker_id, date)
+    );
+
+    -- 탭 표시 여부 설정 (시스템 전체 사용자에게 일괄 적용)
+    CREATE TABLE IF NOT EXISTS tab_visibility (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      module TEXT NOT NULL,      -- '생산관리' | '생산가동' | '생산/출하입력' 등
+      feature TEXT NOT NULL,     -- 'backup' | 'maintenance' 등 - 탭 이름
+      visible INTEGER NOT NULL DEFAULT 1, -- 1: 표시, 0: 숨김
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(module, feature)
     );
   `);
 
@@ -352,6 +462,8 @@ export function getDb(): Database.Database {
     ["entered_by", "TEXT"],
     ["updated_by", "TEXT"],
     ["locked", "INTEGER NOT NULL DEFAULT 0"],
+    ["time", "TEXT"],
+    ["sample_no", "TEXT"],
   ]);
   migrateColumns("qc_test", [
     ["entered_by", "TEXT"],
@@ -402,8 +514,19 @@ export function getDb(): Database.Database {
   migrateColumns("board_post", [["pinned", "INTEGER NOT NULL DEFAULT 0"]]);
   migrateColumns("worker", [
     ["hire_date", "TEXT"],
-    ["shift_type", "TEXT"], // 'day' | 'night'
     ["nationality", "TEXT NOT NULL DEFAULT 'domestic'"], // 'domestic' | 'foreign'
+    ["birth_date", "TEXT"],
+    ["foreign_country", "TEXT"], // 'cambodia' | 'nepal' (외국인일 때만 사용)
+  ]);
+  migrateColumns("raw_material_supplier", [["country", "TEXT"]]);
+  migrateColumns("raw_material", [
+    // 별지 제40호서식(유기농업자재 공시 원료·재료 수급대장) 발급용, 자재(품목)마다 고정되는 공시 정보
+    ["disclosure_no", "TEXT"],
+    ["disclosure_date", "TEXT"],
+    ["material_type", "TEXT"],
+    ["main_ingredients", "TEXT"],
+    ["disclosure_valid_from", "TEXT"],
+    ["disclosure_valid_to", "TEXT"],
   ]);
 
   const specCount = db.prepare("SELECT COUNT(*) as c FROM spec_limit").get() as { c: number };
@@ -483,4 +606,13 @@ export function setSetting(key: string, value: string): void {
     `INSERT INTO app_setting (key, value) VALUES (?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
   ).run(key, value);
+}
+
+export function isTabVisible(module: string, feature: string): boolean {
+  const db = getDb();
+  const row = db.prepare("SELECT visible FROM tab_visibility WHERE module = ? AND feature = ?").get(module, feature) as
+    | { visible: number }
+    | undefined;
+  // 기본값은 표시(1)
+  return row ? row.visible === 1 : true;
 }
