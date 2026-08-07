@@ -88,8 +88,8 @@ export async function GET() {
 
   // 전일 근태현황 (주간/야간별)
   const workers = db
-    .prepare("SELECT id, nationality, shift_type FROM worker WHERE active = 1")
-    .all() as { id: number; nationality: Nationality; shift_type: ShiftType | null }[];
+    .prepare("SELECT id, nationality FROM worker WHERE active = 1")
+    .all() as { id: number; nationality: Nationality }[];
   const dailyRows = db
     .prepare("SELECT worker_id, shift, status FROM daily_attendance WHERE date = ?")
     .all(yesterday) as { worker_id: number; shift: ShiftType | null; status: string | null }[];
@@ -107,7 +107,7 @@ export async function GET() {
   };
   for (const w of workers) {
     const daily = dailyByWorker.get(w.id);
-    const shift = (daily?.shift ?? w.shift_type ?? "day") as ShiftType;
+    const shift = (daily?.shift ?? "day") as ShiftType;
     const bucket = attendance[shift];
     bucket.total += 1;
     if (onLeave.has(w.id)) bucket.leave += 1;

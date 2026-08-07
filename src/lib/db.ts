@@ -335,6 +335,22 @@ export function getDb(): Database.Database {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- 모듈별 대분류 권한 (대분류 수준에서 해당 모듈의 모든 기능에 동일하게 적용)
+    CREATE TABLE IF NOT EXISTS module_permission (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES user_account(id) ON DELETE CASCADE,
+      module TEXT NOT NULL,             -- '시스템관리' | '근태관리' | '생산관리' 등
+      can_view INTEGER NOT NULL DEFAULT 0,   -- 1: 조회 가능
+      can_create INTEGER NOT NULL DEFAULT 0, -- 1: 입력 가능
+      can_update INTEGER NOT NULL DEFAULT 0, -- 1: 수정 가능
+      can_delete INTEGER NOT NULL DEFAULT 0, -- 1: 삭제 가능
+      is_hidden INTEGER NOT NULL DEFAULT 0,  -- 1: 화면에 표시 안 함
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, module)
+    );
+    CREATE INDEX IF NOT EXISTS idx_module_permission_user ON module_permission(user_id);
+
     -- 근로자명부 (생산/출하 입력 등에서 작업자를 드롭다운으로 선택하기 위한 목록)
     CREATE TABLE IF NOT EXISTS worker (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -403,12 +419,23 @@ export function getDb(): Database.Database {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       worker_id INTEGER NOT NULL,
       date TEXT NOT NULL,
-      shift TEXT,               -- 'day' | 'night' (비어있으면 근로자명부 기본 근무형태를 사용)
+      shift TEXT,               -- 'day' | 'night' (비어있으면 주간을 기본값으로 사용)
       status TEXT,              -- 'early_leave' | 'comp_off' | 'late' | 'absent' | 'other' (없으면 정상출근)
       status_detail TEXT,
       updated_by TEXT,
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(worker_id, date)
+    );
+
+    -- 탭 표시 여부 설정 (시스템 전체 사용자에게 일괄 적용)
+    CREATE TABLE IF NOT EXISTS tab_visibility (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      module TEXT NOT NULL,      -- '생산관리' | '생산가동' | '생산/출하입력' 등
+      feature TEXT NOT NULL,     -- 'backup' | 'maintenance' 등 - 탭 이름
+      visible INTEGER NOT NULL DEFAULT 1, -- 1: 표시, 0: 숨김
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(module, feature)
     );
   `);
 
@@ -435,6 +462,8 @@ export function getDb(): Database.Database {
     ["entered_by", "TEXT"],
     ["updated_by", "TEXT"],
     ["locked", "INTEGER NOT NULL DEFAULT 0"],
+    ["time", "TEXT"],
+    ["sample_no", "TEXT"],
   ]);
   migrateColumns("qc_test", [
     ["entered_by", "TEXT"],
@@ -485,8 +514,9 @@ export function getDb(): Database.Database {
   migrateColumns("board_post", [["pinned", "INTEGER NOT NULL DEFAULT 0"]]);
   migrateColumns("worker", [
     ["hire_date", "TEXT"],
-    ["shift_type", "TEXT"], // 'day' | 'night'
     ["nationality", "TEXT NOT NULL DEFAULT 'domestic'"], // 'domestic' | 'foreign'
+    ["birth_date", "TEXT"],
+    ["foreign_country", "TEXT"], // 'cambodia' | 'nepal' (외국인일 때만 사용)
   ]);
   migrateColumns("raw_material_supplier", [["country", "TEXT"]]);
   migrateColumns("raw_material", [
@@ -576,4 +606,13 @@ export function setSetting(key: string, value: string): void {
     `INSERT INTO app_setting (key, value) VALUES (?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
   ).run(key, value);
+}
+
+export function isTabVisible(module: string, feature: string): boolean {
+  const db = getDb();
+  const row = db.prepare("SELECT visible FROM tab_visibility WHERE module = ? AND feature = ?").get(module, feature) as
+    | { visible: number }
+    | undefined;
+  // 기본값은 표시(1)
+  return row ? row.visible === 1 : true;
 }

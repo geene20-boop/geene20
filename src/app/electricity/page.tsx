@@ -46,6 +46,7 @@ export default function ElectricityPage() {
   const { enteredBy, setEnteredBy } = useEnteredBy();
   const [nameError, setNameError] = useState(false);
   const session = useSiteSession();
+  const [pmeterConfigured, setPmeterConfigured] = useState(false);
 
   useEffect(() => {
     if (session.loggedIn && session.displayName) {
@@ -71,6 +72,9 @@ export default function ElectricityPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadRows();
     loadSummary(monthStart(), today());
+    apiGet<{ configured: boolean }>("/api/electricity/pmeter-status")
+      .then((data) => setPmeterConfigured(data.configured))
+      .catch(() => {});
   }, []);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -144,10 +148,17 @@ export default function ElectricityPage() {
           1공장(저압)·2공장(고압) 일일 전력 사용량(kWh)을 입력합니다. 같은 날짜·공장으로 다시
           저장하면 기존 기록이 수정됩니다.
         </p>
-        <div className="mt-2 text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-md px-3 py-2">
-          현재는 수동 입력 방식입니다. 한전 Open P-Meter API 승인을 받으시면, API 키를 전달해
-          주시는 대로 매일 자동으로 값을 가져와 채워주는 기능을 추가로 연동해 드릴 수 있습니다.
-        </div>
+        {pmeterConfigured ? (
+          <div className="mt-2 text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md px-3 py-2">
+            한전 Open P-Meter API와 연동되어 매일 오전 8시에 전일 전력사용량이 자동으로 채워집니다.
+            값이 다르면 아래에서 언제든 직접 수정할 수 있습니다.
+          </div>
+        ) : (
+          <div className="mt-2 text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-md px-3 py-2">
+            현재는 수동 입력 방식입니다. 한전 Open P-Meter API 승인을 받으시면, API 키를 전달해
+            주시는 대로 매일 자동으로 값을 가져와 채워주는 기능을 추가로 연동해 드릴 수 있습니다.
+          </div>
+        )}
       </div>
 
       {/* 기간별 조회 + 1공장/2공장/합계 (req1) */}

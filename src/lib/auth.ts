@@ -15,6 +15,7 @@ interface TokenPayload {
   accountId?: number;
   role?: AccountRole;
   name?: string; // 관리자(공용 비밀번호) 로그인 시 실제 입력한 사람 이름
+  language?: string; // 사용자 언어 설정 ('ko' | 'cambodia' | 'nepal')
 }
 
 interface AuthRow {
@@ -141,6 +142,12 @@ export function resetAccountPassword(id: number, newPassword: string): void {
   if (info.changes === 0) throw new Error("계정을 찾을 수 없습니다.");
 }
 
+export function deleteAccount(id: number): void {
+  const db = getDb();
+  const info = db.prepare("DELETE FROM user_account WHERE id = ?").run(id);
+  if (info.changes === 0) throw new Error("계정을 찾을 수 없습니다.");
+}
+
 export function verifyAccountLogin(
   username: string,
   password: string
@@ -187,9 +194,9 @@ export function createSessionToken(scope: "admin", name?: string): string {
   return signPayload({ scope, exp: Date.now() + SESSION_TTL_MS, name }, session_secret);
 }
 
-export function createUserSessionToken(accountId: number, role: AccountRole): string {
+export function createUserSessionToken(accountId: number, role: AccountRole, language?: string): string {
   const { session_secret } = getAdminAuthRow();
-  return signPayload({ scope: "site", accountId, role, exp: Date.now() + SESSION_TTL_MS }, session_secret);
+  return signPayload({ scope: "site", accountId, role, language, exp: Date.now() + SESSION_TTL_MS }, session_secret);
 }
 
 export function verifySessionToken(token: string | undefined | null, scope: Scope): boolean {
@@ -198,7 +205,7 @@ export function verifySessionToken(token: string | undefined | null, scope: Scop
 
 export function getUserSession(req: {
   cookies: { get(name: string): { value: string } | undefined };
-}): { accountId: number; role: AccountRole } | null {
+}): { accountId: number; role: AccountRole; language?: string } | null {
   const parsed = decodeToken(req.cookies.get(SITE_SESSION_COOKIE)?.value);
   if (!parsed || parsed.scope !== "site" || parsed.accountId == null || !parsed.role) return null;
   // 토큰 자체는 유효해도, 그 사이 관리자가 계정을 비활성화했다면 즉시 차단되도록
@@ -208,7 +215,7 @@ export function getUserSession(req: {
     | { active: number }
     | undefined;
   if (!row || !row.active) return null;
-  return { accountId: parsed.accountId, role: parsed.role };
+  return { accountId: parsed.accountId, role: parsed.role, language: parsed.language };
 }
 
 // 로그인한 개인계정이 근로자명부의 어느 근로자와 연결되어 있는지 (없으면 null).
