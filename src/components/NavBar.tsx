@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useSiteSession } from "@/lib/useSiteSession";
+import { useAdminSession } from "@/components/AdminUnlock";
 import HanilLogo from "@/components/HanilLogo";
 import { NAV_GROUPS, NavGroup } from "@/lib/navGroups";
 
@@ -44,14 +45,30 @@ function AccountBadge() {
 export default function NavBar() {
   const pathname = usePathname();
   const session = useSiteSession();
+  const admin = useAdminSession();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
   const navRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    admin.refresh();
+  }, []);
+
   // 외국인 근로자와 연동된 계정은 근태관리를 이용하지 않으므로 메뉴에서 숨긴다.
-  const visibleGroups = session.isForeignWorker
+  // 관리자가 아니면 데이터 가져오기도 메뉴에서 숨긴다.
+  let visibleGroups = session.isForeignWorker
     ? NAV_GROUPS.filter((g) => g.label !== "근태관리")
     : NAV_GROUPS;
+
+  if (!admin.loggedIn) {
+    visibleGroups = visibleGroups.map((g) =>
+      g.label === "시스템관리"
+        ? { ...g, items: g.items.filter((item) => item.href !== "/import") }
+        : g
+    );
+  }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

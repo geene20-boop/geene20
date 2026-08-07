@@ -7,6 +7,13 @@ export interface ChangelogEntry {
 // 새 기능을 배포할 때 배열 맨 앞에 새 항목을 추가한다 (버전 문자열은 날짜 기반 권장).
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2026.08.07",
+    date: "2026-08-07",
+    items: [
+      { title: "데이터 가져오기 관리자 전용 변경", desc: "시스템관리 메뉴의 \"데이터 가져오기\"는 이제 관리자만 접근할 수 있습니다." },
+    ],
+  },
+  {
     version: "2026.07.29",
     date: "2026-07-29",
     items: [
