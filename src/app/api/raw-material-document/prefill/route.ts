@@ -3,13 +3,18 @@ import { getDb, getSetting } from "@/lib/db";
 import { RawMaterial, RawMaterialInbound, RawMaterialSupplier } from "@/lib/types";
 
 // 양식출력 2단계 "데이터 미리보기"에서 쓰는 자동 프리필 조회.
-// - form19_2 / form40 / inbound_certificate: 기간·원재료로 입고대장 여러 건을 가져온다.
+// - form19_2 / inbound_certificate: 기간·원재료(단일, 선택 안 하면 전체)로 입고대장 여러 건을 가져온다.
+// - form40: 기간 + 원재료(자재) 1개 이상(materialKeys)으로 입고대장을 모아 가져온다. 여러 원료가
+//   하나의 공시 자재(예: 백운석+당밀 → 석회고토)에 함께 쓰이는 경우를 지원하기 위함이며, 공시정보
+//   (공시번호·자재구분 등)는 선택한 원료 중 첫 번째(대표 원료) 것을 사용한다.
 // - product_certificate: 입고 건 하나(inboundId)의 상세를 가져온다.
 export async function GET(req: NextRequest) {
   const db = getDb();
   const { searchParams } = new URL(req.url);
   const docType = searchParams.get("docType");
   const materialKey = searchParams.get("materialKey");
+  const materialKeysParam = searchParams.get("materialKeys");
+  const materialKeys = materialKeysParam ? materialKeysParam.split(",").filter(Boolean) : [];
   const from = searchParams.get("from") ?? "0000-01-01";
   const to = searchParams.get("to") ?? "9999-12-31";
   const inboundId = searchParams.get("inboundId");
@@ -68,13 +73,16 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  if (docType === "form40" && !materialKey) {
-    return NextResponse.json({ error: "별지 제40호서식은 원재료(자재)를 하나 선택해야 합니다." }, { status: 400 });
+  if (docType === "form40" && materialKeys.length === 0) {
+    return NextResponse.json({ error: "별지 제40호서식은 원재료(자재)를 1개 이상 선택해야 합니다." }, { status: 400 });
   }
 
   let sql = "SELECT * FROM raw_material_inbound WHERE date BETWEEN ? AND ?";
-  const args: string[] = [from, to];
-  if (materialKey) {
+  const args: (string | number)[] = [from, to];
+  if (docType === "form40") {
+    sql += ` AND material_key IN (${materialKeys.map(() => "?").join(",")})`;
+    args.push(...materialKeys);
+  } else if (materialKey) {
     sql += " AND material_key = ?";
     args.push(materialKey);
   }
@@ -100,19 +108,20 @@ export async function GET(req: NextRequest) {
   });
 
   let meta: Record<string, string> | null = null;
-  if (docType === "form40" && materialKey) {
-    const material = materialByKey.get(materialKey);
+  if (docType === "form40" && materialKeys.length > 0) {
+    const primary = materialByKey.get(materialKeys[0]);
+    const allNames = materialKeys.map((k) => materialByKey.get(k)?.name ?? k).join(", ");
     meta = {
       companyName: getSetting("company_name") ?? "",
       companyCeo: getSetting("company_ceo") ?? "",
       companyAddress: getSetting("company_address") ?? "",
-      materialName: material ? material.name : materialKey,
-      disclosureNo: material?.disclosure_no ?? "",
-      disclosureDate: material?.disclosure_date ?? "",
-      materialType: material?.material_type ?? "",
-      mainIngredients: material?.main_ingredients ?? "",
-      disclosureValidFrom: material?.disclosure_valid_from ?? "",
-      disclosureValidTo: material?.disclosure_valid_to ?? "",
+      materialName: allNames,
+      disclosureNo: primary?.disclosure_no ?? "",
+      disclosureDate: primary?.disclosure_date ?? "",
+      materialType: primary?.material_type ?? "",
+      mainIngredients: primary?.main_ingredients ?? "",
+      disclosureValidFrom: primary?.disclosure_valid_from ?? "",
+      disclosureValidTo: primary?.disclosure_valid_to ?? "",
     };
   }
 

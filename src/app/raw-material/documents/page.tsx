@@ -60,6 +60,7 @@ export default function RawMaterialDocumentsPage() {
   const [docType, setDocType] = useState<RawMaterialDocType>("form19_2");
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [materialKey, setMaterialKey] = useState("");
+  const [form40MaterialKeys, setForm40MaterialKeys] = useState<string[]>([]);
   const [targetMaterial, setTargetMaterial] = useState("");
   const [from, setFrom] = useState(shiftDate(todayStr(), -30));
   const [to, setTo] = useState(todayStr());
@@ -89,11 +90,15 @@ export default function RawMaterialDocumentsPage() {
 
   const materialByKey = useMemo(() => new Map(materials.map((m) => [m.key, m])), [materials]);
 
+  function toggleForm40Material(key: string) {
+    setForm40MaterialKeys((keys) => (keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key]));
+  }
+
   async function preview() {
     setMessage(null);
     setMeta(null);
-    if (docType === "form40" && !materialKey) {
-      setMessage("별지 제40호서식은 원재료(자재)를 하나 선택해야 합니다.");
+    if (docType === "form40" && form40MaterialKeys.length === 0) {
+      setMessage("별지 제40호서식은 원재료(자재)를 1개 이상 선택해야 합니다.");
       return;
     }
     const params = new URLSearchParams({ docType });
@@ -106,7 +111,11 @@ export default function RawMaterialDocumentsPage() {
     } else {
       params.set("from", from);
       params.set("to", to);
-      if (materialKey) params.set("materialKey", materialKey);
+      if (docType === "form40") {
+        params.set("materialKeys", form40MaterialKeys.join(","));
+      } else if (materialKey) {
+        params.set("materialKey", materialKey);
+      }
     }
     const res = await apiGet<{ rows: PrefillRow[]; meta?: Form40Meta | null; error?: string }>(
       `/api/raw-material-document/prefill?${params.toString()}`
@@ -131,7 +140,13 @@ export default function RawMaterialDocumentsPage() {
         entered_by: enteredBy,
         docType,
         title: RAW_MATERIAL_DOC_LABELS[docType],
-        targetMaterial: targetMaterial || (materialKey ? materialLabel(materialByKey.get(materialKey)!) : null),
+        targetMaterial:
+          targetMaterial ||
+          (docType === "form40"
+            ? form40MaterialKeys.map((k) => materialLabel(materialByKey.get(k)!)).join(", ") || null
+            : materialKey
+              ? materialLabel(materialByKey.get(materialKey)!)
+              : null),
         periodFrom: docType === "product_certificate" ? null : from,
         periodTo: docType === "product_certificate" ? null : to,
         rows,
@@ -167,6 +182,9 @@ export default function RawMaterialDocumentsPage() {
                   setDocType(t);
                   setRows([]);
                   setInboundId("");
+                  setMaterialKey("");
+                  setForm40MaterialKeys([]);
+                  setMeta(null);
                 }}
                 className={`text-left border rounded-lg px-3 py-2 ${
                   docType === t ? "border-slate-900 bg-slate-50" : "border-slate-200"
@@ -191,24 +209,45 @@ export default function RawMaterialDocumentsPage() {
                   />
                 </label>
               )}
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-slate-600">
-                  원재료 {docType === "form40" ? "(자재 1개 선택 — 필수)" : "(선택 시 해당 품목만)"}
-                </span>
-                <select value={materialKey} onChange={(e) => setMaterialKey(e.target.value)} className="border rounded-md px-2 py-1.5">
-                  <option value="">{docType === "form40" ? "선택" : "전체"}</option>
-                  {materials.map((m) => (
-                    <option key={m.key} value={m.key}>
-                      {materialLabel(m)}
-                    </option>
-                  ))}
-                </select>
-                {docType === "form40" && (
+              {docType === "form40" ? (
+                <div className="flex flex-col gap-1 text-sm">
+                  <span className="text-slate-600">원재료 (자재 1개 이상 선택 — 필수)</span>
+                  <div className="border rounded-md px-2 py-2 max-h-40 overflow-y-auto flex flex-col gap-1">
+                    {materials.map((m) => (
+                      <label key={m.key} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={form40MaterialKeys.includes(m.key)}
+                          onChange={() => toggleForm40Material(m.key)}
+                        />
+                        {materialLabel(m)}
+                        {form40MaterialKeys[0] === m.key && (
+                          <span className="text-[10px] text-sky-700 bg-sky-50 border border-sky-200 rounded-full px-1.5">
+                            대표(공시정보 기준)
+                          </span>
+                        )}
+                      </label>
+                    ))}
+                    {materials.length === 0 && <span className="text-xs text-slate-400">등록된 원재료가 없습니다.</span>}
+                  </div>
                   <span className="text-[11px] text-slate-400">
-                    공시번호·주성분함량 등은 품목관리 &gt; 해당 원재료의 &ldquo;공시정보&rdquo;에 등록해두면 자동으로 채워집니다.
+                    여러 원료가 하나의 공시 자재에 함께 쓰이면 모두 체크하세요. 공시번호·주성분함량 등은
+                    맨 처음 체크한(대표) 원재료의 &ldquo;공시정보&rdquo; 값을 사용합니다.
                   </span>
-                )}
-              </label>
+                </div>
+              ) : (
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="text-slate-600">원재료 (선택 시 해당 품목만)</span>
+                  <select value={materialKey} onChange={(e) => setMaterialKey(e.target.value)} className="border rounded-md px-2 py-1.5">
+                    <option value="">전체</option>
+                    {materials.map((m) => (
+                      <option key={m.key} value={m.key}>
+                        {materialLabel(m)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <div className="grid grid-cols-2 gap-2">
                 <label className="flex flex-col gap-1 text-sm">
                   <span className="text-slate-600">조회 시작일</span>

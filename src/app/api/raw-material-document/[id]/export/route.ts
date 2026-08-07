@@ -70,7 +70,7 @@ export async function GET(
       ["공시번호", m.disclosureNo ?? "", "", "최초 공시", m.disclosureDate ?? ""],
       ["업체명", m.companyName ?? "", "", "대표자 성명", m.companyCeo ?? ""],
       ["사업장 소재지", m.companyAddress ?? ""],
-      ["자재의 명칭", m.materialName ?? doc.target_material ?? ""],
+      ["자재의 명칭", doc.target_material ?? m.materialName ?? ""],
       ["자재의 구분", m.materialType ?? ""],
       ["주성분(원료)의 종류 및 함량(%)", m.mainIngredients ?? ""],
       ["공시의 유효기간", `${m.disclosureValidFrom ?? ""} ~ ${m.disclosureValidTo ?? ""}`],
