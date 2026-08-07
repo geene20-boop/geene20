@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+import { getDb, getSetting } from "@/lib/db";
 import { RawMaterial, RawMaterialInbound, RawMaterialSupplier } from "@/lib/types";
 
 // 양식출력 2단계 "데이터 미리보기"에서 쓰는 자동 프리필 조회.
@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
       name: row.supplier_name ?? supplier?.name ?? "",
       address: supplier?.address ?? "",
       phone: supplier?.phone ?? "",
+      country: supplier?.country ?? "",
     };
   }
 
@@ -67,6 +68,10 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  if (docType === "form40" && !materialKey) {
+    return NextResponse.json({ error: "별지 제40호서식은 원재료(자재)를 하나 선택해야 합니다." }, { status: 400 });
+  }
+
   let sql = "SELECT * FROM raw_material_inbound WHERE date BETWEEN ? AND ?";
   const args: string[] = [from, to];
   if (materialKey) {
@@ -87,11 +92,29 @@ export async function GET(req: NextRequest) {
       supplierName: supplier.name,
       supplierAddress: supplier.address,
       supplierPhone: supplier.phone,
+      supplierCountry: supplier.country,
       qty: row.qty,
       unit: row.unit ?? "",
       note: "",
     };
   });
 
-  return NextResponse.json({ rows });
+  let meta: Record<string, string> | null = null;
+  if (docType === "form40" && materialKey) {
+    const material = materialByKey.get(materialKey);
+    meta = {
+      companyName: getSetting("company_name") ?? "",
+      companyCeo: getSetting("company_ceo") ?? "",
+      companyAddress: getSetting("company_address") ?? "",
+      materialName: material ? material.name : materialKey,
+      disclosureNo: material?.disclosure_no ?? "",
+      disclosureDate: material?.disclosure_date ?? "",
+      materialType: material?.material_type ?? "",
+      mainIngredients: material?.main_ingredients ?? "",
+      disclosureValidFrom: material?.disclosure_valid_from ?? "",
+      disclosureValidTo: material?.disclosure_valid_to ?? "",
+    };
+  }
+
+  return NextResponse.json({ rows, meta });
 }

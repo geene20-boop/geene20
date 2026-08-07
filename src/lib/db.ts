@@ -488,6 +488,16 @@ export function getDb(): Database.Database {
     ["shift_type", "TEXT"], // 'day' | 'night'
     ["nationality", "TEXT NOT NULL DEFAULT 'domestic'"], // 'domestic' | 'foreign'
   ]);
+  migrateColumns("raw_material_supplier", [["country", "TEXT"]]);
+  migrateColumns("raw_material", [
+    // 별지 제40호서식(유기농업자재 공시 원료·재료 수급대장) 발급용, 자재(품목)마다 고정되는 공시 정보
+    ["disclosure_no", "TEXT"],
+    ["disclosure_date", "TEXT"],
+    ["material_type", "TEXT"],
+    ["main_ingredients", "TEXT"],
+    ["disclosure_valid_from", "TEXT"],
+    ["disclosure_valid_to", "TEXT"],
+  ]);
 
   const specCount = db.prepare("SELECT COUNT(*) as c FROM spec_limit").get() as { c: number };
   if (specCount.c === 0) {

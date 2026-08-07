@@ -291,6 +291,77 @@ function AdminPasswordCard() {
   );
 }
 
+function CompanyInfoCard() {
+  const [companyName, setCompanyName] = useState("");
+  const [companyCeo, setCompanyCeo] = useState("");
+  const [companyAddress, setCompanyAddress] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() {
+    const res = await fetch("/api/settings");
+    if (!res.ok) return;
+    const data = await res.json();
+    setCompanyName(data.company_name ?? "");
+    setCompanyCeo(data.company_ceo ?? "");
+    setCompanyAddress(data.company_address ?? "");
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refresh();
+  }, []);
+
+  async function save() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await Promise.all([
+        fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "company_name", value: companyName }) }),
+        fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "company_ceo", value: companyCeo }) }),
+        fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "company_address", value: companyAddress }) }),
+      ]);
+      setMessage("회사정보가 저장되었습니다.");
+    } catch {
+      setMessage("오류: 저장에 실패했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border p-5 flex flex-col gap-3">
+      <div>
+        <h2 className="font-semibold text-slate-800">회사정보</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          여기에 한 번 등록해두면, 원재료관리의 별지 제40호서식(유기농업자재 공시 원료·재료 수급대장)
+          발급 시 업체명·대표자·사업장 소재지가 자동으로 채워집니다.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">업체명</span>
+          <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="border rounded-md px-2 py-1.5 text-sm" placeholder="㈜한일씨앤에스" />
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">대표자 성명</span>
+          <input value={companyCeo} onChange={(e) => setCompanyCeo(e.target.value)} className="border rounded-md px-2 py-1.5 text-sm" />
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">사업장 소재지</span>
+          <input value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} className="border rounded-md px-2 py-1.5 text-sm" />
+        </label>
+      </div>
+      <div className="flex justify-end">
+        <button onClick={save} disabled={busy} className="bg-slate-900 text-white rounded-md px-4 py-1.5 text-sm font-medium disabled:opacity-50">
+          {busy ? "저장 중..." : "저장"}
+        </button>
+      </div>
+      {message && <p className="text-sm text-slate-600">{message}</p>}
+    </div>
+  );
+}
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -467,6 +538,7 @@ export default function AdminPage() {
       </div>
 
       <AccountManagementCard />
+      <CompanyInfoCard />
       <AdminPasswordCard />
       <BackupCard />
     </div>

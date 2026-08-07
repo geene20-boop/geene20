@@ -21,6 +21,7 @@ type PrefillRow = {
   supplierName: string;
   supplierAddress: string;
   supplierPhone: string;
+  supplierCountry?: string;
   qty: number;
   unit: string;
   unitPrice?: number | string;
@@ -32,6 +33,19 @@ type PrefillRow = {
   actionTaken?: string;
   judgedBy?: string;
   note?: string;
+};
+
+type Form40Meta = {
+  companyName: string;
+  companyCeo: string;
+  companyAddress: string;
+  materialName: string;
+  disclosureNo: string;
+  disclosureDate: string;
+  materialType: string;
+  mainIngredients: string;
+  disclosureValidFrom: string;
+  disclosureValidTo: string;
 };
 
 const DOC_TYPES: RawMaterialDocType[] = ["form19_2", "form40", "inbound_certificate", "product_certificate"];
@@ -52,6 +66,7 @@ export default function RawMaterialDocumentsPage() {
   const [recentInbound, setRecentInbound] = useState<RawMaterialInbound[]>([]);
   const [inboundId, setInboundId] = useState("");
   const [rows, setRows] = useState<PrefillRow[]>([]);
+  const [meta, setMeta] = useState<Form40Meta | null>(null);
   const [memo, setMemo] = useState("");
   const [documents, setDocuments] = useState<RawMaterialDocument[]>([]);
   const [message, setMessage] = useState<string | null>(null);
@@ -76,6 +91,11 @@ export default function RawMaterialDocumentsPage() {
 
   async function preview() {
     setMessage(null);
+    setMeta(null);
+    if (docType === "form40" && !materialKey) {
+      setMessage("별지 제40호서식은 원재료(자재)를 하나 선택해야 합니다.");
+      return;
+    }
     const params = new URLSearchParams({ docType });
     if (docType === "product_certificate") {
       if (!inboundId) {
@@ -88,8 +108,11 @@ export default function RawMaterialDocumentsPage() {
       params.set("to", to);
       if (materialKey) params.set("materialKey", materialKey);
     }
-    const res = await apiGet<{ rows: PrefillRow[]; error?: string }>(`/api/raw-material-document/prefill?${params.toString()}`);
+    const res = await apiGet<{ rows: PrefillRow[]; meta?: Form40Meta | null; error?: string }>(
+      `/api/raw-material-document/prefill?${params.toString()}`
+    );
     setRows(res.rows ?? []);
+    setMeta(res.meta ?? null);
     if (!res.rows || res.rows.length === 0) setMessage("조건에 맞는 데이터가 없습니다.");
   }
 
@@ -112,6 +135,7 @@ export default function RawMaterialDocumentsPage() {
         periodFrom: docType === "product_certificate" ? null : from,
         periodTo: docType === "product_certificate" ? null : to,
         rows,
+        meta,
         memo: memo || null,
       });
       setMessage("문서함에 저장되었습니다.");
@@ -168,15 +192,22 @@ export default function RawMaterialDocumentsPage() {
                 </label>
               )}
               <label className="flex flex-col gap-1 text-sm">
-                <span className="text-slate-600">원재료 (선택 시 해당 품목만)</span>
+                <span className="text-slate-600">
+                  원재료 {docType === "form40" ? "(자재 1개 선택 — 필수)" : "(선택 시 해당 품목만)"}
+                </span>
                 <select value={materialKey} onChange={(e) => setMaterialKey(e.target.value)} className="border rounded-md px-2 py-1.5">
-                  <option value="">전체</option>
+                  <option value="">{docType === "form40" ? "선택" : "전체"}</option>
                   {materials.map((m) => (
                     <option key={m.key} value={m.key}>
                       {materialLabel(m)}
                     </option>
                   ))}
                 </select>
+                {docType === "form40" && (
+                  <span className="text-[11px] text-slate-400">
+                    공시번호·주성분함량 등은 품목관리 &gt; 해당 원재료의 &ldquo;공시정보&rdquo;에 등록해두면 자동으로 채워집니다.
+                  </span>
+                )}
               </label>
               <div className="grid grid-cols-2 gap-2">
                 <label className="flex flex-col gap-1 text-sm">
@@ -190,45 +221,20 @@ export default function RawMaterialDocumentsPage() {
               </div>
             </>
           ) : (
-            <>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-slate-600">원재료로 조회 (목록 좁히기)</span>
-                <select
-                  value={materialKey}
-                  onChange={(e) => {
-                    setMaterialKey(e.target.value);
-                    setInboundId("");
-                  }}
-                  className="border rounded-md px-2 py-1.5"
-                >
-                  <option value="">전체</option>
-                  {materials.map((m) => (
-                    <option key={m.key} value={m.key}>
-                      {materialLabel(m)}
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-slate-600">대상 입고 건 (최근 90일)</span>
+              <select value={inboundId} onChange={(e) => setInboundId(e.target.value)} className="border rounded-md px-2 py-1.5">
+                <option value="">선택</option>
+                {recentInbound.map((r) => {
+                  const material = materialByKey.get(r.material_key);
+                  return (
+                    <option key={r.id} value={r.id}>
+                      {r.date} · {material ? materialLabel(material) : r.material_key} · {r.supplier_name ?? "-"} ({r.judgment})
                     </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-slate-600">대상 입고 건 (최근 90일)</span>
-                <select value={inboundId} onChange={(e) => setInboundId(e.target.value)} className="border rounded-md px-2 py-1.5">
-                  <option value="">선택</option>
-                  {recentInbound
-                    .filter((r) => !materialKey || r.material_key === materialKey)
-                    .map((r) => {
-                      const material = materialByKey.get(r.material_key);
-                      return (
-                        <option key={r.id} value={r.id}>
-                          {r.date} · {material ? materialLabel(material) : r.material_key} · {r.supplier_name ?? "-"} ({r.judgment})
-                        </option>
-                      );
-                    })}
-                </select>
-                {materialKey && recentInbound.filter((r) => r.material_key === materialKey).length === 0 && (
-                  <span className="text-[11px] text-amber-600">선택한 원재료의 최근 90일 입고 건이 없습니다.</span>
-                )}
-              </label>
-            </>
+                  );
+                })}
+              </select>
+            </label>
           )}
 
           <button onClick={preview} className="bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium">
@@ -238,6 +244,26 @@ export default function RawMaterialDocumentsPage() {
 
         <div className="bg-white rounded-xl border p-5 flex flex-col gap-4">
           <h2 className="text-sm font-semibold text-slate-700">② 데이터 미리보기</h2>
+
+          {docType === "form40" && meta && (
+            <div className="bg-sky-50 border border-sky-200 rounded-lg px-3 py-2.5 text-xs grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1">
+              <div><span className="text-slate-500">업체명</span> {meta.companyName || "-"}</div>
+              <div><span className="text-slate-500">대표자</span> {meta.companyCeo || "-"}</div>
+              <div><span className="text-slate-500">사업장 소재지</span> {meta.companyAddress || "-"}</div>
+              <div><span className="text-slate-500">공시번호</span> {meta.disclosureNo || "-"}</div>
+              <div><span className="text-slate-500">자재구분</span> {meta.materialType || "-"}</div>
+              <div><span className="text-slate-500">주성분함량</span> {meta.mainIngredients || "-"}</div>
+              <div className="col-span-2 md:col-span-3">
+                <span className="text-slate-500">공시 유효기간</span> {meta.disclosureValidFrom || "-"} ~ {meta.disclosureValidTo || "-"}
+              </div>
+              {!meta.companyName && (
+                <div className="col-span-2 md:col-span-3 text-amber-700">
+                  회사정보가 비어있습니다. 관리자 설정 &gt; 회사정보에서 등록해주세요.
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <table className="w-full text-xs border-collapse">
               <thead className="bg-slate-100 text-slate-600">
@@ -247,6 +273,7 @@ export default function RawMaterialDocumentsPage() {
                   <th className="border px-2 py-1.5">공급처</th>
                   <th className="border px-2 py-1.5">공급처 주소</th>
                   <th className="border px-2 py-1.5">공급처 전화번호</th>
+                  {docType === "form19_2" && <th className="border px-2 py-1.5">생산국가</th>}
                   <th className="border px-2 py-1.5">수량</th>
                   {docType === "product_certificate" && (
                     <>
@@ -264,6 +291,7 @@ export default function RawMaterialDocumentsPage() {
                     <td className="border px-2 py-1.5">{r.supplierName || "-"}</td>
                     <td className="border px-2 py-1.5">{r.supplierAddress || "-"}</td>
                     <td className="border px-2 py-1.5">{r.supplierPhone || "-"}</td>
+                    {docType === "form19_2" && <td className="border px-2 py-1.5">{r.supplierCountry || "-"}</td>}
                     <td className="border px-2 py-1.5 text-right">
                       {r.qty}
                       {r.unit}

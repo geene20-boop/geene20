@@ -33,8 +33,10 @@ export async function POST(req: NextRequest) {
   }
 
   db.prepare(
-    `INSERT INTO raw_material (key, name, form, category, unit, submit_to, stock, entered_by, updated_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO raw_material
+     (key, name, form, category, unit, submit_to, stock, entered_by, updated_by,
+      disclosure_no, disclosure_date, material_type, main_ingredients, disclosure_valid_from, disclosure_valid_to)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     key,
     name,
@@ -44,7 +46,13 @@ export async function POST(req: NextRequest) {
     body.submitTo ?? null,
     typeof body.initialStock === "number" ? body.initialStock : 0,
     actor,
-    actor
+    actor,
+    body.disclosureNo ?? null,
+    body.disclosureDate ?? null,
+    body.materialType ?? null,
+    body.mainIngredients ?? null,
+    body.disclosureValidFrom ?? null,
+    body.disclosureValidTo ?? null
   );
 
   logAudit("raw_material", `[${key}] ${name}`, "create", actor, [form, body.category, body.unit].filter(Boolean).join("/"));

@@ -30,9 +30,9 @@ export async function POST(req: NextRequest) {
 
   const info = db
     .prepare(
-      "INSERT INTO raw_material_supplier (name, address, phone, entered_by) VALUES (?, ?, ?, ?)"
+      "INSERT INTO raw_material_supplier (name, address, phone, country, entered_by) VALUES (?, ?, ?, ?, ?)"
     )
-    .run(name, body.address ?? null, body.phone ?? null, actor);
+    .run(name, body.address ?? null, body.phone ?? null, body.country ?? null, actor);
 
   logAudit("raw_material_supplier", name, "create", actor, [body.address, body.phone].filter(Boolean).join(" / "));
 

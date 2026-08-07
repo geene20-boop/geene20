@@ -361,6 +361,13 @@ export interface RawMaterial {
   updated_by: string | null;
   created_at: string;
   updated_at: string;
+  // 별지 제40호서식(유기농업자재 공시 원료·재료 수급대장) 발급용 — 자재(품목)마다 고정되는 공시 정보
+  disclosure_no: string | null;
+  disclosure_date: string | null;
+  material_type: string | null;
+  main_ingredients: string | null;
+  disclosure_valid_from: string | null;
+  disclosure_valid_to: string | null;
 }
 
 export interface RawMaterialSupplier {
@@ -368,6 +375,7 @@ export interface RawMaterialSupplier {
   name: string;
   address: string | null;
   phone: string | null;
+  country: string | null;
   entered_by: string | null;
   created_at: string;
   updated_at: string;

@@ -36,10 +36,39 @@ export async function PUT(
   const unit = body.unit !== undefined && body.unit !== "" ? body.unit : before.unit;
   const submitTo = body.submitTo !== undefined ? body.submitTo || null : before.submit_to;
   const stock = typeof body.stock === "number" ? body.stock : before.stock;
+  const disclosureNo = body.disclosureNo !== undefined ? body.disclosureNo || null : before.disclosure_no;
+  const disclosureDate = body.disclosureDate !== undefined ? body.disclosureDate || null : before.disclosure_date;
+  const materialType = body.materialType !== undefined ? body.materialType || null : before.material_type;
+  const mainIngredients =
+    body.mainIngredients !== undefined ? body.mainIngredients || null : before.main_ingredients;
+  const disclosureValidFrom =
+    body.disclosureValidFrom !== undefined ? body.disclosureValidFrom || null : before.disclosure_valid_from;
+  const disclosureValidTo =
+    body.disclosureValidTo !== undefined ? body.disclosureValidTo || null : before.disclosure_valid_to;
 
   db.prepare(
-    "UPDATE raw_material SET name = ?, form = ?, category = ?, unit = ?, submit_to = ?, stock = ?, updated_by = ?, updated_at = datetime('now') WHERE key = ?"
-  ).run(name, form, category, unit, submitTo, stock, actor, key);
+    `UPDATE raw_material SET
+       name = ?, form = ?, category = ?, unit = ?, submit_to = ?, stock = ?,
+       disclosure_no = ?, disclosure_date = ?, material_type = ?, main_ingredients = ?,
+       disclosure_valid_from = ?, disclosure_valid_to = ?,
+       updated_by = ?, updated_at = datetime('now')
+     WHERE key = ?`
+  ).run(
+    name,
+    form,
+    category,
+    unit,
+    submitTo,
+    stock,
+    disclosureNo,
+    disclosureDate,
+    materialType,
+    mainIngredients,
+    disclosureValidFrom,
+    disclosureValidTo,
+    actor,
+    key
+  );
 
   logAudit(
     "raw_material",

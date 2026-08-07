@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     body.targetMaterial ?? null,
     body.periodFrom ?? null,
     body.periodTo ?? null,
-    JSON.stringify(body.rows),
+    JSON.stringify({ rows: body.rows, meta: body.meta ?? null }),
     body.memo ?? null,
     actor
   );

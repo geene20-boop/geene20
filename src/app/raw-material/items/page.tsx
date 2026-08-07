@@ -22,11 +22,31 @@ function emptyMaterialForm(): NewMaterialForm {
   return { key: "", name: "", form: "solid", category: "", unit: "", submitTo: "", initialStock: "" };
 }
 
+type DisclosureForm = {
+  disclosureNo: string;
+  disclosureDate: string;
+  materialType: string;
+  mainIngredients: string;
+  disclosureValidFrom: string;
+  disclosureValidTo: string;
+};
+
+function emptyDisclosureForm(): DisclosureForm {
+  return {
+    disclosureNo: "",
+    disclosureDate: "",
+    materialType: "",
+    mainIngredients: "",
+    disclosureValidFrom: "",
+    disclosureValidTo: "",
+  };
+}
+
 export default function RawMaterialItemsPage() {
   const [materials, setMaterials] = useState<RawMaterial[]>([]);
   const [suppliers, setSuppliers] = useState<RawMaterialSupplier[]>([]);
   const [form, setForm] = useState<NewMaterialForm>(emptyMaterialForm());
-  const [supplierForm, setSupplierForm] = useState({ name: "", address: "", phone: "" });
+  const [supplierForm, setSupplierForm] = useState({ name: "", address: "", phone: "", country: "" });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const { enteredBy, setEnteredBy } = useEnteredBy();
@@ -36,7 +56,9 @@ export default function RawMaterialItemsPage() {
   const [editKey, setEditKey] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: "", category: "", unit: "", submitTo: "", stock: "" });
   const [editSupplierId, setEditSupplierId] = useState<number | null>(null);
-  const [editSupplierForm, setEditSupplierForm] = useState({ name: "", address: "", phone: "" });
+  const [editSupplierForm, setEditSupplierForm] = useState({ name: "", address: "", phone: "", country: "" });
+  const [disclosureKey, setDisclosureKey] = useState<string | null>(null);
+  const [disclosureForm, setDisclosureForm] = useState<DisclosureForm>(emptyDisclosureForm());
   const session = useSiteSession();
 
   useEffect(() => {
@@ -163,8 +185,9 @@ export default function RawMaterialItemsPage() {
         name: supplierForm.name,
         address: supplierForm.address || null,
         phone: supplierForm.phone || null,
+        country: supplierForm.country || null,
       });
-      setSupplierForm({ name: "", address: "", phone: "" });
+      setSupplierForm({ name: "", address: "", phone: "", country: "" });
       await loadSuppliers();
     } catch (err) {
       setMessage(`오류: ${(err as Error).message}`);
@@ -173,7 +196,33 @@ export default function RawMaterialItemsPage() {
 
   function startEditSupplier(s: RawMaterialSupplier) {
     setEditSupplierId(s.id);
-    setEditSupplierForm({ name: s.name, address: s.address ?? "", phone: s.phone ?? "" });
+    setEditSupplierForm({ name: s.name, address: s.address ?? "", phone: s.phone ?? "", country: s.country ?? "" });
+  }
+
+  function startEditDisclosure(item: RawMaterial) {
+    setDisclosureKey(item.key);
+    setDisclosureForm({
+      disclosureNo: item.disclosure_no ?? "",
+      disclosureDate: item.disclosure_date ?? "",
+      materialType: item.material_type ?? "",
+      mainIngredients: item.main_ingredients ?? "",
+      disclosureValidFrom: item.disclosure_valid_from ?? "",
+      disclosureValidTo: item.disclosure_valid_to ?? "",
+    });
+  }
+
+  async function saveDisclosure(key: string) {
+    if (!enteredBy.trim()) {
+      setNameError(true);
+      return;
+    }
+    try {
+      await apiPut(`/api/raw-material/${key}`, { entered_by: enteredBy, ...disclosureForm });
+      setDisclosureKey(null);
+      await loadMaterials();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    }
   }
 
   async function saveEditSupplier(id: number) {
@@ -413,6 +462,14 @@ export default function RawMaterialItemsPage() {
                           )}
                         </>
                       )}
+                      {canEdit(item) && (
+                        <button
+                          onClick={() => (disclosureKey === item.key ? setDisclosureKey(null) : startEditDisclosure(item))}
+                          className="text-xs border rounded-md px-2 py-1 bg-white text-sky-700"
+                        >
+                          공시정보
+                        </button>
+                      )}
                       {admin.loggedIn && (
                         <button onClick={() => toggleLock(item)} className="text-xs border rounded-md px-2 py-1 bg-white">
                           {item.locked ? "승인해제" : "승인"}
@@ -423,6 +480,82 @@ export default function RawMaterialItemsPage() {
                 )}
               </tr>
             ))}
+            {materials.map(
+              (item) =>
+                disclosureKey === item.key && (
+                  <tr key={`${item.key}-disclosure`} className="border-t bg-sky-50/50">
+                    <td colSpan={9} className="px-4 py-3">
+                      <div className="text-xs font-semibold text-sky-800 mb-2">
+                        [{item.key}] {item.name} — 별지 제40호서식 공시정보
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+                        <label className="flex flex-col gap-1 text-xs">
+                          <span className="text-slate-500">공시번호</span>
+                          <input
+                            value={disclosureForm.disclosureNo}
+                            onChange={(e) => setDisclosureForm((f) => ({ ...f, disclosureNo: e.target.value }))}
+                            className="border rounded-md px-2 py-1"
+                            placeholder="공시-2-3-454"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-xs">
+                          <span className="text-slate-500">최초 공시일</span>
+                          <input
+                            type="date"
+                            value={disclosureForm.disclosureDate}
+                            onChange={(e) => setDisclosureForm((f) => ({ ...f, disclosureDate: e.target.value }))}
+                            className="border rounded-md px-2 py-1"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-xs">
+                          <span className="text-slate-500">자재의 구분</span>
+                          <input
+                            value={disclosureForm.materialType}
+                            onChange={(e) => setDisclosureForm((f) => ({ ...f, materialType: e.target.value }))}
+                            className="border rounded-md px-2 py-1"
+                            placeholder="토양개량 및 작물생육용"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-xs">
+                          <span className="text-slate-500">주성분(원료) 함량</span>
+                          <input
+                            value={disclosureForm.mainIngredients}
+                            onChange={(e) => setDisclosureForm((f) => ({ ...f, mainIngredients: e.target.value }))}
+                            className="border rounded-md px-2 py-1"
+                            placeholder="백운석 95%, 당밀 5%"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-xs">
+                          <span className="text-slate-500">공시 유효기간(시작)</span>
+                          <input
+                            type="date"
+                            value={disclosureForm.disclosureValidFrom}
+                            onChange={(e) => setDisclosureForm((f) => ({ ...f, disclosureValidFrom: e.target.value }))}
+                            className="border rounded-md px-2 py-1"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-1 text-xs">
+                          <span className="text-slate-500">공시 유효기간(종료)</span>
+                          <input
+                            type="date"
+                            value={disclosureForm.disclosureValidTo}
+                            onChange={(e) => setDisclosureForm((f) => ({ ...f, disclosureValidTo: e.target.value }))}
+                            className="border rounded-md px-2 py-1"
+                          />
+                        </label>
+                      </div>
+                      <div className="flex justify-end gap-2 mt-2">
+                        <button onClick={() => setDisclosureKey(null)} className="text-xs border rounded-md px-3 py-1.5 bg-white">
+                          취소
+                        </button>
+                        <button onClick={() => saveDisclosure(item.key)} className="text-xs bg-slate-900 text-white rounded-md px-3 py-1.5">
+                          공시정보 저장
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+            )}
             {materials.length === 0 && (
               <tr>
                 <td colSpan={9} className="px-3 py-8 text-center text-slate-400">
@@ -440,8 +573,8 @@ export default function RawMaterialItemsPage() {
           !session.canWrite ? "opacity-50 pointer-events-none" : ""
         }`}
       >
-        <h2 className="text-sm font-semibold text-slate-700">거래처 등록 (주소·전화번호는 양식출력에 자동 반영됩니다)</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <h2 className="text-sm font-semibold text-slate-700">거래처 등록 (주소·전화번호·생산국가는 양식출력에 자동 반영됩니다)</h2>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">거래처명</span>
             <input
@@ -467,6 +600,15 @@ export default function RawMaterialItemsPage() {
               className="border rounded-md px-2 py-1.5"
             />
           </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-600">생산국가 (별지19호의2용)</span>
+            <input
+              value={supplierForm.country}
+              onChange={(e) => setSupplierForm((f) => ({ ...f, country: e.target.value }))}
+              className="border rounded-md px-2 py-1.5"
+              placeholder="한국"
+            />
+          </label>
         </div>
         <div className="flex justify-end">
           <button type="submit" className="bg-slate-900 text-white rounded-md px-4 py-1.5 text-sm font-medium">
@@ -483,6 +625,7 @@ export default function RawMaterialItemsPage() {
               <th className="text-left px-3 py-2">거래처명</th>
               <th className="text-left px-3 py-2">주소</th>
               <th className="text-left px-3 py-2">전화번호</th>
+              <th className="text-left px-3 py-2">생산국가</th>
               {canManage && <th className="text-left px-3 py-2">관리</th>}
             </tr>
           </thead>
@@ -500,12 +643,16 @@ export default function RawMaterialItemsPage() {
                     <td className="px-3 py-2">
                       <input value={editSupplierForm.phone} onChange={(e) => setEditSupplierForm((f) => ({ ...f, phone: e.target.value }))} className="border rounded-md px-2 py-1 w-32" />
                     </td>
+                    <td className="px-3 py-2">
+                      <input value={editSupplierForm.country} onChange={(e) => setEditSupplierForm((f) => ({ ...f, country: e.target.value }))} className="border rounded-md px-2 py-1 w-20" />
+                    </td>
                   </>
                 ) : (
                   <>
                     <td className="px-3 py-2">{s.name}</td>
                     <td className="px-3 py-2">{s.address ?? "-"}</td>
                     <td className="px-3 py-2">{s.phone ?? "-"}</td>
+                    <td className="px-3 py-2">{s.country ?? "-"}</td>
                   </>
                 )}
                 {canManage && (
@@ -537,7 +684,7 @@ export default function RawMaterialItemsPage() {
             ))}
             {suppliers.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={5} className="px-3 py-8 text-center text-slate-400">
                   등록된 거래처가 없습니다.
                 </td>
               </tr>

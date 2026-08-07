@@ -17,6 +17,8 @@ export async function GET(req: NextRequest) {
   const to = searchParams.get("to") ?? "9999-12-31";
   const judgment = searchParams.get("judgment");
   const materialKey = searchParams.get("materialKey");
+  const category = searchParams.get("category");
+  const supplierId = searchParams.get("supplierId");
 
   let sql = "SELECT * FROM raw_material_inbound WHERE date BETWEEN ? AND ?";
   const args: (string | number)[] = [from, to];
@@ -27,6 +29,14 @@ export async function GET(req: NextRequest) {
   if (materialKey) {
     sql += " AND material_key = ?";
     args.push(materialKey);
+  }
+  if (supplierId) {
+    sql += " AND supplier_id = ?";
+    args.push(Number(supplierId));
+  }
+  if (category) {
+    sql += " AND material_key IN (SELECT key FROM raw_material WHERE category = ?)";
+    args.push(category);
   }
   sql += " ORDER BY date DESC, created_at DESC";
 

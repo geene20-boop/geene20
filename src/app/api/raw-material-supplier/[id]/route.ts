@@ -22,10 +22,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const name = body.name !== undefined && body.name !== "" ? body.name : before.name;
   const address = body.address !== undefined ? body.address || null : before.address;
   const phone = body.phone !== undefined ? body.phone || null : before.phone;
+  const country = body.country !== undefined ? body.country || null : before.country;
 
   db.prepare(
-    "UPDATE raw_material_supplier SET name = ?, address = ?, phone = ?, updated_at = datetime('now') WHERE id = ?"
-  ).run(name, address, phone, id);
+    "UPDATE raw_material_supplier SET name = ?, address = ?, phone = ?, country = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(name, address, phone, country, id);
 
   logAudit("raw_material_supplier", name, "update", actor, [address, phone].filter(Boolean).join(" / "));
 
