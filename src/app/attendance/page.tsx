@@ -637,8 +637,12 @@ function DailyRosterRow({ row, onChanged }: { row: DailyAttendanceRow; onChanged
   );
 }
 
+type ShiftFilter = "all" | ShiftType;
+const SHIFT_FILTER_LABELS: Record<ShiftFilter, string> = { all: "전체", day: "주간", night: "야간" };
+
 function DailyRosterTab() {
   const [date, setDate] = useState(today());
+  const [shiftFilter, setShiftFilter] = useState<ShiftFilter>("all");
   const [rows, setRows] = useState<DailyAttendanceRow[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -659,6 +663,7 @@ function DailyRosterTab() {
   }, [date]);
 
   const weekday = ["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T00:00:00Z`).getUTCDay()];
+  const filteredRows = shiftFilter === "all" ? rows : rows.filter((r) => r.shift === shiftFilter);
 
   return (
     <div className="bg-white rounded-xl border overflow-x-auto">
@@ -682,8 +687,22 @@ function DailyRosterTab() {
           >
             다음날 ▶
           </button>
+          <select
+            value={shiftFilter}
+            onChange={(e) => setShiftFilter(e.target.value as ShiftFilter)}
+            className="border rounded-md px-2 py-1 text-xs bg-white"
+          >
+            {(["all", "day", "night"] as ShiftFilter[]).map((f) => (
+              <option key={f} value={f}>
+                {SHIFT_FILTER_LABELS[f]}
+              </option>
+            ))}
+          </select>
         </div>
-        <a href={`/api/daily-attendance/export?date=${date}`} className="text-xs border rounded-md px-3 py-1.5 bg-white">
+        <a
+          href={`/api/daily-attendance/export?date=${date}${shiftFilter !== "all" ? `&shift=${shiftFilter}` : ""}`}
+          className="text-xs border rounded-md px-3 py-1.5 bg-white"
+        >
           ⬇ 엑셀 다운로드
         </a>
       </div>
@@ -698,13 +717,13 @@ function DailyRosterTab() {
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {filteredRows.map((r) => (
             <DailyRosterRow key={r.worker_id} row={r} onChanged={refresh} />
           ))}
-          {!loading && rows.length === 0 && (
+          {!loading && filteredRows.length === 0 && (
             <tr>
               <td colSpan={5} className="px-3 py-8 text-center text-slate-400">
-                근로자명부가 비어있습니다.
+                {rows.length === 0 ? "근로자명부가 비어있습니다." : "해당 근무조 인원이 없습니다."}
               </td>
             </tr>
           )}

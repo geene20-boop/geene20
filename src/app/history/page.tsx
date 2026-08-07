@@ -46,17 +46,6 @@ export default function HistoryPage() {
   const [rows, setRows] = useState<AuditLogRow[]>([]);
   const [loading, setLoading] = useState(false);
 
-  if (!session.isAdmin) {
-    return (
-      <div className="flex flex-col gap-4 items-start">
-        <div>
-          <h1 className="text-xl font-bold">이력 관리</h1>
-          <p className="text-sm text-slate-500 mt-1">이 화면은 관리자만 접근할 수 있습니다.</p>
-        </div>
-      </div>
-    );
-  }
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -73,10 +62,22 @@ export default function HistoryPage() {
   }, [table, actor, from, to]);
 
   useEffect(() => {
+    if (!session.isAdmin) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [session.isAdmin]);
+
+  if (!session.isAdmin) {
+    return (
+      <div className="flex flex-col gap-4 items-start">
+        <div>
+          <h1 className="text-xl font-bold">이력 관리</h1>
+          <p className="text-sm text-slate-500 mt-1">이 화면은 관리자만 접근할 수 있습니다.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
