@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useSiteSession } from "@/lib/useSiteSession";
+import { useAdminSession } from "@/components/AdminUnlock";
 import HanilLogo from "@/components/HanilLogo";
 import { NAV_GROUPS, NavGroup } from "@/lib/navGroups";
 import { apiGet } from "@/lib/apiClient";
@@ -91,20 +92,29 @@ function AccountBadge() {
 export default function NavBar() {
   const pathname = usePathname();
   const session = useSiteSession();
+  const admin = useAdminSession();
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
   const navRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    admin.refresh();
+  }, []);
+
   const canApprove = session.isAdmin || session.isModifier;
   const pendingCount = usePendingApprovalCount(canApprove, pathname);
   // 외국인 근로자와 연동된 계정은 근태관리를 이용하지 않으므로 메뉴에서 숨긴다.
   // 관리자만 이력관리를 볼 수 있다.
   const visibleGroups = NAV_GROUPS.map((group) => {
     if (group.label === "시스템관리" && !session.isAdmin) {
-      return {
-        ...group,
-        items: group.items.filter((item) => item.href !== "/history"),
-      };
+      let items = group.items.filter((item) => item.href !== "/history");
+      // 관리자 로그인이 아니면 데이터 가져오기도 숨긴다.
+      if (!admin.loggedIn) {
+        items = items.filter((item) => item.href !== "/import");
+      }
+      return { ...group, items };
     }
     if (session.isForeignWorker && group.label === "근태관리") {
       return null;
