@@ -281,7 +281,7 @@ export default function QcPage() {
         shift: inferShift(form.time),
         time: form.time,
         measured_date: form.measured_date || null,
-        measured_time: form.measured_time || null,
+        measured_time: nowHHMM(),
         burner_temp: n(form.burner_temp),
         granulation_brix: n(form.granulation_brix),
         granulation_input: n(form.granulation_input),
