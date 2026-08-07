@@ -28,5 +28,4 @@ jobs:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           npm install -g @railway/cli
-          railway link -t $RAILWAY_TOKEN
-          railway deploy --detach
+          railway up --detach
