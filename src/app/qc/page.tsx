@@ -7,12 +7,23 @@ import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import { useSiteSession } from "@/lib/useSiteSession";
 
-const today = () => new Date().toISOString().slice(0, 10);
-const nowHHMM = () => new Date().toISOString().slice(11, 16);
+// toISOString()은 세계표준시(UTC) 기준이라 한국시간(KST)과 최대 9시간 어긋난다.
+// 기기(브라우저)의 실제 현지 날짜·시각을 그대로 써야 한다.
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : `${n}`;
+}
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+const today = () => localDateStr(new Date());
+const nowHHMM = () => {
+  const d = new Date();
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+};
 const daysAgo = (n: number) => {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d);
 };
 const formatDateForSampleNo = (dateStr: string) => {
   return dateStr.replace(/-/g, ".");
@@ -54,6 +65,11 @@ const emptyForm = (): FormState => ({
   worker: "",
 });
 
+// 서버(SSR)와 브라우저의 시간대가 다르면 최초 렌더 시 날짜·시각이 서로 달라 하이드레이션이
+// 어긋날 수 있다. 최초 렌더에서는 비워두고, 브라우저에 붙은 뒤(useEffect)에만 실제 현재
+// 날짜·시각을 채운다.
+const initialForm = (): FormState => ({ ...emptyForm(), date: "", time: "", measured_date: "", measured_time: "" });
+
 const DRAFT_KEY = "qc_draft";
 
 function n(v: string): number | null {
@@ -63,7 +79,7 @@ function n(v: string): number | null {
 }
 
 export default function QcPage() {
-  const [form, setForm] = useState<FormState>(emptyForm());
+  const [form, setForm] = useState<FormState>(initialForm);
   const [tests, setTests] = useState<QcTest[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -78,6 +94,12 @@ export default function QcPage() {
   const [rangeFrom, setRangeFrom] = useState(daysAgo(30));
   const [rangeTo, setRangeTo] = useState(today());
   const session = useSiteSession();
+
+  // 브라우저에 붙은 뒤(클라이언트 전용) 실제 현재 날짜·시각으로 채운다 (initialForm 참고).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm((f) => (f.date ? f : { ...f, date: today(), time: nowHHMM(), measured_date: today(), measured_time: nowHHMM() }));
+  }, []);
 
   useEffect(() => {
     if (session.loggedIn && session.displayName) {

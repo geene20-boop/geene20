@@ -62,6 +62,15 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [{ href: "/board", label: "게시판" }],
   },
   {
+    label: "문서관리",
+    items: [
+      { href: "/test-reports", label: "외부기관 시험성적서" },
+      { href: "/msds", label: "MSDS" },
+      { href: "/self-test", label: "자체시험성적서" },
+      { href: "/lab-journal", label: "연구실험일지" },
+    ],
+  },
+  {
     label: "시스템관리",
     items: [
       { href: "/history", label: "이력 관리" },
