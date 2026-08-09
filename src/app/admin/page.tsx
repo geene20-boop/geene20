@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 
 type AccountRole = "viewer" | "editor" | "modifier";
@@ -18,7 +18,7 @@ function AccountManagementCard() {
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<AccountRole>("editor");
+  const role: AccountRole = "editor";
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -57,21 +57,39 @@ function AccountManagementCard() {
   }
 
   async function changeRole(id: number, newRole: AccountRole) {
-    await fetch(`/api/accounts/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: newRole }),
-    });
-    refresh();
+    try {
+      const res = await fetch(`/api/accounts/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: newRole }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "권한 변경 실패");
+      }
+      setMessage("권한이 변경되었습니다.");
+      refresh();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    }
   }
 
   async function toggleActive(account: AccountRow) {
-    await fetch(`/api/accounts/${account.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ active: account.active ? false : true }),
-    });
-    refresh();
+    try {
+      const res = await fetch(`/api/accounts/${account.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: account.active ? false : true }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "상태 변경 실패");
+      }
+      setMessage(account.active ? "계정이 비활성화되었습니다." : "계정이 활성화되었습니다.");
+      refresh();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    }
   }
 
   async function resetPassword(id: number) {
@@ -87,6 +105,25 @@ function AccountManagementCard() {
       return;
     }
     setMessage("비밀번호가 재설정되었습니다.");
+  }
+
+  async function deleteAccount(account: AccountRow) {
+    if (!confirm(`'${account.display_name || account.username}' 계정을 정말 삭제하시겠습니까?\n(이 작업은 취소할 수 없습니다)`)) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/accounts/${account.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "계정 삭제 실패");
+      }
+      setMessage("계정이 삭제되었습니다.");
+      refresh();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    }
   }
 
   return (
@@ -125,14 +162,6 @@ function AccountManagementCard() {
             onChange={(e) => setPassword(e.target.value)}
             className="border rounded-md px-2 py-1.5 text-sm"
           />
-        </label>
-        <label className="flex flex-col gap-1 text-xs">
-          <span className="text-slate-500">권한</span>
-          <select value={role} onChange={(e) => setRole(e.target.value as AccountRole)} className="border rounded-md px-2 py-1.5 text-sm">
-            <option value="editor">입력 가능(editor)</option>
-            <option value="modifier">수정·삭제 가능(modifier)</option>
-            <option value="viewer">조회만(viewer)</option>
-          </select>
         </label>
         <button
           type="submit"
@@ -186,6 +215,9 @@ function AccountManagementCard() {
                   <button onClick={() => toggleActive(a)} className="text-xs border rounded-md px-2 py-1 bg-white">
                     {a.active ? "비활성화" : "활성화"}
                   </button>
+                  <button onClick={() => deleteAccount(a)} className="text-xs border rounded-md px-2 py-1 bg-white text-red-600 hover:bg-red-50">
+                    삭제
+                  </button>
                 </div>
               </td>
             </tr>
@@ -203,6 +235,7 @@ function AccountManagementCard() {
     </div>
   );
 }
+
 
 function AdminPasswordCard() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -286,6 +319,77 @@ function AdminPasswordCard() {
           변경
         </button>
       </form>
+      {message && <p className="text-sm text-slate-600">{message}</p>}
+    </div>
+  );
+}
+
+function CompanyInfoCard() {
+  const [companyName, setCompanyName] = useState("");
+  const [companyCeo, setCompanyCeo] = useState("");
+  const [companyAddress, setCompanyAddress] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function refresh() {
+    const res = await fetch("/api/settings");
+    if (!res.ok) return;
+    const data = await res.json();
+    setCompanyName(data.company_name ?? "");
+    setCompanyCeo(data.company_ceo ?? "");
+    setCompanyAddress(data.company_address ?? "");
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refresh();
+  }, []);
+
+  async function save() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await Promise.all([
+        fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "company_name", value: companyName }) }),
+        fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "company_ceo", value: companyCeo }) }),
+        fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: "company_address", value: companyAddress }) }),
+      ]);
+      setMessage("회사정보가 저장되었습니다.");
+    } catch {
+      setMessage("오류: 저장에 실패했습니다.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border p-5 flex flex-col gap-3">
+      <div>
+        <h2 className="font-semibold text-slate-800">회사정보</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          여기에 한 번 등록해두면, 원재료관리의 별지 제40호서식(유기농업자재 공시 원료·재료 수급대장)
+          발급 시 업체명·대표자·사업장 소재지가 자동으로 채워집니다.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">업체명</span>
+          <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="border rounded-md px-2 py-1.5 text-sm" placeholder="㈜한일씨앤에스" />
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">대표자 성명</span>
+          <input value={companyCeo} onChange={(e) => setCompanyCeo(e.target.value)} className="border rounded-md px-2 py-1.5 text-sm" />
+        </label>
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">사업장 소재지</span>
+          <input value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} className="border rounded-md px-2 py-1.5 text-sm" />
+        </label>
+      </div>
+      <div className="flex justify-end">
+        <button onClick={save} disabled={busy} className="bg-slate-900 text-white rounded-md px-4 py-1.5 text-sm font-medium disabled:opacity-50">
+          {busy ? "저장 중..." : "저장"}
+        </button>
+      </div>
       {message && <p className="text-sm text-slate-600">{message}</p>}
     </div>
   );
@@ -415,6 +519,97 @@ function BackupCard() {
   );
 }
 
+type PmeterResult = {
+  plant: string;
+  date: string;
+  usage_kwh: number | null;
+  status: "saved" | "skipped_manual" | "no_data" | "error";
+  error?: string;
+};
+
+const PMETER_STATUS_LABELS: Record<PmeterResult["status"], string> = {
+  saved: "저장됨",
+  skipped_manual: "수동입력 있어 건너뜀",
+  no_data: "조회된 값 없음",
+  error: "오류",
+};
+
+function PmeterCard() {
+  const [configured, setConfigured] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [results, setResults] = useState<PmeterResult[] | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function refresh() {
+    const res = await fetch("/api/admin/pmeter");
+    if (!res.ok) return;
+    const data = await res.json();
+    setConfigured(!!data.configured);
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refresh();
+  }, []);
+
+  async function runNow() {
+    setRunning(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/pmeter", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "실패했습니다.");
+      setResults(data.results);
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border p-5 flex flex-col gap-3">
+      <div>
+        <h2 className="font-semibold text-slate-800">한전 Open P-Meter 자동 연동</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          매일 오전 8시(KST)에 전일 전력사용량을 1공장·2공장 각각 자동으로 조회해 전력사용량
+          화면에 채워 넣습니다. 같은 날짜에 이미 수동 입력이 있으면 자동 값으로 덮어쓰지 않습니다.
+        </p>
+      </div>
+      {configured ? (
+        <>
+          <p className="text-xs text-emerald-600">설정되어 있습니다. 자동 연동이 활성화됩니다.</p>
+          <button
+            onClick={runNow}
+            disabled={running}
+            className="border rounded-md px-3 py-1.5 text-sm disabled:opacity-50 w-fit"
+          >
+            {running ? "동기화 중..." : "지금 동기화 실행 (전일치)"}
+          </button>
+        </>
+      ) : (
+        <p className="text-xs text-amber-600">
+          아직 설정되지 않았습니다. KEPCO_PMETER_API_KEY, KEPCO_PMETER_CUSTNO_PLANT1,
+          KEPCO_PMETER_CUSTNO_PLANT2 환경변수를 Railway 프로젝트 설정(Variables)에 추가하면
+          자동으로 활성화됩니다.
+        </p>
+      )}
+      {message && <p className="text-sm text-slate-600">{message}</p>}
+      {results && (
+        <ul className="text-xs text-slate-600 flex flex-col gap-1">
+          {results.map((r) => (
+            <li key={r.plant}>
+              {r.date} {r.plant}: {r.usage_kwh != null ? `${r.usage_kwh.toLocaleString()}kWh · ` : ""}
+              {PMETER_STATUS_LABELS[r.status]}
+              {r.error ? ` (${r.error})` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const admin = useAdminSession();
   const [showModal, setShowModal] = useState(false);
@@ -467,8 +662,10 @@ export default function AdminPage() {
       </div>
 
       <AccountManagementCard />
+      <CompanyInfoCard />
       <AdminPasswordCard />
       <BackupCard />
+      <PmeterCard />
     </div>
   );
 }

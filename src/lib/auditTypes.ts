@@ -20,7 +20,11 @@ export type AuditTable =
   | "document_file"
   | "self_test_item_spec"
   | "self_test_certificate"
-  | "lab_journal";
+  | "lab_journal"
+  | "raw_material"
+  | "raw_material_supplier"
+  | "raw_material_inbound"
+  | "raw_material_document";
 export type AuditAction = "create" | "update" | "delete";
 
 export interface AuditLogRow {
@@ -54,6 +58,10 @@ export const TABLE_LABELS: Record<AuditTable, string> = {
   self_test_item_spec: "자체시험성적서 품목규격",
   self_test_certificate: "자체시험성적서 발행",
   lab_journal: "연구실험일지",
+  raw_material: "원재료 품목관리",
+  raw_material_supplier: "원재료 거래처",
+  raw_material_inbound: "원재료 입고",
+  raw_material_document: "원재료 양식출력 문서함",
 };
 
 export const ACTION_LABELS: Record<AuditAction, string> = {

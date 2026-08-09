@@ -35,13 +35,15 @@ export interface ProductionLog {
   locked: number;
   entered_by: string | null;
   updated_by: string | null;
+  time: string | null;
+  sample_no: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface QcTest {
   id: number;
-  sample_no: number | null;
+  sample_no: string | null;
   fertilizer_type: string | null;
   date: string;
   shift: Shift;
@@ -276,8 +278,9 @@ export interface Worker {
   name: string;
   active: number;
   hire_date: string | null;
-  shift_type: ShiftType | null;
+  birth_date: string | null;
   nationality: Nationality;
+  foreign_country: string | null; // 'cambodia' | 'nepal'
   created_at: string;
 }
 
@@ -296,7 +299,7 @@ export interface DailyAttendanceRow {
   note: string | null; // "본인 신청 → 관리자 승인됨" 등 참고 문구
 }
 
-export type LeaveType = "연차" | "반차(오전)" | "반차(오후)" | "외출" | "조퇴";
+export type LeaveType = "연차" | "반차(오전)" | "반차(오후)" | "외출" | "조퇴" | "무급휴무" | "유급휴무";
 export type LeaveStatus = "pending" | "approved" | "rejected";
 
 export interface LeaveRequest {
@@ -328,6 +331,115 @@ export interface LeaveBalance {
   monthly_used_days: number[]; // 1월~12월 순서의 사용일수(연차/반차 합산)
   updated_by: string | null;
   updated_at: string;
+}
+
+// ---------- 원재료관리 ----------
+
+export type RawMaterialForm = "solid" | "liquid";
+export type RawMaterialJudgment = "OK" | "NG";
+
+export const RAW_MATERIAL_FORM_LABELS: Record<RawMaterialForm, string> = {
+  solid: "고상",
+  liquid: "액상",
+};
+
+export const RAW_MATERIAL_JUDGMENT_LABELS: Record<RawMaterialJudgment, string> = {
+  OK: "OK 적합",
+  NG: "NG 부적합",
+};
+
+export interface RawMaterial {
+  key: string;
+  name: string;
+  form: RawMaterialForm;
+  category: string | null;
+  unit: string | null;
+  submit_to: string | null;
+  last_price: number | null;
+  stock: number;
+  locked: number;
+  approved_by: string | null;
+  approved_at: string | null;
+  entered_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // 별지 제40호서식(유기농업자재 공시 원료·재료 수급대장) 발급용 — 자재(품목)마다 고정되는 공시 정보
+  disclosure_no: string | null;
+  disclosure_date: string | null;
+  material_type: string | null;
+  main_ingredients: string | null;
+  disclosure_valid_from: string | null;
+  disclosure_valid_to: string | null;
+}
+
+export interface RawMaterialSupplier {
+  id: number;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  country: string | null;
+  entered_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RawMaterialInbound {
+  id: string;
+  date: string;
+  material_key: string;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  qty: number;
+  unit: string | null;
+  unit_price: number | null;
+  amount: number | null;
+  vehicle_no: string | null;
+  judgment: RawMaterialJudgment;
+  problem: string | null;
+  reason: string | null;
+  action_taken: string | null;
+  judged_by: string | null;
+  locked: number;
+  approved_by: string | null;
+  approved_at: string | null;
+  entered_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RawMaterialPriceHistory {
+  id: number;
+  material_key: string;
+  effective_date: string;
+  old_price: number | null;
+  new_price: number;
+  changed_by: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export type RawMaterialDocType = "form19_2" | "form40" | "inbound_certificate" | "product_certificate";
+
+export const RAW_MATERIAL_DOC_LABELS: Record<RawMaterialDocType, string> = {
+  form19_2: "별지 제19호의2서식 (비료관리법 시행규칙 · 원료 장부)",
+  form40: "별지 제40호서식 (유기농업자재 공시 원료·재료 수급대장)",
+  inbound_certificate: "원재료 입고 성적서",
+  product_certificate: "제품성적서",
+};
+
+export interface RawMaterialDocument {
+  id: string;
+  doc_type: RawMaterialDocType;
+  title: string | null;
+  target_material: string | null;
+  period_from: string | null;
+  period_to: string | null;
+  data_json: string;
+  memo: string | null;
+  created_by: string | null;
+  created_at: string;
 }
 
 export type BoardCategory = "생산계획" | "보수계획" | "휴무일" | "기타";
@@ -413,6 +525,15 @@ export interface LabJournal {
   linked_report_id: number | null;
   entered_by: string;
   updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TabVisibility {
+  id: number;
+  module: string; // '생산관리' | '생산가동' | '생산/출하입력' | '품질관리' | '재고관리' 등
+  feature: string; // 'backup' | 'maintenance' 등 - 탭 이름
+  visible: number; // 1: 표시, 0: 숨김
   created_at: string;
   updated_at: string;
 }
