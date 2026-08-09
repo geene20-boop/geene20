@@ -327,6 +327,65 @@ export function getDb(): Database.Database {
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(worker_id, date)
     );
+
+    -- 문서관리: 외부기관 시험성적서(test_report) / MSDS(msds) 공용 업로드 파일
+    CREATE TABLE IF NOT EXISTS document_file (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      doc_type TEXT NOT NULL,          -- 'test_report' | 'msds'
+      category TEXT NOT NULL,          -- '원료' | '제품'
+      item_name TEXT NOT NULL,
+      language TEXT,                   -- test_report만 사용: '국문' | '영문' | '기타'
+      ref_date TEXT,                   -- test_report=시험일자, msds=개정일자 (YYYY-MM-DD)
+      filename TEXT NOT NULL,
+      mime_type TEXT,
+      size INTEGER NOT NULL,
+      data BLOB NOT NULL,
+      entered_by TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_document_file_type ON document_file(doc_type, item_name);
+
+    -- 자체시험성적서(수출용): 품목별 규격/비고 마스터 (품목 선택 시 자동입력용)
+    CREATE TABLE IF NOT EXISTS self_test_item_spec (
+      item_name TEXT PRIMARY KEY,
+      specification TEXT,
+      remarks TEXT,
+      updated_by TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- 자체시험성적서 발행 이력
+    CREATE TABLE IF NOT EXISTS self_test_certificate (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_no TEXT,
+      item_name TEXT NOT NULL,
+      specification TEXT,
+      remarks TEXT,
+      result TEXT,
+      language TEXT NOT NULL DEFAULT '국문',   -- '국문' | '영문'
+      consignee TEXT,                          -- 발송처 (자유입력)
+      issued_date TEXT NOT NULL,
+      issued_by TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_self_test_certificate_date ON self_test_certificate(issued_date);
+
+    -- 연구실험일지: 항목형 / 자유기술형 / 외부시험연동형 공용
+    CREATE TABLE IF NOT EXISTS lab_journal (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      form_type TEXT NOT NULL,        -- '항목형' | '자유기술형' | '외부시험연동형'
+      date TEXT NOT NULL,
+      researcher TEXT,
+      item_name TEXT,
+      title TEXT NOT NULL,
+      content_json TEXT NOT NULL,     -- 양식별 세부 데이터 (JSON)
+      linked_report_id INTEGER REFERENCES document_file(id) ON DELETE SET NULL,
+      entered_by TEXT NOT NULL,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_lab_journal_date ON lab_journal(date);
   `);
 
   // 기존에 만들어진 DB에도 새 컬럼이 안전하게 추가되도록 마이그레이션

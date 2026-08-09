@@ -351,3 +351,68 @@ export interface BoardPost {
   updated_at: string;
   attachments: BoardAttachment[];
 }
+
+// ---------- 문서관리: 외부기관 시험성적서 / MSDS ----------
+
+export type DocumentType = "test_report" | "msds";
+export type DocumentCategory = "원료" | "제품";
+export type DocumentLanguage = "국문" | "영문" | "기타";
+
+export interface DocumentFile {
+  id: number;
+  doc_type: DocumentType;
+  category: DocumentCategory;
+  item_name: string;
+  language: DocumentLanguage | null;
+  ref_date: string | null;
+  filename: string;
+  mime_type: string | null;
+  size: number;
+  entered_by: string;
+  created_at: string;
+}
+
+// ---------- 자체시험성적서(수출용) ----------
+
+export interface SelfTestItemSpec {
+  item_name: string;
+  specification: string | null;
+  remarks: string | null;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+export type CertificateLanguage = "국문" | "영문";
+
+export interface SelfTestCertificate {
+  id: number;
+  report_no: string | null;
+  item_name: string;
+  specification: string | null;
+  remarks: string | null;
+  result: string | null;
+  language: CertificateLanguage;
+  consignee: string | null;
+  issued_date: string;
+  issued_by: string;
+  created_at: string;
+}
+
+// ---------- 연구실험일지 ----------
+
+export type LabJournalFormType = "항목형" | "자유기술형" | "외부시험연동형";
+
+export interface LabJournal {
+  id: number;
+  form_type: LabJournalFormType;
+  date: string;
+  researcher: string | null;
+  item_name: string | null;
+  title: string;
+  content_json: string;
+  linked_report_id: number | null;
+  entered_by: string;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
