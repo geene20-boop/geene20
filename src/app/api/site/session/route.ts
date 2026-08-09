@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import {
   getAccountById,
   getAdminName,
+  getAllowedHrefs,
   getUserSession,
   hasAnyAccount,
   isAdminRequest,
@@ -34,5 +35,7 @@ export async function GET(req: NextRequest) {
     role: isAdmin ? "admin" : account?.role ?? null,
     workerId: isAdmin ? null : account?.worker_id ?? null,
     nationality,
+    // null이면 제한 없이 전체 메뉴 접근 가능 (관리자, 그룹 미지정 계정, 미로그인 개방모드 포함)
+    allowedHrefs: isAdmin ? null : getAllowedHrefs(account),
   });
 }

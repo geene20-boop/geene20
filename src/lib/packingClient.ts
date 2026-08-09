@@ -24,3 +24,14 @@ export function groupByKind(items: PackingItem[]): Record<string, PackingItem[]>
   }
   return groups;
 }
+
+// 부자재는 30개, 포장지는 10000매 미만이면 부족주의
+export const LOW_STOCK_THRESHOLD: Partial<Record<PackingItem["kind"], number>> = {
+  aux: 30,
+  bagmat: 10000,
+};
+
+export function isLowStock(item: PackingItem): boolean {
+  const threshold = LOW_STOCK_THRESHOLD[item.kind];
+  return threshold != null && item.stock < threshold;
+}

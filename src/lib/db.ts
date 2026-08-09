@@ -252,6 +252,15 @@ export function getDb(): Database.Database {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- 메뉴 그룹 (부서 단위로 볼 수 있는 메뉴를 제한). 계정에 그룹이 지정되지 않으면 전체 메뉴를 그대로 볼 수 있다.
+    CREATE TABLE IF NOT EXISTS menu_group (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      allowed_hrefs TEXT NOT NULL DEFAULT '[]', -- 허용된 메뉴 href의 JSON 배열
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     -- 근로자명부 (생산/출하 입력 등에서 작업자를 드롭다운으로 선택하기 위한 목록)
     CREATE TABLE IF NOT EXISTS worker (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -398,7 +407,10 @@ export function getDb(): Database.Database {
     ["approved_by", "TEXT"],
     ["approved_at", "TEXT"],
   ]);
-  migrateColumns("user_account", [["worker_id", "INTEGER"]]);
+  migrateColumns("user_account", [
+    ["worker_id", "INTEGER"],
+    ["menu_group_id", "INTEGER"],
+  ]);
   migrateColumns("board_post", [["pinned", "INTEGER NOT NULL DEFAULT 0"]]);
   migrateColumns("worker", [
     ["hire_date", "TEXT"],

@@ -8,6 +8,16 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+// 메뉴 그룹이 지정된 계정은 allowedHrefs에 있는 메뉴만 볼 수 있다. allowedHrefs가 null이면
+// 제한 없음(전체 메뉴). 그룹 안에 항목이 하나도 안 남는 대분류는 통째로 숨긴다.
+export function filterNavGroups(groups: NavGroup[], allowedHrefs: string[] | null): NavGroup[] {
+  if (allowedHrefs == null) return groups;
+  const allowed = new Set(allowedHrefs);
+  return groups
+    .map((g) => ({ ...g, items: g.items.filter((item) => allowed.has(item.href)) }))
+    .filter((g) => g.items.length > 0);
+}
+
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "생산가동",

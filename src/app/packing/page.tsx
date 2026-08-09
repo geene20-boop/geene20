@@ -9,7 +9,7 @@ import {
   PackingBreakage,
   PackingReturn,
 } from "@/lib/types";
-import { groupByKind, itemLabel, stripCode } from "@/lib/packingClient";
+import { groupByKind, isLowStock, itemLabel, stripCode } from "@/lib/packingClient";
 import ShipmentSummaryTab from "./ShipmentSummaryTab";
 
 interface PackingState {
@@ -22,17 +22,6 @@ interface PackingState {
 
 function fmt(v: number | null | undefined): string {
   return v == null ? "-" : v.toLocaleString(undefined, { maximumFractionDigits: 1 });
-}
-
-// 부자재는 30개, 포장지는 10000매 미만이면 부족주의
-const LOW_STOCK_THRESHOLD: Partial<Record<PackingItem["kind"], number>> = {
-  aux: 30,
-  bagmat: 10000,
-};
-
-function isLowStock(item: PackingItem): boolean {
-  const threshold = LOW_STOCK_THRESHOLD[item.kind];
-  return threshold != null && item.stock < threshold;
 }
 
 // 제품 재고현황을 대분류(석회고토/입상규산/칼슘유황)별로 묶어서 보여준다 (피벗 스타일).

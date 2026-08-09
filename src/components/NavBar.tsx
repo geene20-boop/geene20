@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useSiteSession } from "@/lib/useSiteSession";
 import HanilLogo from "@/components/HanilLogo";
-import { NAV_GROUPS, NavGroup } from "@/lib/navGroups";
+import { filterNavGroups, NAV_GROUPS, NavGroup } from "@/lib/navGroups";
 
 function isGroupActive(group: NavGroup, pathname: string): boolean {
   return group.items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
@@ -67,9 +67,11 @@ export default function NavBar() {
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null);
   const navRef = useRef<HTMLDivElement>(null);
   // 외국인 근로자와 연동된 계정은 근태관리를 이용하지 않으므로 메뉴에서 숨긴다.
-  const visibleGroups = session.isForeignWorker
+  const baseGroups = session.isForeignWorker
     ? NAV_GROUPS.filter((g) => g.label !== "근태관리")
     : NAV_GROUPS;
+  // 메뉴 그룹이 지정된 계정은 허용된 메뉴만 본다.
+  const visibleGroups = filterNavGroups(baseGroups, session.allowedHrefs);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

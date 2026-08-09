@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
+import { NAV_GROUPS } from "@/lib/navGroups";
 
 type AccountRole = "viewer" | "editor" | "modifier";
 
@@ -11,14 +12,162 @@ interface AccountRow {
   display_name: string | null;
   role: AccountRole;
   active: number;
+  menu_group_id: number | null;
 }
 
-function AccountManagementCard() {
+interface MenuGroupRow {
+  id: number;
+  name: string;
+  allowed_hrefs: string[];
+}
+
+function MenuGroupCard({ groups, refresh }: { groups: MenuGroupRow[]; refresh: () => Promise<void> }) {
+  const [editingId, setEditingId] = useState<number | "new" | null>(null);
+  const [name, setName] = useState("");
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function startNew() {
+    setEditingId("new");
+    setName("");
+    setChecked(new Set());
+    setMessage(null);
+  }
+
+  function startEdit(group: MenuGroupRow) {
+    setEditingId(group.id);
+    setName(group.name);
+    setChecked(new Set(group.allowed_hrefs));
+    setMessage(null);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  function toggleHref(href: string) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(href)) next.delete(href);
+      else next.add(href);
+      return next;
+    });
+  }
+
+  async function save() {
+    if (!name.trim()) {
+      setMessage("그룹 이름을 입력해주세요.");
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      const body = JSON.stringify({ name: name.trim(), allowedHrefs: Array.from(checked) });
+      const res =
+        editingId === "new"
+          ? await fetch("/api/menu-groups", { method: "POST", headers: { "Content-Type": "application/json" }, body })
+          : await fetch(`/api/menu-groups/${editingId}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body,
+            });
+      if (!res.ok) throw new Error((await res.json()).error ?? "실패했습니다.");
+      setEditingId(null);
+      await refresh();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: number) {
+    if (!confirm("이 메뉴 그룹을 삭제할까요? 이 그룹을 쓰던 계정은 다시 전체 메뉴를 보게 됩니다.")) return;
+    await fetch(`/api/menu-groups/${id}`, { method: "DELETE" });
+    if (editingId === id) setEditingId(null);
+    await refresh();
+  }
+
+  return (
+    <div className="bg-white rounded-xl border p-5 flex flex-col gap-4">
+      <div>
+        <h2 className="font-semibold text-slate-800">메뉴 그룹 관리</h2>
+        <p className="text-sm text-slate-500 mt-1">
+          부서별로 볼 수 있는 메뉴를 그룹으로 묶어두면, 계정 관리에서 그 그룹을 지정한 계정은 허용된
+          메뉴만 보게 됩니다. 그룹을 지정하지 않은 계정은 기존처럼 전체 메뉴를 그대로 볼 수 있습니다.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {groups.map((g) => (
+          <div key={g.id} className="flex items-center justify-between border rounded-md px-3 py-2 text-sm">
+            <div>
+              <span className="font-medium text-slate-800">{g.name}</span>
+              <span className="text-xs text-slate-400 ml-2">메뉴 {g.allowed_hrefs.length}개 허용</span>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => startEdit(g)} className="text-xs border rounded-md px-2 py-1 bg-white">
+                수정
+              </button>
+              <button onClick={() => remove(g.id)} className="text-xs border rounded-md px-2 py-1 bg-white text-red-600">
+                삭제
+              </button>
+            </div>
+          </div>
+        ))}
+        {groups.length === 0 && editingId === null && (
+          <p className="text-sm text-slate-400">등록된 메뉴 그룹이 없습니다.</p>
+        )}
+      </div>
+
+      {editingId === null ? (
+        <button onClick={startNew} className="self-start text-sm border rounded-md px-3 py-1.5 bg-white">
+          + 새 메뉴 그룹
+        </button>
+      ) : (
+        <div className="border rounded-md p-4 flex flex-col gap-3">
+          <label className="flex flex-col gap-1 text-xs w-64">
+            <span className="text-slate-500">그룹 이름</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} className="border rounded-md px-2 py-1.5 text-sm" placeholder="예: 포장팀" />
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {NAV_GROUPS.map((group) => (
+              <div key={group.label} className="border rounded-md p-2">
+                <p className="text-xs font-semibold text-slate-600 mb-1">{group.label}</p>
+                <div className="flex flex-col gap-1">
+                  {group.items.map((item) => (
+                    <label key={item.href} className="flex items-center gap-2 text-xs text-slate-600">
+                      <input type="checkbox" checked={checked.has(item.href)} onChange={() => toggleHref(item.href)} />
+                      {item.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          {message && <p className="text-sm text-slate-600">{message}</p>}
+          <div className="flex gap-2">
+            <button onClick={save} disabled={busy} className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-sm disabled:opacity-50">
+              {busy ? "저장 중..." : "저장"}
+            </button>
+            <button onClick={cancelEdit} className="border rounded-md px-3 py-1.5 text-sm bg-white">
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AccountManagementCard({ menuGroups }: { menuGroups: MenuGroupRow[] }) {
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<AccountRole>("editor");
+  const [menuGroupId, setMenuGroupId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -41,12 +190,19 @@ function AccountManagementCard() {
       const res = await fetch("/api/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, role, displayName }),
+        body: JSON.stringify({
+          username,
+          password,
+          role,
+          displayName,
+          menuGroupId: menuGroupId ? Number(menuGroupId) : null,
+        }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "실패했습니다.");
       setUsername("");
       setDisplayName("");
       setPassword("");
+      setMenuGroupId("");
       setMessage("계정이 추가되었습니다.");
       refresh();
     } catch (err) {
@@ -61,6 +217,15 @@ function AccountManagementCard() {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role: newRole }),
+    });
+    refresh();
+  }
+
+  async function changeMenuGroup(id: number, newMenuGroupId: string) {
+    await fetch(`/api/accounts/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ menuGroupId: newMenuGroupId ? Number(newMenuGroupId) : null }),
     });
     refresh();
   }
@@ -134,6 +299,17 @@ function AccountManagementCard() {
             <option value="viewer">조회만(viewer)</option>
           </select>
         </label>
+        <label className="flex flex-col gap-1 text-xs">
+          <span className="text-slate-500">메뉴 그룹</span>
+          <select value={menuGroupId} onChange={(e) => setMenuGroupId(e.target.value)} className="border rounded-md px-2 py-1.5 text-sm">
+            <option value="">전체 메뉴</option>
+            {menuGroups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           type="submit"
           disabled={busy || !username.trim() || password.length < 8}
@@ -151,6 +327,7 @@ function AccountManagementCard() {
             <th className="text-left px-2 py-1.5">아이디</th>
             <th className="text-left px-2 py-1.5">이름</th>
             <th className="text-left px-2 py-1.5">권한</th>
+            <th className="text-left px-2 py-1.5">메뉴 그룹</th>
             <th className="text-left px-2 py-1.5">상태</th>
             <th className="text-left px-2 py-1.5">관리</th>
           </tr>
@@ -169,6 +346,20 @@ function AccountManagementCard() {
                   <option value="editor">입력 가능(editor)</option>
                   <option value="modifier">수정·삭제 가능(modifier)</option>
                   <option value="viewer">조회만(viewer)</option>
+                </select>
+              </td>
+              <td className="px-2 py-1.5">
+                <select
+                  value={a.menu_group_id ?? ""}
+                  onChange={(e) => changeMenuGroup(a.id, e.target.value)}
+                  className="border rounded-md px-1.5 py-1 text-xs"
+                >
+                  <option value="">전체 메뉴</option>
+                  {menuGroups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
                 </select>
               </td>
               <td className="px-2 py-1.5">
@@ -192,7 +383,7 @@ function AccountManagementCard() {
           ))}
           {accounts.length === 0 && (
             <tr>
-              <td colSpan={5} className="px-2 py-6 text-center text-slate-400">
+              <td colSpan={6} className="px-2 py-6 text-center text-slate-400">
                 아직 계정이 없습니다.
               </td>
             </tr>
@@ -418,11 +609,23 @@ function BackupCard() {
 export default function AdminPage() {
   const admin = useAdminSession();
   const [showModal, setShowModal] = useState(false);
+  const [menuGroups, setMenuGroups] = useState<MenuGroupRow[]>([]);
+
+  async function refreshMenuGroups() {
+    const res = await fetch("/api/menu-groups");
+    if (!res.ok) return;
+    setMenuGroups(await res.json());
+  }
 
   useEffect(() => {
     admin.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (admin.loggedIn) refreshMenuGroups();
+  }, [admin.loggedIn]);
 
   if (!admin.checked) {
     return <p className="text-sm text-slate-400">확인 중...</p>;
@@ -466,7 +669,8 @@ export default function AdminPage() {
         </button>
       </div>
 
-      <AccountManagementCard />
+      <MenuGroupCard groups={menuGroups} refresh={refreshMenuGroups} />
+      <AccountManagementCard menuGroups={menuGroups} />
       <AdminPasswordCard />
       <BackupCard />
     </div>

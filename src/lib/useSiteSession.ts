@@ -15,6 +15,7 @@ export interface SiteSession {
   isModifier: boolean; // role이 modifier인지 (수정 권한: 승인 전 기록은 수정·삭제 가능)
   workerId: number | null; // 근로자명부와 연결된 개인계정이면 그 근로자 id (근태/연차 조회용)
   isForeignWorker: boolean; // 연동된 근로자가 외국인인지 (근태관리 접근 차단 대상)
+  allowedHrefs: string[] | null; // 메뉴 그룹이 지정된 계정만 값이 있음 (null = 전체 메뉴 접근 가능)
   refresh: () => Promise<void>;
 }
 
@@ -29,6 +30,7 @@ const initial: Omit<SiteSession, "refresh"> = {
   isModifier: false,
   workerId: null,
   isForeignWorker: false,
+  allowedHrefs: null,
 };
 
 export function useSiteSession(): SiteSession {
@@ -50,6 +52,7 @@ export function useSiteSession(): SiteSession {
       isModifier: role === "modifier",
       workerId: d.workerId ?? null,
       isForeignWorker: d.nationality === "foreign",
+      allowedHrefs: Array.isArray(d.allowedHrefs) ? d.allowedHrefs : null,
     });
   }, []);
 

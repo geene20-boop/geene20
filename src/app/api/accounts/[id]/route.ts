@@ -33,6 +33,7 @@ export async function PUT(
       displayName: body.displayName !== undefined ? String(body.displayName).trim() || null : undefined,
       role: body.role,
       active: body.active !== undefined ? Boolean(body.active) : undefined,
+      menuGroupId: body.menuGroupId !== undefined ? (body.menuGroupId != null ? Number(body.menuGroupId) : null) : undefined,
     });
     return NextResponse.json(account);
   } catch (e) {

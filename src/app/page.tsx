@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { NAV_GROUPS } from "@/lib/navGroups";
+import { filterNavGroups, NAV_GROUPS } from "@/lib/navGroups";
 import { apiGet } from "@/lib/apiClient";
-import { BoardPost, LeaveRequest } from "@/lib/types";
+import { BoardPost, LeaveRequest, PackingItem } from "@/lib/types";
 import { BOARD_CATEGORY_STYLE } from "@/lib/boardCategory";
 import { getBoardLastSeen } from "@/lib/boardRead";
 import { getLeaveLastSeen } from "@/lib/leaveRead";
 import { useSiteSession } from "@/lib/useSiteSession";
+import { isLowStock } from "@/lib/packingClient";
 
 function BoardPreview() {
   const [posts, setPosts] = useState<BoardPost[]>([]);
@@ -158,8 +159,26 @@ function useLeaveUnreadCount(): number {
   return count;
 }
 
+function useLowStockCount(): number {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    apiGet<PackingItem[]>("/api/packing-item")
+      .then((items) => setCount(items.filter(isLowStock).length))
+      .catch(() => setCount(0));
+  }, []);
+
+  return count;
+}
+
 export default function Home() {
   const leaveUnread = useLeaveUnreadCount();
+  const lowStockCount = useLowStockCount();
+  const session = useSiteSession();
+  const baseGroups = session.isForeignWorker
+    ? NAV_GROUPS.filter((g) => g.label !== "근태관리")
+    : NAV_GROUPS;
+  const visibleGroups = filterNavGroups(baseGroups, session.allowedHrefs);
 
   return (
     <div className="flex flex-col gap-6">
@@ -168,7 +187,7 @@ export default function Home() {
         <p className="text-sm text-slate-500 mt-1">이용할 메뉴를 선택하세요.</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        {NAV_GROUPS.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.label} className="bg-white rounded-xl border p-5">
             <h2 className="text-sm font-semibold text-slate-700 mb-3">{group.label}</h2>
             <div className="flex flex-col">
@@ -182,6 +201,11 @@ export default function Home() {
                   {item.href === "/attendance" && leaveUnread > 0 && (
                     <span className="text-[11px] bg-red-500 text-white rounded-full px-1.5 leading-4 font-medium">
                       {leaveUnread}
+                    </span>
+                  )}
+                  {item.href === "/packing" && lowStockCount > 0 && (
+                    <span className="text-[11px] bg-amber-500 text-white rounded-full px-1.5 leading-4 font-medium">
+                      ⚠ {lowStockCount}
                     </span>
                   )}
                 </Link>

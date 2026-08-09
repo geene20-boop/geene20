@@ -69,11 +69,13 @@ export interface UserAccount {
   role: AccountRole;
   active: number;
   worker_id: number | null;
+  menu_group_id: number | null;
   created_at: string;
   updated_at: string;
 }
 
-const ACCOUNT_COLUMNS = "id, username, display_name, role, active, worker_id, created_at, updated_at";
+const ACCOUNT_COLUMNS =
+  "id, username, display_name, role, active, worker_id, menu_group_id, created_at, updated_at";
 
 export function hasAnyAccount(): boolean {
   const db = getDb();
@@ -100,15 +102,16 @@ export function createAccount(
   password: string,
   role: AccountRole,
   displayName: string | null,
-  workerId: number | null = null
+  workerId: number | null = null,
+  menuGroupId: number | null = null
 ): UserAccount {
   const db = getDb();
   const hash = bcrypt.hashSync(password, 10);
   const info = db
     .prepare(
-      "INSERT INTO user_account (username, display_name, password_hash, role, worker_id) VALUES (?, ?, ?, ?, ?)"
+      "INSERT INTO user_account (username, display_name, password_hash, role, worker_id, menu_group_id) VALUES (?, ?, ?, ?, ?, ?)"
     )
-    .run(username, displayName, hash, role, workerId);
+    .run(username, displayName, hash, role, workerId, menuGroupId);
   return db
     .prepare(`SELECT ${ACCOUNT_COLUMNS} FROM user_account WHERE id = ?`)
     .get(info.lastInsertRowid) as UserAccount;
@@ -116,7 +119,12 @@ export function createAccount(
 
 export function updateAccount(
   id: number,
-  updates: { displayName?: string | null; role?: AccountRole; active?: boolean }
+  updates: {
+    displayName?: string | null;
+    role?: AccountRole;
+    active?: boolean;
+    menuGroupId?: number | null;
+  }
 ): UserAccount {
   const db = getDb();
   const current = db.prepare("SELECT * FROM user_account WHERE id = ?").get(id) as
@@ -126,9 +134,10 @@ export function updateAccount(
   const displayName = updates.displayName !== undefined ? updates.displayName : current.display_name;
   const role = updates.role ?? current.role;
   const active = updates.active !== undefined ? (updates.active ? 1 : 0) : current.active;
+  const menuGroupId = updates.menuGroupId !== undefined ? updates.menuGroupId : current.menu_group_id;
   db.prepare(
-    "UPDATE user_account SET display_name = ?, role = ?, active = ?, updated_at = datetime('now') WHERE id = ?"
-  ).run(displayName, role, active, id);
+    "UPDATE user_account SET display_name = ?, role = ?, active = ?, menu_group_id = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(displayName, role, active, menuGroupId, id);
   return db.prepare(`SELECT ${ACCOUNT_COLUMNS} FROM user_account WHERE id = ?`).get(id) as UserAccount;
 }
 
@@ -154,6 +163,79 @@ export function verifyAccountLogin(
   if (!row || !row.active) return null;
   if (!bcrypt.compareSync(password, row.password_hash)) return null;
   return { id: row.id, role: row.role, displayName: row.display_name };
+}
+
+// ---------- 메뉴 그룹 (부서별로 볼 수 있는 메뉴를 제한) ----------
+
+export interface MenuGroup {
+  id: number;
+  name: string;
+  allowed_hrefs: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+interface MenuGroupRow {
+  id: number;
+  name: string;
+  allowed_hrefs: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function parseMenuGroup(row: MenuGroupRow): MenuGroup {
+  let allowed_hrefs: string[] = [];
+  try {
+    const parsed = JSON.parse(row.allowed_hrefs);
+    if (Array.isArray(parsed)) allowed_hrefs = parsed.filter((h): h is string => typeof h === "string");
+  } catch {
+    allowed_hrefs = [];
+  }
+  return { ...row, allowed_hrefs };
+}
+
+export function listMenuGroups(): MenuGroup[] {
+  const db = getDb();
+  const rows = db.prepare("SELECT * FROM menu_group ORDER BY name").all() as MenuGroupRow[];
+  return rows.map(parseMenuGroup);
+}
+
+export function getMenuGroupById(id: number): MenuGroup | undefined {
+  const db = getDb();
+  const row = db.prepare("SELECT * FROM menu_group WHERE id = ?").get(id) as MenuGroupRow | undefined;
+  return row ? parseMenuGroup(row) : undefined;
+}
+
+export function createMenuGroup(name: string, allowedHrefs: string[]): MenuGroup {
+  const db = getDb();
+  const info = db
+    .prepare("INSERT INTO menu_group (name, allowed_hrefs) VALUES (?, ?)")
+    .run(name, JSON.stringify(allowedHrefs));
+  return getMenuGroupById(info.lastInsertRowid as number) as MenuGroup;
+}
+
+export function updateMenuGroup(id: number, name: string, allowedHrefs: string[]): MenuGroup {
+  const db = getDb();
+  const info = db
+    .prepare("UPDATE menu_group SET name = ?, allowed_hrefs = ?, updated_at = datetime('now') WHERE id = ?")
+    .run(name, JSON.stringify(allowedHrefs), id);
+  if (info.changes === 0) throw new Error("메뉴 그룹을 찾을 수 없습니다.");
+  return getMenuGroupById(id) as MenuGroup;
+}
+
+export function deleteMenuGroup(id: number): void {
+  const db = getDb();
+  // 이 그룹을 쓰던 계정은 그룹 지정이 풀려 다시 전체 메뉴를 보게 된다 (계정 자체는 유지).
+  db.prepare("UPDATE user_account SET menu_group_id = NULL WHERE menu_group_id = ?").run(id);
+  db.prepare("DELETE FROM menu_group WHERE id = ?").run(id);
+}
+
+// 계정이 볼 수 있는 메뉴 href 목록. null이면 제한 없음(전체 메뉴 접근 가능) — 그룹이 지정되지 않은
+// 계정은 기존과 동일하게 전체 메뉴를 그대로 이용한다 (하위 호환).
+export function getAllowedHrefs(account: Pick<UserAccount, "menu_group_id"> | undefined | null): string[] | null {
+  if (!account?.menu_group_id) return null;
+  const group = getMenuGroupById(account.menu_group_id);
+  return group ? group.allowed_hrefs : null;
 }
 
 // ---------- 세션 토큰 (관리자/개인계정 공용 서명 로직, scope로 구분) ----------
