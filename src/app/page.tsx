@@ -1,24 +1,44 @@
 "use client";
 
-// Build version: 0.1.2 - Version check marker
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { apiGet } from "@/lib/apiClient";
-import { BoardPost, LeaveRequest } from "@/lib/types";
+import { BoardPost, LeaveRequest, Nationality } from "@/lib/types";
 import { BOARD_CATEGORY_STYLE } from "@/lib/boardCategory";
 import { getBoardLastSeen } from "@/lib/boardRead";
 import { getLeaveLastSeen } from "@/lib/leaveRead";
 import { useSiteSession } from "@/lib/useSiteSession";
+import Modal from "@/components/Modal";
 
+interface CategoryTons {
+  category: string;
+  tons: number;
+}
+interface CategoryBagTonbag {
+  category: string;
+  bag: number;
+  tonbag: number;
+}
+interface AttendancePerson {
+  name: string;
+  nationality: Nationality;
+}
+interface AttendanceLeaveEntry extends AttendancePerson {
+  shift: "day" | "night";
+  type: string;
+}
 interface HomeSummary {
   date: string;
-  production: { tons: number };
-  shipment: { tons: number };
+  production: { tons: number; byCategory: CategoryTons[] };
+  shipment: { tons: number; byCategory: CategoryTons[] };
+  seasonProduction: CategoryBagTonbag[];
+  seasonShipment: CategoryBagTonbag[];
   inbound: { tons: number; top: { name: string; qty: number }[] };
   stock: { byCategory: { category: string; bags: number; tons: number }[]; totalTons: number };
   attendance: {
-    day: { normal: number; leave: number; other: number; total: number };
-    night: { normal: number; leave: number; other: number; total: number };
+    day: { normal: AttendancePerson[] };
+    night: { normal: AttendancePerson[] };
+    leaveEtc: AttendanceLeaveEntry[];
   };
   notices: { text: string; level: "red" | "amber" }[];
 }
@@ -99,39 +119,173 @@ function Kpi({ label, value, unit, alert }: { label: string; value: string; unit
   );
 }
 
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : `${n}`;
+}
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+function addDaysLocal(dateStr: string, delta: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + delta);
+  return localDateStr(dt);
+}
 function weekdayLabel(dateStr: string): string {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  const w = ["일", "월", "화", "수", "목", "금", "토"][d.getUTCDay()];
-  const [y, m, day] = dateStr.split("-");
-  return `${y}년 ${Number(m)}월 ${Number(day)}일 (${w}) 기준`;
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const w = ["일", "월", "화", "수", "목", "금", "토"][dt.getDay()];
+  return `${y}년 ${m}월 ${d}일 (${w})`;
+}
+function fmtTon(n: number): string {
+  return n.toLocaleString("ko-KR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+const CATEGORY_DOT: Record<string, string> = {
+  석회고토: "bg-amber-800",
+  입상규산: "bg-emerald-700",
+  칼슘유황: "bg-purple-700",
+};
+
+function NatBadge({ nationality }: { nationality: Nationality }) {
+  return (
+    <span
+      className={`text-[10px] border rounded-full px-1.5 py-0.5 ml-1.5 ${
+        nationality === "foreign"
+          ? "bg-amber-50 text-amber-700 border-amber-200"
+          : "bg-sky-50 text-sky-700 border-sky-200"
+      }`}
+    >
+      {nationality === "foreign" ? "외국인" : "내국인"}
+    </span>
+  );
+}
+
+function SeasonTable({ title, rows }: { title: string; rows: CategoryBagTonbag[] }) {
+  const grand = rows.reduce((s, r) => s + r.bag + r.tonbag, 0);
+  return (
+    <div>
+      <h3 className="text-xs font-semibold text-slate-500 mb-1.5">{title}</h3>
+      <table className="w-full text-xs">
+        <tbody>
+          {rows.map((r) => (
+            <Fragment key={r.category}>
+              <tr className="border-t">
+                <td className="py-1.5 font-semibold text-slate-700 flex items-center gap-1.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${CATEGORY_DOT[r.category] ?? "bg-slate-400"}`} />
+                  {r.category}
+                </td>
+                <td className="py-1.5 text-right font-semibold text-slate-700 tabular-nums">
+                  {fmtTon(r.bag + r.tonbag)}톤
+                </td>
+              </tr>
+              {r.tonbag > 0 && (
+                <tr>
+                  <td className="py-1 pl-4 text-slate-500">포장지 {fmtTon(r.bag)}톤 · 톤백 {fmtTon(r.tonbag)}톤</td>
+                  <td />
+                </tr>
+              )}
+            </Fragment>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t bg-slate-50 font-bold text-slate-800">
+            <td className="py-1.5 px-1">합계</td>
+            <td className="py-1.5 px-1 text-right tabular-nums">{fmtTon(grand)}톤</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
 }
 
 export default function Home() {
   const leaveUnread = useLeaveUnreadCount();
+  const [refDate, setRefDate] = useState<string | null>(null);
   const [summary, setSummary] = useState<HomeSummary | null>(null);
+  const [detail, setDetail] = useState<
+    | { title: string; kind: "normal"; rows: AttendancePerson[] }
+    | { title: string; kind: "leave"; rows: AttendanceLeaveEntry[] }
+    | null
+  >(null);
 
   useEffect(() => {
-    apiGet<HomeSummary>("/api/dashboard/home-summary")
-      .then(setSummary)
-      .catch(() => setSummary(null));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRefDate(addDaysLocal(localDateStr(new Date()), -1));
   }, []);
+
+  useEffect(() => {
+    if (!refDate) return;
+    let cancelled = false;
+    apiGet<HomeSummary>(`/api/dashboard/home-summary?date=${refDate}`)
+      .then((d) => {
+        if (!cancelled) setSummary(d);
+      })
+      .catch(() => {
+        if (!cancelled) setSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refDate]);
+
+  if (!refDate) return null;
+
+  const todayStr = localDateStr(new Date());
+  const isYesterday = refDate === addDaysLocal(todayStr, -1);
+  const isToday = refDate === todayStr;
+
+  const dayLeaveEtc = summary?.attendance.leaveEtc.filter((e) => e.shift === "day") ?? [];
+  const nightLeaveEtc = summary?.attendance.leaveEtc.filter((e) => e.shift === "night") ?? [];
+  const dayTotal = (summary?.attendance.day.normal.length ?? 0) + dayLeaveEtc.length;
+  const nightTotal = (summary?.attendance.night.normal.length ?? 0) + nightLeaveEtc.length;
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-bold">전일 현황</h1>
         <p className="text-sm text-slate-500 mt-1">
-          {summary ? weekdayLabel(summary.date) : "불러오는 중..."} — 로고를 누르면 언제든 이 화면으로 돌아옵니다.
-          메뉴는 상단 드롭다운에서 이용하세요.
+          로고를 누르면 언제든 이 화면으로 돌아옵니다. 메뉴는 상단 드롭다운에서 이용하세요.
         </p>
+      </div>
+
+      <div className="bg-white rounded-xl border p-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setRefDate((d) => addDaysLocal(d!, -1))}
+          className="border rounded-md px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-50"
+        >
+          ◀ 전날
+        </button>
+        <div className="flex-1 text-center text-sm font-semibold text-slate-800">
+          {weekdayLabel(refDate)} 기준
+          {isYesterday && (
+            <span className="ml-2 text-[11px] font-medium text-sky-700 bg-sky-50 border border-sky-200 rounded-full px-2 py-0.5">
+              기본값 · 전일
+            </span>
+          )}
+          {isToday && (
+            <span className="ml-2 text-[11px] font-medium text-slate-600 bg-slate-100 border rounded-full px-2 py-0.5">
+              오늘
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setRefDate((d) => addDaysLocal(d!, 1))}
+          disabled={refDate >= todayStr}
+          className="border rounded-md px-3 py-1.5 text-xs font-medium bg-white hover:bg-slate-50 disabled:opacity-40"
+        >
+          다음날 ▶
+        </button>
       </div>
 
       {summary && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Kpi label="전일 생산량" value={summary.production.tons.toFixed(1)} unit="t" />
-            <Kpi label="전일 출하량" value={summary.shipment.tons.toFixed(1)} unit="t" />
-            <Kpi label="전일 원재료 입고" value={summary.inbound.tons.toFixed(1)} unit="t" />
+            <Kpi label="생산량" value={summary.production.tons.toFixed(1)} unit="t" />
+            <Kpi label="출하량" value={summary.shipment.tons.toFixed(1)} unit="t" />
+            <Kpi label="원재료 입고" value={summary.inbound.tons.toFixed(1)} unit="t" />
             <Kpi
               label="확인 필요"
               value={String(summary.notices.length)}
@@ -160,7 +314,7 @@ export default function Home() {
             </div>
 
             <div className="bg-white rounded-xl border p-5">
-              <h2 className="text-sm font-semibold text-slate-700 mb-3">원재료 입고현황 (전일)</h2>
+              <h2 className="text-sm font-semibold text-slate-700 mb-3">원재료 입고현황</h2>
               <div className="flex flex-col divide-y text-sm">
                 {summary.inbound.top.map((r) => (
                   <div key={r.name} className="flex justify-between py-1.5">
@@ -168,7 +322,7 @@ export default function Home() {
                     <span className="tabular-nums text-slate-800">{r.qty.toLocaleString()}</span>
                   </div>
                 ))}
-                {summary.inbound.top.length === 0 && <p className="text-sm text-slate-400 py-2">전일 입고 기록이 없습니다.</p>}
+                {summary.inbound.top.length === 0 && <p className="text-sm text-slate-400 py-2">입고 기록이 없습니다.</p>}
                 {summary.inbound.top.length > 0 && (
                   <div className="flex justify-between py-1.5 font-bold text-slate-900">
                     <span>합계</span>
@@ -179,42 +333,64 @@ export default function Home() {
             </div>
 
             <div className="bg-white rounded-xl border p-5">
-              <h2 className="text-sm font-semibold text-slate-700 mb-3">근태현황 (전일, 주간·야간)</h2>
-              <div className="flex flex-col divide-y text-sm">
-                <div className="flex justify-between py-1.5">
-                  <span className="text-slate-600">주간조 정상출근</span>
-                  <span className="tabular-nums text-slate-800">
-                    {summary.attendance.day.normal}명 / {summary.attendance.day.total}명
-                  </span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span className="text-slate-600">주간조 연차·기타</span>
-                  <span className="tabular-nums text-slate-800">
-                    {summary.attendance.day.leave + summary.attendance.day.other}명
-                  </span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span className="text-slate-600">야간조 정상출근</span>
-                  <span className="tabular-nums text-slate-800">
-                    {summary.attendance.night.normal}명 / {summary.attendance.night.total}명
-                  </span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span className="text-slate-600">야간조 연차·기타</span>
-                  <span className="tabular-nums text-slate-800">
-                    {summary.attendance.night.leave + summary.attendance.night.other}명
-                  </span>
-                </div>
-                <div className="flex justify-between py-1.5 font-bold text-slate-900">
-                  <span>전체 인원</span>
-                  <span className="tabular-nums">
-                    {summary.attendance.day.total + summary.attendance.night.total}명
-                  </span>
-                </div>
+              <h2 className="text-sm font-semibold text-slate-700 mb-3">시즌누계 (7월~다음해 6월)</h2>
+              <div className="grid grid-cols-2 gap-4">
+                <SeasonTable title="생산" rows={summary.seasonProduction} />
+                <SeasonTable title="출하" rows={summary.seasonShipment} />
               </div>
             </div>
 
             <div className="bg-white rounded-xl border p-5">
+              <h2 className="text-sm font-semibold text-slate-700 mb-3">근태현황 (주간·야간)</h2>
+              <div className="flex flex-col divide-y text-sm">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDetail({ title: "주간조 정상출근", kind: "normal", rows: summary.attendance.day.normal })
+                  }
+                  className="flex justify-between py-1.5 hover:bg-slate-50 -mx-2 px-2 rounded-md text-left"
+                >
+                  <span className="text-slate-600">주간조 정상출근</span>
+                  <span className="tabular-nums text-slate-800">
+                    {summary.attendance.day.normal.length}명 / {dayTotal}명
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetail({ title: "주간조 연차·기타", kind: "leave", rows: dayLeaveEtc })}
+                  className="flex justify-between py-1.5 hover:bg-slate-50 -mx-2 px-2 rounded-md text-left"
+                >
+                  <span className="text-slate-600">주간조 연차·기타</span>
+                  <span className="tabular-nums text-slate-800">{dayLeaveEtc.length}명</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDetail({ title: "야간조 정상출근", kind: "normal", rows: summary.attendance.night.normal })
+                  }
+                  className="flex justify-between py-1.5 hover:bg-slate-50 -mx-2 px-2 rounded-md text-left"
+                >
+                  <span className="text-slate-600">야간조 정상출근</span>
+                  <span className="tabular-nums text-slate-800">
+                    {summary.attendance.night.normal.length}명 / {nightTotal}명
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetail({ title: "야간조 연차·기타", kind: "leave", rows: nightLeaveEtc })}
+                  className="flex justify-between py-1.5 hover:bg-slate-50 -mx-2 px-2 rounded-md text-left"
+                >
+                  <span className="text-slate-600">야간조 연차·기타</span>
+                  <span className="tabular-nums text-slate-800">{nightLeaveEtc.length}명</span>
+                </button>
+                <div className="flex justify-between py-1.5 font-bold text-slate-900">
+                  <span>전체 인원</span>
+                  <span className="tabular-nums">{dayTotal + nightTotal}명</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border p-5 lg:col-span-2">
               <h2 className="text-sm font-semibold text-slate-700 mb-3">알림</h2>
               <div className="flex flex-col divide-y text-sm">
                 {leaveUnread > 0 && (
@@ -243,6 +419,33 @@ export default function Home() {
       )}
 
       <BoardPreview />
+
+      {detail && (
+        <Modal title={detail.title} onClose={() => setDetail(null)}>
+          {detail.rows.length === 0 ? (
+            <p className="text-sm text-slate-400 py-2">해당 인원이 없습니다.</p>
+          ) : (
+            <div className="flex flex-col divide-y text-sm">
+              {detail.kind === "normal"
+                ? detail.rows.map((p, i) => (
+                    <div key={i} className="flex items-center py-2">
+                      <span className="text-slate-700">{p.name}</span>
+                      <NatBadge nationality={p.nationality} />
+                    </div>
+                  ))
+                : detail.rows.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between py-2">
+                      <span className="flex items-center">
+                        <span className="text-slate-700">{p.name}</span>
+                        <NatBadge nationality={p.nationality} />
+                      </span>
+                      <span className="text-slate-500 text-xs">{p.type}</span>
+                    </div>
+                  ))}
+            </div>
+          )}
+        </Modal>
+      )}
     </div>
   );
 }
