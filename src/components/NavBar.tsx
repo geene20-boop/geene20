@@ -17,14 +17,14 @@ const ROLE_LABELS: Record<string, string> = {
   viewer: "조회전용",
 };
 
+async function logout() {
+  if (!confirm("정말 로그아웃하시겠습니까?")) return;
+  await fetch("/api/site/logout", { method: "POST" });
+  window.location.reload();
+}
+
 function AccountBadge() {
   const session = useSiteSession();
-
-  async function logout() {
-    if (!confirm("정말 로그아웃하시겠습니까?")) return;
-    await fetch("/api/site/logout", { method: "POST" });
-    window.location.reload();
-  }
 
   if (!session.loggedIn) return null;
 
@@ -35,6 +35,24 @@ function AccountBadge() {
         {session.role && ` (${ROLE_LABELS[session.role] ?? session.role})`}
       </span>
       <button onClick={logout} className="underline">
+        로그아웃
+      </button>
+    </div>
+  );
+}
+
+function MobileAccountBadge() {
+  const session = useSiteSession();
+
+  if (!session.loggedIn) return null;
+
+  return (
+    <div className="flex items-center justify-between px-2 py-2.5 mb-1 border-b text-sm text-slate-600">
+      <span>
+        {session.displayName}
+        {session.role && ` (${ROLE_LABELS[session.role] ?? session.role})`}
+      </span>
+      <button onClick={logout} className="underline text-slate-500">
         로그아웃
       </button>
     </div>
@@ -141,6 +159,7 @@ export default function NavBar() {
                 닫기 ✕
               </button>
             </div>
+            <MobileAccountBadge />
             {visibleGroups.map((group) => {
               const active = isGroupActive(group, pathname);
               const expanded = mobileExpanded === group.label || active;

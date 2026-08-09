@@ -240,6 +240,7 @@ export default function PackingStockPage() {
           ...m,
           tons: m.rows.reduce((sum, r) => sum + tonsOfItem(r), 0),
           bags: m.rows.reduce((sum, r) => sum + r.stock, 0),
+          unit: new Set(m.rows.map((r) => r.unit ?? "")).size === 1 ? m.rows[0]?.unit ?? "" : "",
         }));
       const tons = mids.reduce((sum, m) => sum + m.tons, 0);
       return { ...style, mids, tons };
@@ -430,6 +431,14 @@ export default function PackingStockPage() {
                         {mid.key.endsWith("::bag") ? (
                           <>
                             {fmt(mid.bags)}포{" "}
+                            <span className="text-slate-400">({fmtTon(mid.tons)}톤)</span>
+                          </>
+                        ) : mid.unit && mid.unit !== "톤" ? (
+                          // 톤백 재고를 개수(예: 개) 단위로 관리하는 경우에만 수량을 톤과 함께 보여준다.
+                          // (톤 단위로 관리하면 수량과 톤이 같은 값이라 중복 표시를 피한다.)
+                          <>
+                            {fmt(mid.bags)}
+                            {mid.unit}{" "}
                             <span className="text-slate-400">({fmtTon(mid.tons)}톤)</span>
                           </>
                         ) : (

@@ -54,6 +54,90 @@ function BoardPreview() {
   );
 }
 
+interface DailyLogRow {
+  key: string;
+  label: string;
+  unit: string | null;
+  packedQty: number;
+  shippedQty: number;
+  restockedQty: number;
+}
+
+interface DailyLogResult {
+  products: DailyLogRow[];
+  bagmats: DailyLogRow[];
+  auxes: DailyLogRow[];
+}
+
+function yesterday() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function fmtQty(v: number): string {
+  return v.toLocaleString(undefined, { maximumFractionDigits: 1 });
+}
+
+function PrevDaySummary() {
+  const [date] = useState(() => yesterday());
+  const [data, setData] = useState<DailyLogResult | null>(null);
+
+  useEffect(() => {
+    apiGet<DailyLogResult>(`/api/packing-daily-log?date=${date}`)
+      .then(setData)
+      .catch(() => setData(null));
+  }, [date]);
+
+  const produced = (data?.products ?? []).filter((r) => r.packedQty !== 0);
+  const shipped = (data?.products ?? []).filter((r) => r.shippedQty !== 0);
+  const restocked = [...(data?.bagmats ?? []), ...(data?.auxes ?? [])].filter((r) => r.restockedQty !== 0);
+
+  function renderList(rows: DailyLogRow[], qtyKey: "packedQty" | "shippedQty" | "restockedQty") {
+    if (rows.length === 0) return <p className="text-sm text-slate-400 py-1">기록 없음</p>;
+    return (
+      <ul className="flex flex-col divide-y">
+        {rows.map((r) => (
+          <li key={r.key} className="flex items-center justify-between py-1.5 text-sm">
+            <span className="text-slate-600">{r.label}</span>
+            <span className="tabular-nums font-medium text-slate-800">
+              {fmtQty(r[qtyKey])}
+              {r.unit ?? ""}
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl border p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+          📅 전일현황 ({date})
+        </h2>
+        <Link href="/packing/log" className="text-xs text-slate-500 hover:underline">
+          자세히 →
+        </Link>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <h3 className="text-xs font-semibold text-slate-500 mb-1">생산량</h3>
+          {renderList(produced, "packedQty")}
+        </div>
+        <div>
+          <h3 className="text-xs font-semibold text-slate-500 mb-1">출하량</h3>
+          {renderList(shipped, "shippedQty")}
+        </div>
+        <div>
+          <h3 className="text-xs font-semibold text-slate-500 mb-1">원재료 입고</h3>
+          {renderList(restocked, "restockedQty")}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function useLeaveUnreadCount(): number {
   const session = useSiteSession();
   const [count, setCount] = useState(0);
@@ -106,6 +190,7 @@ export default function Home() {
           </div>
         ))}
       </div>
+      <PrevDaySummary />
       <BoardPreview />
     </div>
   );
