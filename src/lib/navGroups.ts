@@ -8,6 +8,36 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+// 외국인 근로자와 연동된 계정은 생산가동/품질관리/제품포장만 이용할 수 있다.
+export const FOREIGN_WORKER_RESTRICTED_GROUPS = new Set([
+  "원재료관리",
+  "문서관리",
+  "근태관리",
+  "게시판",
+  "시스템관리",
+]);
+
+// 특정 개인(이름)에게만 숨기는 메뉴. 근로자 단위의 세부 권한 체계가 아직 없어
+// 요청받은 이름을 그대로 매칭한다 — 근로자명부 이름이 바뀌면 이 목록도 함께 갱신해야 한다.
+export const NAME_RESTRICTED_GROUPS = new Set(["원재료관리", "문서관리"]);
+export const NAME_RESTRICTED_DISPLAY_NAMES = new Set(["김상순", "김춘수", "이재혁"]);
+
+// 관리자(공용 비밀번호) 세션은 어떤 메뉴도 제한하지 않는다 — 관리자로 로그인하며 입력한
+// 이름이 우연히 제한 대상 이름과 같아도 차단되지 않도록 isAdmin을 최우선으로 확인한다.
+export function isGroupBlockedForSession(
+  groupLabel: string,
+  isForeignWorker: boolean,
+  displayName: string | null | undefined,
+  isAdmin = false
+): boolean {
+  if (isAdmin) return false;
+  if (isForeignWorker && FOREIGN_WORKER_RESTRICTED_GROUPS.has(groupLabel)) return true;
+  if (displayName && NAME_RESTRICTED_GROUPS.has(groupLabel) && NAME_RESTRICTED_DISPLAY_NAMES.has(displayName)) {
+    return true;
+  }
+  return false;
+}
+
 export const NAV_GROUPS: NavGroup[] = [
   {
     label: "생산가동",

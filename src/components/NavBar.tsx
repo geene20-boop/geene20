@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSiteSession } from "@/lib/useSiteSession";
 import { useAdminSession } from "@/components/AdminUnlock";
 import HanilLogo from "@/components/HanilLogo";
-import { NAV_GROUPS, NavGroup } from "@/lib/navGroups";
+import { isGroupBlockedForSession, NAV_GROUPS, NavGroup } from "@/lib/navGroups";
 import { apiGet } from "@/lib/apiClient";
 import { LeaveRequest } from "@/lib/types";
 
@@ -60,14 +60,14 @@ function ApprovalBadge({ count }: { count: number }) {
   );
 }
 
+async function logout() {
+  if (!confirm("정말 로그아웃하시겠습니까?")) return;
+  await fetch("/api/site/logout", { method: "POST" });
+  window.location.reload();
+}
+
 function AccountBadge() {
   const session = useSiteSession();
-
-  async function logout() {
-    if (!confirm("정말 로그아웃하시겠습니까?")) return;
-    await fetch("/api/site/logout", { method: "POST" });
-    window.location.reload();
-  }
 
   if (!session.loggedIn) return null;
 
@@ -105,9 +105,12 @@ export default function NavBar() {
 
   const canApprove = session.isAdmin || session.isModifier;
   const pendingCount = usePendingApprovalCount(canApprove, pathname);
-  // 외국인 근로자와 연동된 계정은 근태관리를 이용하지 않으므로 메뉴에서 숨긴다.
-  // 관리자만 이력관리를 볼 수 있다.
+  // 외국인 근로자와 연동된 계정은 생산가동/품질관리/제품포장만 이용하므로 나머지는 메뉴에서 숨기고,
+  // 지정된 개인 계정은 원재료관리·문서관리를 숨긴다. 관리자만 이력관리를 볼 수 있다.
   const visibleGroups = NAV_GROUPS.map((group) => {
+    if (isGroupBlockedForSession(group.label, session.isForeignWorker, session.displayName, session.isAdmin)) {
+      return null;
+    }
     if (group.label === "시스템관리" && !session.isAdmin) {
       let items = group.items.filter((item) => item.href !== "/history");
       // 관리자 로그인이 아니면 데이터 가져오기도 숨긴다.
@@ -115,9 +118,6 @@ export default function NavBar() {
         items = items.filter((item) => item.href !== "/import");
       }
       return { ...group, items };
-    }
-    if (session.isForeignWorker && group.label === "근태관리") {
-      return null;
     }
     return group;
   }).filter((g): g is typeof NAV_GROUPS[0] => g !== null);
@@ -259,6 +259,21 @@ export default function NavBar() {
                 </div>
               );
             })}
+            {session.loggedIn && (
+              <div className="mt-2 pt-3 border-t border-white/10 flex items-center justify-between gap-2">
+                <span className="text-xs text-white/60">
+                  {session.displayName}
+                  {session.role && ` (${ROLE_LABELS[session.role] ?? session.role})`}
+                </span>
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="text-sm text-white/80 border border-white/20 rounded-md px-3 py-1.5"
+                >
+                  로그아웃
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
