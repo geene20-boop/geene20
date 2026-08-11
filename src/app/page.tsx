@@ -34,7 +34,7 @@ interface HomeSummary {
   seasonProduction: CategoryBagTonbag[];
   seasonShipment: CategoryBagTonbag[];
   inbound: { tons: number; top: { name: string; qty: number }[] };
-  stock: { byCategory: { category: string; bags: number; tons: number }[]; totalTons: number };
+  stock: { byCategory: { category: string; bags: number; tons: number; tonbagTons: number }[]; totalTons: number };
   attendance: {
     day: { normal: AttendancePerson[] };
     night: { normal: AttendancePerson[] };
@@ -299,12 +299,19 @@ export default function Home() {
               <h2 className="text-sm font-semibold text-slate-700 mb-3">제품 재고현황 (품목대분류별, 현재)</h2>
               <div className="flex flex-col divide-y text-sm">
                 {summary.stock.byCategory.map((c) => (
-                  <div key={c.category} className="flex justify-between py-1.5">
-                    <span className="text-slate-600">{c.category}</span>
-                    <span className="tabular-nums text-slate-800">
-                      {c.bags.toLocaleString()}포 ({c.tons.toFixed(1)}t)
-                    </span>
-                  </div>
+                  <Fragment key={c.category}>
+                    <div className="flex justify-between py-1.5">
+                      <span className="text-slate-600">{c.category}</span>
+                      <span className="tabular-nums text-slate-800">
+                        {c.bags.toLocaleString()}포 ({c.tons.toFixed(1)}t)
+                      </span>
+                    </div>
+                    {c.tonbagTons > 0 && (
+                      <div className="flex justify-between py-1 pl-3 text-xs text-slate-500">
+                        <span>포장지 {(c.tons - c.tonbagTons).toFixed(1)}t · 톤백 {c.tonbagTons.toFixed(1)}t</span>
+                      </div>
+                    )}
+                  </Fragment>
                 ))}
                 <div className="flex justify-between py-1.5 font-bold text-slate-900">
                   <span>전체 합계</span>

@@ -110,18 +110,20 @@ export async function GET(req: NextRequest) {
   const inboundNgCount = inboundRows.filter((r) => r.judgment === "NG").length;
 
   // 현재 제품 재고 (품목대분류별, 톤) — 항상 "지금 시점" 실재고를 보여준다 (과거 마감재고 역산은 하지 않음)
+  // 시즌누계와 동일하게, 톤백 제품(category === "톤백")은 별도로 나눠 표시할 수 있도록 함께 집계한다.
   const stockItems = db
     .prepare(`SELECT category, sub, bag_kg, stock FROM packing_item WHERE kind = 'product'`)
     .all() as { category: string | null; sub: string | null; bag_kg: number | null; stock: number }[];
-  const stockByCategory = new Map<string, { bags: number; tons: number }>();
+  const stockByCategory = new Map<string, { bags: number; tons: number; tonbagTons: number }>();
   let stockTotalTons = 0;
   for (const it of stockItems) {
     const category = classifyCategory(it.category, it.sub);
     if (!category) continue;
     const tons = (it.stock * (it.bag_kg ?? 0)) / 1000;
-    const entry = stockByCategory.get(category) ?? { bags: 0, tons: 0 };
+    const entry = stockByCategory.get(category) ?? { bags: 0, tons: 0, tonbagTons: 0 };
     entry.bags += it.stock;
     entry.tons += tons;
+    if (it.category === "톤백") entry.tonbagTons += tons;
     stockByCategory.set(category, entry);
     stockTotalTons += tons;
   }
@@ -129,6 +131,7 @@ export async function GET(req: NextRequest) {
     category,
     bags: Math.round(stockByCategory.get(category)?.bags ?? 0),
     tons: Number((stockByCategory.get(category)?.tons ?? 0).toFixed(1)),
+    tonbagTons: Number((stockByCategory.get(category)?.tonbagTons ?? 0).toFixed(1)),
   }));
 
   // 근태현황: 주간조/야간조 정상출근 명단 + 연차·기타 통합 명단 (일일 출근부 로직과 동일 기준)
