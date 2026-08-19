@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isEditorRequest } from "@/lib/auth";
 import { requireActor, logAudit } from "@/lib/audit";
+import { saveAttachmentFile } from "@/lib/fileStorage";
 import { DocumentCategory, DocumentFile, DocumentLanguage, DocumentType } from "@/lib/types";
 
 const DOC_TYPES: DocumentType[] = ["test_report", "msds"];
@@ -93,13 +94,14 @@ export async function POST(req: NextRequest) {
   if (!actor) return NextResponse.json({ error: "입력자명을 확인할 수 없습니다." }, { status: 400 });
 
   const buf = Buffer.from(await file.arrayBuffer());
+  const filePath = saveAttachmentFile("documents", file.name, buf);
   const db = getDb();
   const info = db
     .prepare(
-      `INSERT INTO document_file (doc_type, category, item_name, language, ref_date, filename, mime_type, size, data, entered_by)
+      `INSERT INTO document_file (doc_type, category, item_name, language, ref_date, filename, mime_type, size, file_path, entered_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(docType, category, itemName, language, refDate, file.name, file.type || null, file.size, buf, actor);
+    .run(docType, category, itemName, language, refDate, file.name, file.type || null, file.size, filePath, actor);
 
   logAudit("document_file", `[${docType}] ${itemName}`, "create", actor, file.name);
 

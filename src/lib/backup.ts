@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { getDb } from "@/lib/db";
+import { ATTACHMENTS_DIR } from "@/lib/fileStorage";
 
 const BACKUP_KEEP = 14; // 최근 백업 보관 개수
 const BACKUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6시간마다 자동 스냅샷
@@ -25,7 +26,31 @@ export async function createBackupSnapshot(): Promise<string> {
   const dest = path.join(backupDir(), `app-${timestamp()}.db`);
   await db.backup(dest);
   pruneOldBackups();
+  mirrorAttachments();
   return dest;
+}
+
+// 첨부파일(게시판/문서관리)은 DB 밖 파일로 저장되므로 db.backup()에 포함되지 않는다.
+// 파일은 한 번 올라오면 내용이 바뀌지 않으므로(생성/삭제만 있음), 스냅샷마다 전부 복사하는 대신
+// 아직 미러에 없는 파일만 추가로 복사해 최신 상태를 한 벌만 유지한다.
+function mirrorAttachments(): void {
+  if (!fs.existsSync(ATTACHMENTS_DIR)) return;
+  const dest = path.join(backupDir(), "attachments");
+  if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+  copyMissingFiles(ATTACHMENTS_DIR, dest);
+}
+
+function copyMissingFiles(srcDir: string, destDir: string): void {
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    const srcPath = path.join(srcDir, entry.name);
+    const destPath = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      if (!fs.existsSync(destPath)) fs.mkdirSync(destPath, { recursive: true });
+      copyMissingFiles(srcPath, destPath);
+    } else if (!fs.existsSync(destPath)) {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
 }
 
 function pruneOldBackups(): void {
