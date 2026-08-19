@@ -88,10 +88,6 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [{ href: "/attendance", label: "근태 신청·연차현황" }],
   },
   {
-    label: "게시판",
-    items: [{ href: "/board", label: "게시판" }],
-  },
-  {
     label: "문서관리",
     items: [
       { href: "/test-reports", label: "외부기관 시험성적서" },

@@ -1251,13 +1251,18 @@ export default function ProductionPage() {
               휴무일
             </button>
           </div>
-          {currentId != null && !locked && (
+          {currentId != null && (
             <button
               type="button"
-              onClick={onConfirmLock}
-              className="border border-emerald-300 text-emerald-700 rounded-md px-4 py-2 text-sm font-medium"
+              onClick={locked ? requestUnlock : onConfirmLock}
+              title={locked ? "관리자 로그인 후 잠금 해제" : "이 기록을 확정하고 잠그기"}
+              className={`border rounded-md px-4 py-2 text-sm font-medium ${
+                locked
+                  ? "border-slate-300 text-slate-600"
+                  : "border-emerald-300 text-emerald-700"
+              }`}
             >
-              확정
+              {locked ? "🔒 해제" : "🔓 확정"}
             </button>
           )}
           <button

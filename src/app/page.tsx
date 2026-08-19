@@ -280,6 +280,8 @@ export default function Home() {
         </button>
       </div>
 
+      <BoardPreview />
+
       {summary && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -424,8 +426,6 @@ export default function Home() {
           </div>
         </>
       )}
-
-      <BoardPreview />
 
       {detail && (
         <Modal title={detail.title} onClose={() => setDetail(null)}>
