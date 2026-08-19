@@ -83,6 +83,7 @@ export default function Home() {
         <h1 className="text-xl font-bold">메뉴</h1>
         <p className="text-sm text-slate-500 mt-1">이용할 메뉴를 선택하세요.</p>
       </div>
+      <BoardPreview />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         {NAV_GROUPS.map((group) => (
           <div key={group.label} className="bg-white rounded-xl border p-5">
@@ -106,7 +107,6 @@ export default function Home() {
           </div>
         ))}
       </div>
-      <BoardPreview />
     </div>
   );
 }

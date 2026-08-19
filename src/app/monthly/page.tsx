@@ -21,18 +21,6 @@ function fmt(v: number | null | undefined, digits = 1): string {
   return v == null ? "-" : v.toFixed(digits);
 }
 
-function Delta({ v }: { v: number | null }) {
-  if (v == null) return <span className="text-slate-300">-</span>;
-  const rounded = Math.round(v * 10) / 10;
-  if (rounded === 0) return <span className="text-slate-400">±0</span>;
-  const up = rounded > 0;
-  return (
-    <span className={up ? "text-red-600" : "text-sky-600"}>
-      {up ? "▲" : "▼"} {Math.abs(rounded).toLocaleString()}
-    </span>
-  );
-}
-
 function MiniChart({
   title,
   data,
@@ -65,6 +53,16 @@ export default function MonthlyPage() {
   const [month, setMonth] = useState(currentMonth());
   const [rows, setRows] = useState<DailySheetRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+
+  function toggleDate(date: string) {
+    setExpandedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -129,8 +127,7 @@ export default function MonthlyPage() {
         <div>
           <h1 className="text-xl font-bold">월간 시트</h1>
           <p className="text-sm text-slate-500 mt-1">
-            한 달치 일별(주/야) 기록을 한 장의 표로 보여줍니다. 조립제·LNG 사용량은 전일 대비 증감도
-            함께 표시됩니다.
+            한 달치 일별(주/야) 기록을 한 장의 표로 보여줍니다. 날짜를 클릭하면 주/야 상세가 펼쳐집니다.
           </p>
         </div>
         <label className="flex flex-col text-xs gap-1">
@@ -184,9 +181,9 @@ export default function MonthlyPage() {
       )}
 
       {tab === "daily" && (
-      <div className="bg-white rounded-xl border overflow-x-auto">
+      <div className="bg-white rounded-xl border overflow-auto max-h-[70vh]">
         <table className="w-full text-sm">
-          <thead className="bg-slate-100 text-slate-600">
+          <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10">
             <tr>
               <th className="text-left px-3 py-2">날짜</th>
               <th className="text-left px-3 py-2">조</th>
@@ -200,64 +197,9 @@ export default function MonthlyPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((day) => (
-              <Fragment key={day.date}>
-                {day.shifts.length === 0 && (
-                  <tr key={day.date} className="border-t">
-                    <td className="px-3 py-1.5 text-slate-400">{day.date}</td>
-                    <td colSpan={8} className="px-3 py-1.5 text-slate-300">
-                      기록 없음
-                    </td>
-                  </tr>
-                )}
-                {day.shifts.map((s, i) => (
-                  <tr key={`${day.date}-${s.shift}`} className="border-t">
-                    <td className="px-3 py-1.5">{i === 0 ? day.date : ""}</td>
-                    <td className="px-3 py-1.5">{s.shift}</td>
-                    <td className="px-3 py-1.5">{s.worker ?? "-"}</td>
-                    <td className="px-3 py-1.5 text-right">{fmt(s.downtimeHours)}</td>
-                    <td className="px-3 py-1.5 text-right">{fmt(s.lineHoursTotal)}</td>
-                    <td className="px-3 py-1.5">{s.granulationAgent ?? "-"}</td>
-                    <td className="px-3 py-1.5 text-right">{fmt(s.granulationUsageTotal)}</td>
-                    <td className="px-3 py-1.5 text-right">{fmt(s.gasUsageShift)}</td>
-                    <td className="px-3 py-1.5 text-right">{fmt(s.packAmount, 0)}</td>
-                  </tr>
-                ))}
-                {day.shifts.length > 0 && (
-                  <tr key={`${day.date}-total`} className="bg-slate-50 font-medium">
-                    <td className="px-3 py-1.5" colSpan={3}>
-                      {day.date} 일계 / 전일대비 증감
-                    </td>
-                    <td className="px-3 py-1.5 text-right">{fmt(day.dayTotal.downtimeHours)}</td>
-                    <td className="px-3 py-1.5 text-right">{fmt(day.dayTotal.lineHoursTotal)}</td>
-                    <td className="px-3 py-1.5"></td>
-                    <td className="px-3 py-1.5 text-right">
-                      <div className="flex flex-col items-end">
-                        <span>{fmt(day.dayTotal.granulationUsageTotal)}</span>
-                        <Delta v={day.deltaFromPrevDay.granulationUsageTotal} />
-                      </div>
-                    </td>
-                    <td className="px-3 py-1.5 text-right">
-                      <div className="flex flex-col items-end">
-                        <span>{fmt(day.dayTotal.gasUsageShift)}</span>
-                        <Delta v={day.deltaFromPrevDay.gasUsageShift} />
-                      </div>
-                    </td>
-                    <td className="px-3 py-1.5 text-right">{fmt(day.dayTotal.packAmount, 0)}</td>
-                  </tr>
-                )}
-              </Fragment>
-            ))}
-            {!loading && rows.length === 0 && (
-              <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-slate-400">
-                  데이터가 없습니다.
-                </td>
-              </tr>
-            )}
             {monthAgg.dayCount > 0 && (
               <>
-                <tr className="bg-indigo-50 font-bold border-t-2 border-indigo-200">
+                <tr className="bg-indigo-50 font-bold border-b-2 border-indigo-200">
                   <td className="px-3 py-2" colSpan={3}>
                     월계 (데이터 있는 {monthAgg.dayCount}일 합계)
                   </td>
@@ -268,7 +210,7 @@ export default function MonthlyPage() {
                   <td className="px-3 py-2 text-right">{fmt(monthAgg.total.gasUsageShift)}</td>
                   <td className="px-3 py-2 text-right">{fmt(monthAgg.total.packAmount, 0)}</td>
                 </tr>
-                <tr className="bg-indigo-50 font-bold">
+                <tr className="bg-indigo-50 font-bold border-b-2 border-indigo-200">
                   <td className="px-3 py-2" colSpan={3}>
                     월평균 (일 {monthAgg.dayCount}일 기준)
                   </td>
@@ -280,6 +222,59 @@ export default function MonthlyPage() {
                   <td className="px-3 py-2 text-right">{fmt(monthAgg.average?.packAmount, 0)}</td>
                 </tr>
               </>
+            )}
+            {rows.map((day) => {
+              const expanded = expandedDates.has(day.date);
+              return (
+                <Fragment key={day.date}>
+                  {day.shifts.length === 0 && (
+                    <tr className="border-t">
+                      <td className="px-3 py-1.5 text-slate-400">{day.date}</td>
+                      <td colSpan={8} className="px-3 py-1.5 text-slate-300">
+                        기록 없음
+                      </td>
+                    </tr>
+                  )}
+                  {day.shifts.length > 0 && (
+                    <tr
+                      className="border-t bg-slate-50 font-medium cursor-pointer hover:bg-slate-100"
+                      onClick={() => toggleDate(day.date)}
+                    >
+                      <td className="px-3 py-1.5" colSpan={3}>
+                        <span className="inline-block w-4 text-slate-400">{expanded ? "▾" : "▸"}</span>
+                        {day.date} 일계
+                      </td>
+                      <td className="px-3 py-1.5 text-right">{fmt(day.dayTotal.downtimeHours)}</td>
+                      <td className="px-3 py-1.5 text-right">{fmt(day.dayTotal.lineHoursTotal)}</td>
+                      <td className="px-3 py-1.5"></td>
+                      <td className="px-3 py-1.5 text-right">{fmt(day.dayTotal.granulationUsageTotal)}</td>
+                      <td className="px-3 py-1.5 text-right">{fmt(day.dayTotal.gasUsageShift)}</td>
+                      <td className="px-3 py-1.5 text-right">{fmt(day.dayTotal.packAmount, 0)}</td>
+                    </tr>
+                  )}
+                  {expanded &&
+                    day.shifts.map((s) => (
+                      <tr key={`${day.date}-${s.shift}`} className="border-t text-slate-600">
+                        <td className="px-3 py-1.5"></td>
+                        <td className="px-3 py-1.5">{s.shift}</td>
+                        <td className="px-3 py-1.5">{s.worker ?? "-"}</td>
+                        <td className="px-3 py-1.5 text-right">{fmt(s.downtimeHours)}</td>
+                        <td className="px-3 py-1.5 text-right">{fmt(s.lineHoursTotal)}</td>
+                        <td className="px-3 py-1.5">{s.granulationAgent ?? "-"}</td>
+                        <td className="px-3 py-1.5 text-right">{fmt(s.granulationUsageTotal)}</td>
+                        <td className="px-3 py-1.5 text-right">{fmt(s.gasUsageShift)}</td>
+                        <td className="px-3 py-1.5 text-right">{fmt(s.packAmount, 0)}</td>
+                      </tr>
+                    ))}
+                </Fragment>
+              );
+            })}
+            {!loading && rows.length === 0 && (
+              <tr>
+                <td colSpan={9} className="px-3 py-8 text-center text-slate-400">
+                  데이터가 없습니다.
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
