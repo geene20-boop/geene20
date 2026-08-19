@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { getDb } from "@/lib/db";
+import { FOREIGN_WORKER_RESTRICTED_GROUPS, NAME_RESTRICTED_DISPLAY_NAMES, NAME_RESTRICTED_GROUPS } from "@/lib/navGroups";
 
 export const ADMIN_SESSION_COOKIE = "admin_session";
 export const SITE_SESSION_COOKIE = "site_session";
@@ -15,6 +16,7 @@ interface TokenPayload {
   accountId?: number;
   role?: AccountRole;
   name?: string; // 관리자(공용 비밀번호) 로그인 시 실제 입력한 사람 이름
+  language?: string; // 사용자 언어 설정 ('ko' | 'cambodia' | 'nepal')
 }
 
 interface AuthRow {
@@ -141,6 +143,12 @@ export function resetAccountPassword(id: number, newPassword: string): void {
   if (info.changes === 0) throw new Error("계정을 찾을 수 없습니다.");
 }
 
+export function deleteAccount(id: number): void {
+  const db = getDb();
+  const info = db.prepare("DELETE FROM user_account WHERE id = ?").run(id);
+  if (info.changes === 0) throw new Error("계정을 찾을 수 없습니다.");
+}
+
 export function verifyAccountLogin(
   username: string,
   password: string
@@ -187,9 +195,9 @@ export function createSessionToken(scope: "admin", name?: string): string {
   return signPayload({ scope, exp: Date.now() + SESSION_TTL_MS, name }, session_secret);
 }
 
-export function createUserSessionToken(accountId: number, role: AccountRole): string {
+export function createUserSessionToken(accountId: number, role: AccountRole, language?: string): string {
   const { session_secret } = getAdminAuthRow();
-  return signPayload({ scope: "site", accountId, role, exp: Date.now() + SESSION_TTL_MS }, session_secret);
+  return signPayload({ scope: "site", accountId, role, language, exp: Date.now() + SESSION_TTL_MS }, session_secret);
 }
 
 export function verifySessionToken(token: string | undefined | null, scope: Scope): boolean {
@@ -198,7 +206,7 @@ export function verifySessionToken(token: string | undefined | null, scope: Scop
 
 export function getUserSession(req: {
   cookies: { get(name: string): { value: string } | undefined };
-}): { accountId: number; role: AccountRole } | null {
+}): { accountId: number; role: AccountRole; language?: string } | null {
   const parsed = decodeToken(req.cookies.get(SITE_SESSION_COOKIE)?.value);
   if (!parsed || parsed.scope !== "site" || parsed.accountId == null || !parsed.role) return null;
   // 토큰 자체는 유효해도, 그 사이 관리자가 계정을 비활성화했다면 즉시 차단되도록
@@ -208,7 +216,7 @@ export function getUserSession(req: {
     | { active: number }
     | undefined;
   if (!row || !row.active) return null;
-  return { accountId: parsed.accountId, role: parsed.role };
+  return { accountId: parsed.accountId, role: parsed.role, language: parsed.language };
 }
 
 // 로그인한 개인계정이 근로자명부의 어느 근로자와 연결되어 있는지 (없으면 null).
@@ -226,6 +234,45 @@ export function isAdminRequest(req: {
   cookies: { get(name: string): { value: string } | undefined };
 }): boolean {
   return verifySessionToken(req.cookies.get(ADMIN_SESSION_COOKIE)?.value, "admin");
+}
+
+// 로그인한 개인계정이 외국인 근로자와 연동되어 있는지 (근태관리 등 접근 차단 대상).
+export function isForeignWorkerRequest(req: {
+  cookies: { get(name: string): { value: string } | undefined };
+}): boolean {
+  const session = getUserSession(req);
+  if (!session) return false;
+  const account = getAccountById(session.accountId);
+  if (account?.worker_id == null) return false;
+  const db = getDb();
+  const worker = db.prepare("SELECT nationality FROM worker WHERE id = ?").get(account.worker_id) as
+    | { nationality: string }
+    | undefined;
+  return worker?.nationality === "foreign";
+}
+
+// 표시용 이름(개인 로그인 계정의 display_name/username). 관리자(공용 비밀번호)는 특정 개인이 아니므로 null.
+export function getSessionDisplayName(req: {
+  cookies: { get(name: string): { value: string } | undefined };
+}): string | null {
+  const session = getUserSession(req);
+  if (!session) return null;
+  const account = getAccountById(session.accountId);
+  return account?.display_name || account?.username || null;
+}
+
+// NAV_GROUPS의 메뉴 하나(예: "원재료관리")에 대한 접근 가능 여부. 메뉴에서 숨기는 것과
+// 동일한 기준(외국인 근로자 / 이름 지정 제한, navGroups.ts)을 API 쪽에서도 적용해, 주소를
+// 직접 알아도 조회·조작할 수 없도록 한다.
+export function canAccessNavGroup(
+  req: { cookies: { get(name: string): { value: string } | undefined } },
+  groupLabel: string
+): boolean {
+  if (isAdminRequest(req)) return true;
+  if (isForeignWorkerRequest(req) && FOREIGN_WORKER_RESTRICTED_GROUPS.has(groupLabel)) return false;
+  const name = getSessionDisplayName(req);
+  if (name && NAME_RESTRICTED_GROUPS.has(groupLabel) && NAME_RESTRICTED_DISPLAY_NAMES.has(name)) return false;
+  return true;
 }
 
 // 관리자(공용 비밀번호)로 로그인할 때 입력한 실제 이름. 옛 토큰 등 이름이 없으면 null.

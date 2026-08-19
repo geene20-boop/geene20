@@ -1,18 +1,32 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, useRef } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import { PackingItem, ProductionLog, QcTest, Worker, inferShift } from "@/lib/types";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import { useSiteSession } from "@/lib/useSiteSession";
 
-const today = () => new Date().toISOString().slice(0, 10);
-const nowHHMM = () => new Date().toISOString().slice(11, 16);
+// toISOString()은 세계표준시(UTC) 기준이라 한국시간(KST)과 최대 9시간 어긋난다.
+// 기기(브라우저)의 실제 현지 날짜·시각을 그대로 써야 한다.
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : `${n}`;
+}
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+const today = () => localDateStr(new Date());
+const nowHHMM = () => {
+  const d = new Date();
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+};
 const daysAgo = (n: number) => {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return localDateStr(d);
+};
+const formatDateForSampleNo = (dateStr: string) => {
+  return dateStr.replace(/-/g, ".");
 };
 
 type FormState = {
@@ -51,6 +65,11 @@ const emptyForm = (): FormState => ({
   worker: "",
 });
 
+// 서버(SSR)와 브라우저의 시간대가 다르면 최초 렌더 시 날짜·시각이 서로 달라 하이드레이션이
+// 어긋날 수 있다. 최초 렌더에서는 비워두고, 브라우저에 붙은 뒤(useEffect)에만 실제 현재
+// 날짜·시각을 채운다.
+const initialForm = (): FormState => ({ ...emptyForm(), date: "", time: "", measured_date: "", measured_time: "" });
+
 const DRAFT_KEY = "qc_draft";
 
 function n(v: string): number | null {
@@ -60,7 +79,7 @@ function n(v: string): number | null {
 }
 
 export default function QcPage() {
-  const [form, setForm] = useState<FormState>(emptyForm());
+  const [form, setForm] = useState<FormState>(initialForm);
   const [tests, setTests] = useState<QcTest[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -75,6 +94,12 @@ export default function QcPage() {
   const [rangeFrom, setRangeFrom] = useState(daysAgo(30));
   const [rangeTo, setRangeTo] = useState(today());
   const session = useSiteSession();
+
+  // 브라우저에 붙은 뒤(클라이언트 전용) 실제 현재 날짜·시각으로 채운다 (initialForm 참고).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm((f) => (f.date ? f : { ...f, date: today(), time: nowHHMM(), measured_date: today(), measured_time: nowHHMM() }));
+  }, []);
 
   useEffect(() => {
     if (session.loggedIn && session.displayName) {
@@ -129,8 +154,28 @@ export default function QcPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTests();
+    // 페이지 로드 시 현재 시간 자동입력
+    setForm((f) => ({
+      ...f,
+      time: f.time || nowHHMM(),
+      measured_time: f.measured_time || nowHHMM(),
+    }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 새 기록 생성 시 date가 변경되면 현재 시간으로 time/measured_time 자동 업데이트
+  const lastDate = useRef(form.date);
+  useEffect(() => {
+    if (editingId != null) return;
+    if (lastDate.current !== form.date) {
+      lastDate.current = form.date;
+      setForm((f) => ({
+        ...f,
+        time: nowHHMM(),
+        measured_time: nowHHMM(),
+      }));
+    }
+  }, [form.date, editingId]);
 
   // 생산일자+생산시각(→주/야 자동판별)으로 일치하는 생산일지의 설비셋팅을 생산조건에 자동 반영.
   // 기존 기록을 수정 중일 때는 그 기록의 저장된 값을 그대로 두고 덮어쓰지 않는다.
@@ -167,11 +212,16 @@ export default function QcPage() {
     };
   }, [form.date, form.time, editingId]);
 
-  // 시료 No.는 해당 생산일자에 이미 등록된 최대 번호 다음 값으로 자동 생성한다 (수기입력 없음)
+  // 시료 No.는 해당 생산일자에 이미 등록된 최대 번호 다음 값으로 자동 생성한다 (YYYY.MM.DD-01 형식)
   const nextSampleNo = useMemo(() => {
     const sameDate = tests.filter((t) => t.date === form.date);
-    const maxNo = sameDate.reduce((m, t) => Math.max(m, t.sample_no ?? 0), 0);
-    return maxNo + 1;
+    const noStrings = sameDate
+      .map((t) => t.sample_no)
+      .filter((s): s is string => typeof s === "string" && s.includes("-"))
+      .map((s) => parseInt(s.split("-")[1], 10));
+    const maxNo = noStrings.length > 0 ? Math.max(...noStrings) : 0;
+    const nextNum = (maxNo + 1).toString().padStart(2, "0");
+    return `${formatDateForSampleNo(form.date)}-${nextNum}`;
   }, [tests, form.date]);
 
   const effectiveSampleNo = editingId != null ? form.sample_no : String(nextSampleNo);
@@ -208,7 +258,11 @@ export default function QcPage() {
   }
 
   function resetForm() {
-    setForm(emptyForm());
+    setForm((f) => ({
+      ...emptyForm(),
+      date: f.date,
+      fertilizer_type: f.fertilizer_type,
+    }));
     setEditingId(null);
     setMessage(null);
     clearDraft();
@@ -243,13 +297,13 @@ export default function QcPage() {
     setMessage(null);
     try {
       const body: Record<string, unknown> = {
-        sample_no: n(effectiveSampleNo),
+        sample_no: effectiveSampleNo || null,
         fertilizer_type: form.fertilizer_type || null,
         date: form.date,
         shift: inferShift(form.time),
         time: form.time,
         measured_date: form.measured_date || null,
-        measured_time: form.measured_time || null,
+        measured_time: nowHHMM(),
         burner_temp: n(form.burner_temp),
         granulation_brix: n(form.granulation_brix),
         granulation_input: n(form.granulation_input),

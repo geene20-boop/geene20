@@ -5,10 +5,27 @@ import { useSiteSession } from "@/lib/useSiteSession";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import { DailyAttendanceRow, DailyAttendanceStatus, LeaveBalance, LeaveRequest, LeaveType, ShiftType } from "@/lib/types";
 import { markLeaveSeen } from "@/lib/leaveRead";
+import Modal from "@/components/Modal";
 
-const LEAVE_TYPES: LeaveType[] = ["연차", "반차(오전)", "반차(오후)", "외출", "조퇴"];
+const LEAVE_TYPES: LeaveType[] = ["연차", "반차(오전)", "반차(오후)", "외출", "조퇴", "무급휴무", "유급휴무"];
 const HALF_DAY_TYPES: LeaveType[] = ["반차(오전)", "반차(오후)"];
-const NO_DEDUCTION_TYPES: LeaveType[] = ["외출", "조퇴"];
+const NO_DEDUCTION_TYPES: LeaveType[] = ["외출", "조퇴", "무급휴무", "유급휴무"];
+// leave-balance API의 월별 사용일수 집계와 동일한 기준 (신청 시작월 기준으로 귀속)
+const DEDUCTING_LEAVE_TYPES: LeaveType[] = ["연차", "반차(오전)", "반차(오후)"];
+
+function requestsForMonth(requests: LeaveRequest[], workerId: number, year: number, monthIndex: number): LeaveRequest[] {
+  const monthStr = String(monthIndex + 1).padStart(2, "0");
+  return requests
+    .filter(
+      (r) =>
+        r.worker_id === workerId &&
+        r.status === "approved" &&
+        DEDUCTING_LEAVE_TYPES.includes(r.type) &&
+        r.start_date.slice(0, 4) === String(year) &&
+        r.start_date.slice(5, 7) === monthStr
+    )
+    .sort((a, b) => a.start_date.localeCompare(b.start_date));
+}
 
 const STATUS_LABEL: Record<string, string> = { pending: "대기중", approved: "승인", rejected: "반려" };
 const STATUS_STYLE: Record<string, string> = {
@@ -422,7 +439,10 @@ function AdminBalanceTable({ rows, onSaved }: { rows: LeaveBalance[]; onSaved: (
   );
 }
 
-function MonthlyDetailCard({ balance }: { balance: LeaveBalance }) {
+function MonthlyDetailCard({ balance, requests }: { balance: LeaveBalance; requests: LeaveRequest[] }) {
+  const [openMonth, setOpenMonth] = useState<number | null>(null);
+  const detailRows = openMonth != null ? requestsForMonth(requests, balance.worker_id, balance.year, openMonth) : [];
+
   return (
     <div className="bg-white rounded-xl border p-5 overflow-x-auto">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
@@ -430,7 +450,7 @@ function MonthlyDetailCard({ balance }: { balance: LeaveBalance }) {
           <div className="font-semibold text-slate-800">
             {balance.worker_name}님의 연차현황 상세{balance.hire_date ? ` · 입사일 ${balance.hire_date}` : ""}
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">{balance.year}년 · 월별 사용일수</p>
+          <p className="text-xs text-slate-500 mt-0.5">{balance.year}년 · 월별 사용일수 (클릭하면 신청일자가 보입니다)</p>
         </div>
         <a
           href={`/api/leave-balance/export?year=${balance.year}&workerId=${balance.worker_id}`}
@@ -454,22 +474,73 @@ function MonthlyDetailCard({ balance }: { balance: LeaveBalance }) {
         <tbody>
           <tr className="border-t">
             <td className="px-3 py-2">사용일</td>
-            {balance.monthly_used_days.map((d, i) => (
-              <td key={i} className="px-3 py-2 text-right">
-                {d || "-"}
-              </td>
-            ))}
+            {balance.monthly_used_days.map((d, i) =>
+              d ? (
+                <td key={i} className="px-3 py-2 text-right">
+                  <button
+                    type="button"
+                    onClick={() => setOpenMonth(i)}
+                    className="text-sky-700 underline decoration-slate-300 underline-offset-2 hover:decoration-sky-400"
+                  >
+                    {d}
+                  </button>
+                </td>
+              ) : (
+                <td key={i} className="px-3 py-2 text-right text-slate-300">
+                  -
+                </td>
+              )
+            )}
             <td className="px-3 py-2 text-right font-medium">
               {balance.monthly_used_days.reduce((a, b) => a + b, 0)}일
             </td>
           </tr>
         </tbody>
       </table>
+
+      {openMonth != null && (
+        <Modal
+          title={`${balance.worker_name}님 · ${MONTH_LABELS[openMonth]} 연차 사용내역`}
+          subtitle={`${balance.year}년`}
+          onClose={() => setOpenMonth(null)}
+        >
+          <div className="flex flex-col gap-1.5">
+            {detailRows.map((r) => (
+              <div
+                key={r.id}
+                className="flex items-center justify-between text-sm bg-slate-50 rounded-md px-3 py-2"
+              >
+                <span>
+                  {r.start_date}
+                  {r.end_date !== r.start_date ? ` ~ ${r.end_date}` : ""}
+                </span>
+                <span className="text-xs text-slate-500 border rounded-full px-2 py-0.5 bg-white">
+                  {r.type} · {r.days}일
+                </span>
+              </div>
+            ))}
+            {detailRows.length === 0 && (
+              <p className="text-sm text-slate-400 text-center py-4">해당 월의 신청 내역을 찾을 수 없습니다.</p>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
 
-function AdminMonthlyDetailTable({ rows, year }: { rows: LeaveBalance[]; year: number }) {
+function AdminMonthlyDetailTable({
+  rows,
+  year,
+  requests,
+}: {
+  rows: LeaveBalance[];
+  year: number;
+  requests: LeaveRequest[];
+}) {
+  const [open, setOpen] = useState<{ workerId: number; workerName: string; monthIndex: number } | null>(null);
+  const detailRows = open ? requestsForMonth(requests, open.workerId, year, open.monthIndex) : [];
+
   return (
     <div className="bg-white rounded-xl border overflow-x-auto">
       <div className="flex items-center justify-between px-3 pt-3 flex-wrap gap-2">
@@ -478,6 +549,7 @@ function AdminMonthlyDetailTable({ rows, year }: { rows: LeaveBalance[]; year: n
           ⬇ 엑셀 다운로드
         </a>
       </div>
+      <p className="text-xs text-slate-400 px-3 pt-1">숫자가 있는 월을 클릭하면 신청일자가 보입니다.</p>
       <table className="w-full text-sm mt-2">
         <thead className="bg-slate-100 text-slate-600">
           <tr>
@@ -496,11 +568,23 @@ function AdminMonthlyDetailTable({ rows, year }: { rows: LeaveBalance[]; year: n
             <tr key={r.worker_id} className="border-t">
               <td className="px-3 py-2">{r.worker_name}</td>
               <td className="px-3 py-2 text-xs text-slate-500">{r.hire_date ?? "-"}</td>
-              {r.monthly_used_days.map((d, i) => (
-                <td key={i} className="px-3 py-2 text-right">
-                  {d || "-"}
-                </td>
-              ))}
+              {r.monthly_used_days.map((d, i) =>
+                d ? (
+                  <td key={i} className="px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setOpen({ workerId: r.worker_id, workerName: r.worker_name, monthIndex: i })}
+                      className="text-sky-700 underline decoration-slate-300 underline-offset-2 hover:decoration-sky-400"
+                    >
+                      {d}
+                    </button>
+                  </td>
+                ) : (
+                  <td key={i} className="px-3 py-2 text-right text-slate-300">
+                    -
+                  </td>
+                )
+              )}
               <td className="px-3 py-2 text-right font-medium">
                 {r.monthly_used_days.reduce((a, b) => a + b, 0)}일
               </td>
@@ -515,6 +599,34 @@ function AdminMonthlyDetailTable({ rows, year }: { rows: LeaveBalance[]; year: n
           )}
         </tbody>
       </table>
+
+      {open && (
+        <Modal
+          title={`${open.workerName}님 · ${MONTH_LABELS[open.monthIndex]} 연차 사용내역`}
+          subtitle={`${year}년`}
+          onClose={() => setOpen(null)}
+        >
+          <div className="flex flex-col gap-1.5">
+            {detailRows.map((r) => (
+              <div
+                key={r.id}
+                className="flex items-center justify-between text-sm bg-slate-50 rounded-md px-3 py-2"
+              >
+                <span>
+                  {r.start_date}
+                  {r.end_date !== r.start_date ? ` ~ ${r.end_date}` : ""}
+                </span>
+                <span className="text-xs text-slate-500 border rounded-full px-2 py-0.5 bg-white">
+                  {r.type} · {r.days}일
+                </span>
+              </div>
+            ))}
+            {detailRows.length === 0 && (
+              <p className="text-sm text-slate-400 text-center py-4">해당 월의 신청 내역을 찾을 수 없습니다.</p>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -637,8 +749,12 @@ function DailyRosterRow({ row, onChanged }: { row: DailyAttendanceRow; onChanged
   );
 }
 
+type ShiftFilter = "all" | ShiftType;
+const SHIFT_FILTER_LABELS: Record<ShiftFilter, string> = { all: "전체", day: "주간", night: "야간" };
+
 function DailyRosterTab() {
   const [date, setDate] = useState(today());
+  const [shiftFilter, setShiftFilter] = useState<ShiftFilter>("all");
   const [rows, setRows] = useState<DailyAttendanceRow[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -659,6 +775,7 @@ function DailyRosterTab() {
   }, [date]);
 
   const weekday = ["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T00:00:00Z`).getUTCDay()];
+  const filteredRows = shiftFilter === "all" ? rows : rows.filter((r) => r.shift === shiftFilter);
 
   return (
     <div className="bg-white rounded-xl border overflow-x-auto">
@@ -682,8 +799,22 @@ function DailyRosterTab() {
           >
             다음날 ▶
           </button>
+          <select
+            value={shiftFilter}
+            onChange={(e) => setShiftFilter(e.target.value as ShiftFilter)}
+            className="border rounded-md px-2 py-1 text-xs bg-white"
+          >
+            {(["all", "day", "night"] as ShiftFilter[]).map((f) => (
+              <option key={f} value={f}>
+                {SHIFT_FILTER_LABELS[f]}
+              </option>
+            ))}
+          </select>
         </div>
-        <a href={`/api/daily-attendance/export?date=${date}`} className="text-xs border rounded-md px-3 py-1.5 bg-white">
+        <a
+          href={`/api/daily-attendance/export?date=${date}${shiftFilter !== "all" ? `&shift=${shiftFilter}` : ""}`}
+          className="text-xs border rounded-md px-3 py-1.5 bg-white"
+        >
           ⬇ 엑셀 다운로드
         </a>
       </div>
@@ -698,20 +829,20 @@ function DailyRosterTab() {
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {filteredRows.map((r) => (
             <DailyRosterRow key={r.worker_id} row={r} onChanged={refresh} />
           ))}
-          {!loading && rows.length === 0 && (
+          {!loading && filteredRows.length === 0 && (
             <tr>
               <td colSpan={5} className="px-3 py-8 text-center text-slate-400">
-                근로자명부가 비어있습니다.
+                {rows.length === 0 ? "근로자명부가 비어있습니다." : "해당 근무조 인원이 없습니다."}
               </td>
             </tr>
           )}
         </tbody>
       </table>
       <p className="text-xs text-slate-500 px-3 py-3">
-        • 근무조는 근로자명부 기본값이 자동으로 채워지고, 관리자가 그날만 바꾸면 즉시 저장됩니다.
+        • 근무조는 기본값(주간)이 자동으로 채워지고, 관리자가 그날만 바꾸면 즉시 저장됩니다.
         <br />
         • 근태현황은 본인이 신청해 승인된 연차·반차·외출·조퇴가 있으면 자동으로 채워지고 수정할 수 없습니다(초록 표시).
         <br />
@@ -722,26 +853,51 @@ function DailyRosterTab() {
 }
 
 function AdminApprovalTable({
-  rows,
+  allRows,
   onChanged,
   canReject,
 }: {
-  rows: LeaveRequest[];
+  allRows: LeaveRequest[];
   onChanged: () => void;
   canReject: boolean;
 }) {
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [rangeFrom, setRangeFrom] = useState(today());
+  const [rangeTo, setRangeTo] = useState(today());
+  const [showPendingOnly, setShowPendingOnly] = useState(true);
+
+  const filteredRows = useMemo(() => {
+    return allRows.filter((r) => {
+      const dateOk = r.start_date >= rangeFrom && r.start_date <= rangeTo;
+      const statusOk = showPendingOnly ? r.status === "pending" : true;
+      return dateOk && statusOk;
+    });
+  }, [allRows, rangeFrom, rangeTo, showPendingOnly]);
 
   async function decide(id: number, status: "approved" | "rejected") {
+    const req = allRows.find((r) => r.id === id);
+    if (!req) return;
+
+    if (status === "rejected" && req.status === "approved") {
+      if (!confirm("이미 승인된 신청을 반려하면 해당 근태 일정이 취소됩니다. 계속 진행하시겠습니까?")) {
+        return;
+      }
+    }
+
     await apiPut(`/api/leave-request/${id}`, { status });
     onChanged();
   }
 
   async function approveAll() {
-    if (!confirm(`대기중인 신청 ${rows.length}건을 모두 승인할까요?`)) return;
+    const pending = filteredRows.filter((r) => r.status === "pending");
+    if (pending.length === 0) {
+      alert("승인할 신청이 없습니다.");
+      return;
+    }
+    if (!confirm(`대기중인 신청 ${pending.length}건을 모두 승인할까요?`)) return;
     setBulkBusy(true);
     try {
-      for (const r of rows) {
+      for (const r of pending) {
         await apiPut(`/api/leave-request/${r.id}`, { status: "approved" });
       }
       onChanged();
@@ -750,20 +906,54 @@ function AdminApprovalTable({
     }
   }
 
+  const pendingCount = filteredRows.filter((r) => r.status === "pending").length;
+
   return (
     <div className="bg-white rounded-xl border overflow-x-auto">
-      {rows.length > 0 && (
-        <div className="flex justify-end px-3 pt-3">
-          <button
-            type="button"
-            onClick={approveAll}
-            disabled={bulkBusy}
-            className="text-xs bg-slate-900 text-white rounded-md px-3 py-1.5 disabled:opacity-50"
-          >
-            전체 승인 ({rows.length}건)
-          </button>
+      <div className="px-4 py-4 border-b flex flex-col gap-3">
+        <div className="flex gap-2 items-end flex-wrap">
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-slate-600">기간 (신청일)</span>
+            <input
+              type="date"
+              value={rangeFrom}
+              onChange={(e) => setRangeFrom(e.target.value)}
+              className="border rounded-md px-2 py-1.5 text-sm"
+            />
+          </label>
+          <span className="text-slate-400">~</span>
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-slate-600">종료</span>
+            <input
+              type="date"
+              value={rangeTo}
+              onChange={(e) => setRangeTo(e.target.value)}
+              className="border rounded-md px-2 py-1.5 text-sm"
+            />
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={showPendingOnly}
+              onChange={(e) => setShowPendingOnly(e.target.checked)}
+              className="rounded"
+            />
+            <span className="text-xs text-slate-600">대기중만 보기</span>
+          </label>
         </div>
-      )}
+        {pendingCount > 0 && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={approveAll}
+              disabled={bulkBusy}
+              className="text-xs bg-slate-900 text-white rounded-md px-3 py-1.5 disabled:opacity-50"
+            >
+              전체 승인 ({pendingCount}건)
+            </button>
+          </div>
+        )}
+      </div>
       <table className="w-full text-sm">
         <thead className="bg-slate-100 text-slate-600">
           <tr>
@@ -771,30 +961,36 @@ function AdminApprovalTable({
             <th className="text-left px-3 py-2">유형</th>
             <th className="text-left px-3 py-2">기간</th>
             <th className="text-right px-3 py-2">일수</th>
+            <th className="text-left px-3 py-2">상태</th>
             <th className="text-left px-3 py-2">사유</th>
             <th className="px-3 py-2"></th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {filteredRows.map((r) => (
             <tr key={r.id} className="border-t">
               <td className="px-3 py-2">{r.worker_name}</td>
               <td className="px-3 py-2">{r.type}</td>
-              <td className="px-3 py-2">
+              <td className="px-3 py-2 text-sm">
                 {r.start_date}
                 {r.end_date !== r.start_date ? ` ~ ${r.end_date}` : ""}
               </td>
               <td className="px-3 py-2 text-right">{r.days}</td>
+              <td className="px-3 py-2">
+                <StatusBadge status={r.status} />
+              </td>
               <td className="px-3 py-2 text-xs text-slate-600 max-w-[200px] truncate" title={r.reason ?? ""}>
                 {r.reason ?? "-"}
               </td>
-              <td className="px-3 py-2 text-right whitespace-nowrap">
-                <button
-                  onClick={() => decide(r.id, "approved")}
-                  className="text-xs bg-slate-900 text-white rounded-md px-2 py-1 mr-2"
-                >
-                  승인
-                </button>
+              <td className="px-3 py-2 text-right whitespace-nowrap flex gap-1 justify-end">
+                {r.status !== "approved" && (
+                  <button
+                    onClick={() => decide(r.id, "approved")}
+                    className="text-xs bg-slate-900 text-white rounded-md px-2 py-1"
+                  >
+                    승인
+                  </button>
+                )}
                 <button
                   onClick={() => decide(r.id, "rejected")}
                   disabled={!canReject}
@@ -806,10 +1002,10 @@ function AdminApprovalTable({
               </td>
             </tr>
           ))}
-          {rows.length === 0 && (
+          {filteredRows.length === 0 && (
             <tr>
-              <td colSpan={6} className="px-3 py-8 text-center text-slate-400">
-                대기중인 신청이 없습니다.
+              <td colSpan={7} className="px-3 py-8 text-center text-slate-400">
+                해당 기간의 신청이 없습니다.
               </td>
             </tr>
           )}
@@ -868,8 +1064,6 @@ export default function AttendancePage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.checked, isAdmin, isModifier, hasWorker]);
-
-  const pendingForAdmin = useMemo(() => allRequests.filter((r) => r.status === "pending"), [allRequests]);
 
   if (!session.checked) {
     return <p className="text-sm text-slate-400">확인 중...</p>;
@@ -992,10 +1186,12 @@ export default function AttendancePage() {
         <RequestList rows={myRequests} showWorkerName={false} canCancel onChanged={refresh} />
       )}
       {activeView === "mine" && tab === "balance" && myBalance && <BalanceCard balance={myBalance} />}
-      {activeView === "mine" && tab === "detail" && myBalance && <MonthlyDetailCard balance={myBalance} />}
+      {activeView === "mine" && tab === "detail" && myBalance && (
+        <MonthlyDetailCard balance={myBalance} requests={myRequests} />
+      )}
 
       {activeView === "manage" && tab === "approval" && (
-        <AdminApprovalTable rows={pendingForAdmin} onChanged={refresh} canReject={isAdmin} />
+        <AdminApprovalTable allRows={allRequests} onChanged={refresh} canReject={isAdmin} />
       )}
       {activeView === "manage" && isAdmin && tab === "roster" && <DailyRosterTab />}
       {activeView === "manage" && tab === "history" && (
@@ -1005,7 +1201,11 @@ export default function AttendancePage() {
         <AdminBalanceTable rows={allBalances} onSaved={refresh} />
       )}
       {activeView === "manage" && isAdmin && tab === "detail" && (
-        <AdminMonthlyDetailTable rows={allBalances} year={allBalances[0]?.year ?? new Date().getFullYear()} />
+        <AdminMonthlyDetailTable
+          rows={allBalances}
+          year={allBalances[0]?.year ?? new Date().getFullYear()}
+          requests={allRequests}
+        />
       )}
 
       <div className="flex justify-end">
