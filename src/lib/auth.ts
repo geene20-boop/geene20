@@ -335,28 +335,48 @@ export function canDeleteRecord(
 }
 
 // ---------- 로그인 시도 제한 (무차별 대입 방지) ----------
+// DB(login_attempt)에 저장해서, 서버 메모리에만 있던 예전 방식과 달리 재배포해도 잠금이 유지된다.
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 5 * 60 * 1000; // 5분
-const attempts = new Map<string, { count: number; lockedUntil: number }>();
+const STALE_MS = 24 * 60 * 60 * 1000; // 하루 넘게 조용한 기록은 정리 대상
 
 export function isLoginLocked(key: string): number {
-  const rec = attempts.get(key);
+  const db = getDb();
+  const rec = db.prepare("SELECT locked_until FROM login_attempt WHERE key = ?").get(key) as
+    | { locked_until: number }
+    | undefined;
   if (!rec) return 0;
-  const remaining = rec.lockedUntil - Date.now();
+  const remaining = rec.locked_until - Date.now();
   return remaining > 0 ? remaining : 0;
 }
 
 export function recordLoginFailure(key: string): void {
-  const rec = attempts.get(key) ?? { count: 0, lockedUntil: 0 };
-  rec.count += 1;
-  if (rec.count >= MAX_ATTEMPTS) {
-    rec.lockedUntil = Date.now() + LOCKOUT_MS;
-    rec.count = 0;
+  const db = getDb();
+  const rec = db.prepare("SELECT count, locked_until FROM login_attempt WHERE key = ?").get(key) as
+    | { count: number; locked_until: number }
+    | undefined;
+  let count = (rec?.count ?? 0) + 1;
+  let lockedUntil = rec?.locked_until ?? 0;
+  if (count >= MAX_ATTEMPTS) {
+    lockedUntil = Date.now() + LOCKOUT_MS;
+    count = 0;
   }
-  attempts.set(key, rec);
+  db.prepare(
+    `INSERT INTO login_attempt (key, count, locked_until, updated_at) VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET count = excluded.count, locked_until = excluded.locked_until, updated_at = excluded.updated_at`
+  ).run(key, count, lockedUntil);
+  pruneStaleLoginAttempts();
 }
 
 export function recordLoginSuccess(key: string): void {
-  attempts.delete(key);
+  getDb().prepare("DELETE FROM login_attempt WHERE key = ?").run(key);
+}
+
+// 잠기지 않고 조용히 남아있는 오래된 기록을 정리해 테이블이 무한정 쌓이지 않게 한다.
+function pruneStaleLoginAttempts(): void {
+  const cutoff = new Date(Date.now() - STALE_MS).toISOString().slice(0, 19).replace("T", " ");
+  getDb()
+    .prepare("DELETE FROM login_attempt WHERE locked_until < ? AND updated_at < ?")
+    .run(Date.now(), cutoff);
 }

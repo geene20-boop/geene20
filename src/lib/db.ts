@@ -219,6 +219,15 @@ export function getDb(): Database.Database {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- 로그인 시도 제한(무차별 대입 방지). 예전에는 서버 메모리(Map)에만 있어서 재배포할
+    -- 때마다 초기화됐는데, 여기로 옮겨서 재배포와 무관하게 잠금 상태가 유지되게 한다.
+    CREATE TABLE IF NOT EXISTS login_attempt (
+      key TEXT PRIMARY KEY,       -- 'admin' 또는 'site:<아이디>'
+      count INTEGER NOT NULL DEFAULT 0,
+      locked_until INTEGER NOT NULL DEFAULT 0, -- epoch ms, 0이면 잠기지 않음
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS admin_auth (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       password_hash TEXT,
