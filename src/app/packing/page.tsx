@@ -11,7 +11,6 @@ import {
 } from "@/lib/types";
 import { groupByKind, itemLabel, stripCode } from "@/lib/packingClient";
 import ShipmentSummaryTab from "./ShipmentSummaryTab";
-import WarehouseMapTab from "./WarehouseMapTab";
 
 interface PackingState {
   stock: PackingItem[];
@@ -45,7 +44,7 @@ const PRODUCT_CATEGORY_STYLE = [
 ] as const;
 
 // 톤백 제품(category가 "톤백"인 품목)은 세부명(sub)에 적힌 이름으로 상위 대분류에 포함시킨다
-export function tonbagParentCategory(sub: string | null): string | null {
+function tonbagParentCategory(sub: string | null): string | null {
   if (!sub) return null;
   if (sub.includes("석회고토")) return "석회고토";
   if (sub.includes("규산")) return "입상규산";
@@ -53,7 +52,7 @@ export function tonbagParentCategory(sub: string | null): string | null {
   return null;
 }
 
-export function tonsOfItem(item: PackingItem): number {
+function tonsOfItem(item: PackingItem): number {
   return item.bag_kg ? (item.stock * item.bag_kg) / 1000 : 0;
 }
 
@@ -107,7 +106,6 @@ const TABS = [
   { key: "aux", label: "03. 부자재" },
   { key: "period", label: "04. 기간별 생산·출하" },
   { key: "shipment", label: "05. 출하누계" },
-  { key: "warehouse", label: "06. 창고 배치도" },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 
@@ -495,7 +493,6 @@ export default function PackingStockPage() {
       )}
 
       {tab === "shipment" && <ShipmentSummaryTab />}
-      {tab === "warehouse" && <WarehouseMapTab stock={state?.stock ?? []} />}
     </div>
   );
 }

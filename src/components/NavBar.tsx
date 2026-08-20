@@ -16,8 +16,8 @@ const GROUP_ICON: Record<string, string> = {
   "생산·품질": "🏭",
   제품포장: "📦",
   "원재료·문서": "🧾",
-  근태관리: "👥",
-  시스템관리: "⚙️",
+  근태: "👥",
+  시스템: "⚙️",
 };
 
 function isGroupActive(group: NavGroup, pathname: string): boolean {
@@ -120,7 +120,7 @@ export default function NavBar() {
     if (isGroupBlockedForSession(group.label, session.isForeignWorker, session.displayName, session.isAdmin)) {
       return null;
     }
-    if (group.label === "시스템관리" && !session.isAdmin) {
+    if (group.label === "시스템" && !session.isAdmin) {
       let items = group.items.filter((item) => item.href !== "/history");
       // 관리자 로그인이 아니면 데이터 가져오기도 숨긴다.
       if (!admin.loggedIn) {
@@ -183,7 +183,7 @@ export default function NavBar() {
           {visibleGroups.map((group) => {
             const active = isGroupActive(group, pathname);
             const open = !collapsed && openGroup === group.label;
-            const showBadge = group.label === "근태관리";
+            const showBadge = group.label === "근태";
             const icon = GROUP_ICON[group.label] ?? "•";
 
             if (collapsed) {
@@ -303,7 +303,7 @@ export default function NavBar() {
             {visibleGroups.map((group) => {
               const active = isGroupActive(group, pathname);
               const expanded = mobileExpanded === group.label || active;
-              const showBadge = group.label === "근태관리";
+              const showBadge = group.label === "근태";
               return (
                 <div key={group.label} className="border-b border-white/10 last:border-b-0">
                   <button

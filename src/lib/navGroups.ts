@@ -11,9 +11,9 @@ export interface NavGroup {
 // 외국인 근로자와 연동된 계정은 생산·품질/제품포장만 이용할 수 있다.
 export const FOREIGN_WORKER_RESTRICTED_GROUPS = new Set([
   "원재료·문서",
-  "근태관리",
+  "근태",
   "게시판",
-  "시스템관리",
+  "시스템",
 ]);
 
 // 특정 개인(이름)에게만 숨기는 메뉴. 근로자 단위의 세부 권한 체계가 아직 없어
@@ -82,11 +82,11 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: "근태관리",
+    label: "근태",
     items: [{ href: "/attendance", label: "근태 신청·연차현황" }],
   },
   {
-    label: "시스템관리",
+    label: "시스템",
     items: [
       { href: "/history", label: "이력 관리" },
       { href: "/import", label: "데이터 가져오기" },
