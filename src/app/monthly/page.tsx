@@ -142,7 +142,7 @@ export default function MonthlyPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold">월간 시트</h1>
+          <h1 className="text-xl font-bold">월별 요약</h1>
           <p className="text-sm text-slate-500 mt-1">
             한 달치 일별(주/야) 기록을 한 장의 표로 보여줍니다. 날짜를 클릭하면 주/야 상세가 펼쳐집니다.
           </p>

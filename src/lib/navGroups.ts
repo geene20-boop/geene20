@@ -42,9 +42,9 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "생산·품질",
     items: [
       { href: "/production", label: "생산일지 입력" },
-      { href: "/daily", label: "일자별 대시보드" },
-      { href: "/monthly", label: "월간 시트" },
-      { href: "/electricity", label: "전력사용량" },
+      { href: "/daily", label: "일자별 요약" },
+      { href: "/monthly", label: "월별 요약" },
+      { href: "/electricity", label: "전력 모니터링" },
       { href: "/utility", label: "월별 유틸리티" },
       { href: "/qc", label: "측정데이터" },
       { href: "/dashboard", label: "품질 요약" },
