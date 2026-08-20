@@ -33,8 +33,18 @@ interface HomeSummary {
   shipment: { tons: number; byCategory: CategoryTons[] };
   seasonProduction: CategoryBagTonbag[];
   seasonShipment: CategoryBagTonbag[];
-  inbound: { tons: number; top: { name: string; qty: number }[] };
-  stock: { byCategory: { category: string; bags: number; tons: number; tonbagTons: number }[]; totalTons: number };
+  inbound: { tons: number; monthTons: number; top: { name: string; qty: number; monthQty: number }[] };
+  stock: {
+    byCategory: {
+      category: string;
+      bagCount: number;
+      bagTons: number;
+      tonbagCount: number;
+      tonbagTons: number;
+      tons: number;
+    }[];
+    totalTons: number;
+  };
   attendance: {
     day: { normal: AttendancePerson[] };
     night: { normal: AttendancePerson[] };
@@ -179,12 +189,10 @@ function SeasonTable({ title, rows }: { title: string; rows: CategoryBagTonbag[]
                   {fmtTon(r.bag + r.tonbag)}톤
                 </td>
               </tr>
-              {r.tonbag > 0 && (
-                <tr>
-                  <td className="py-1 pl-4 text-slate-500">포장지 {fmtTon(r.bag)}톤 · 톤백 {fmtTon(r.tonbag)}톤</td>
-                  <td />
-                </tr>
-              )}
+              <tr>
+                <td className="py-1 pl-4 text-slate-500">포장지 {fmtTon(r.bag)}톤 · 톤백 {fmtTon(r.tonbag)}톤</td>
+                <td />
+              </tr>
             </Fragment>
           ))}
         </tbody>
@@ -304,41 +312,66 @@ export default function Home() {
                   <Fragment key={c.category}>
                     <div className="flex justify-between py-1.5">
                       <span className="text-slate-600">{c.category}</span>
-                      <span className="tabular-nums text-slate-800">
-                        {c.bags.toLocaleString()}포 ({c.tons.toFixed(1)}t)
+                      <span className="tabular-nums text-slate-800 font-semibold">{c.tons.toFixed(1)}t</span>
+                    </div>
+                    <div className="flex justify-between py-1 pl-3 text-xs text-slate-500">
+                      <span>포장지</span>
+                      <span className="tabular-nums">
+                        {c.bagCount.toLocaleString()}포 ({c.bagTons.toFixed(1)}t)
                       </span>
                     </div>
-                    {c.tonbagTons > 0 && (
-                      <div className="flex justify-between py-1 pl-3 text-xs text-slate-500">
-                        <span>포장지 {(c.tons - c.tonbagTons).toFixed(1)}t · 톤백 {c.tonbagTons.toFixed(1)}t</span>
-                      </div>
-                    )}
+                    <div className="flex justify-between py-1 pl-3 text-xs text-slate-500">
+                      <span>톤백</span>
+                      <span className="tabular-nums">
+                        {c.tonbagCount.toLocaleString()}개 ({c.tonbagTons.toFixed(1)}t)
+                      </span>
+                    </div>
                   </Fragment>
                 ))}
                 <div className="flex justify-between py-1.5 font-bold text-slate-900">
                   <span>전체 합계</span>
-                  <span className="tabular-nums">{summary.stock.totalTons.toFixed(1)}t</span>
+                  <span className="tabular-nums">
+                    포장지 {summary.stock.byCategory.reduce((s, c) => s + c.bagTons, 0).toFixed(1)}t + 톤백{" "}
+                    {summary.stock.byCategory.reduce((s, c) => s + c.tonbagTons, 0).toFixed(1)}t ={" "}
+                    {summary.stock.totalTons.toFixed(1)}t
+                  </span>
                 </div>
               </div>
             </div>
 
             <div className="bg-white rounded-xl border p-5">
               <h2 className="text-sm font-semibold text-slate-700 mb-3">원재료 입고현황</h2>
-              <div className="flex flex-col divide-y text-sm">
-                {summary.inbound.top.map((r) => (
-                  <div key={r.name} className="flex justify-between py-1.5">
-                    <span className="text-slate-600">{r.name}</span>
-                    <span className="tabular-nums text-slate-800">{r.qty.toLocaleString()}</span>
-                  </div>
-                ))}
-                {summary.inbound.top.length === 0 && <p className="text-sm text-slate-400 py-2">입고 기록이 없습니다.</p>}
-                {summary.inbound.top.length > 0 && (
-                  <div className="flex justify-between py-1.5 font-bold text-slate-900">
-                    <span>합계</span>
-                    <span className="tabular-nums">{summary.inbound.tons.toFixed(1)}t</span>
-                  </div>
-                )}
-              </div>
+              {summary.inbound.top.length === 0 ? (
+                <p className="text-sm text-slate-400 py-2">입고 기록이 없습니다.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-slate-400">
+                      <th className="text-left font-medium pb-1.5">품목</th>
+                      <th className="text-right font-medium pb-1.5">금일 입고</th>
+                      <th className="text-right font-medium pb-1.5">{Number(refDate.slice(5, 7))}월 누계</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {summary.inbound.top.map((r) => (
+                      <tr key={r.name}>
+                        <td className="py-1.5 text-slate-600">{r.name}</td>
+                        <td className="py-1.5 text-right tabular-nums text-slate-800">{r.qty.toLocaleString()}</td>
+                        <td className="py-1.5 text-right tabular-nums text-slate-500">
+                          {r.monthQty.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="font-bold text-slate-900">
+                      <td className="py-1.5">합계</td>
+                      <td className="py-1.5 text-right tabular-nums">{summary.inbound.tons.toFixed(1)}t</td>
+                      <td className="py-1.5 text-right tabular-nums">{summary.inbound.monthTons.toFixed(1)}t</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
             </div>
 
             <div className="bg-white rounded-xl border p-5">

@@ -103,36 +103,62 @@ export async function GET(req: NextRequest) {
   const inboundTotal = inboundRows.reduce((s, r) => s + r.qty, 0);
   const inboundByMaterial = new Map<string, number>();
   for (const r of inboundRows) inboundByMaterial.set(r.name, (inboundByMaterial.get(r.name) ?? 0) + r.qty);
+  const inboundNgCount = inboundRows.filter((r) => r.judgment === "NG").length;
+
+  // 원재료 입고 월 누계(이번 달 1일 ~ 기준일), 품목별
+  const monthStart = `${targetDate.slice(0, 7)}-01`;
+  const monthInboundRows = db
+    .prepare(
+      `SELECT ri.qty as qty, rm.name as name
+       FROM raw_material_inbound ri JOIN raw_material rm ON ri.material_key = rm.key
+       WHERE ri.date >= ? AND ri.date <= ?`
+    )
+    .all(monthStart, targetDate) as { qty: number; name: string }[];
+  const monthInboundTotal = monthInboundRows.reduce((s, r) => s + r.qty, 0);
+  const monthByMaterial = new Map<string, number>();
+  for (const r of monthInboundRows) monthByMaterial.set(r.name, (monthByMaterial.get(r.name) ?? 0) + r.qty);
+
   const inboundTop = [...inboundByMaterial.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
-    .map(([name, qty]) => ({ name, qty }));
-  const inboundNgCount = inboundRows.filter((r) => r.judgment === "NG").length;
+    .map(([name, qty]) => ({ name, qty, monthQty: Number((monthByMaterial.get(name) ?? 0).toFixed(2)) }));
 
   // 현재 제품 재고 (품목대분류별, 톤) — 항상 "지금 시점" 실재고를 보여준다 (과거 마감재고 역산은 하지 않음)
   // 시즌누계와 동일하게, 톤백 제품(category === "톤백")은 별도로 나눠 표시할 수 있도록 함께 집계한다.
   const stockItems = db
     .prepare(`SELECT category, sub, bag_kg, stock FROM packing_item WHERE kind = 'product'`)
     .all() as { category: string | null; sub: string | null; bag_kg: number | null; stock: number }[];
-  const stockByCategory = new Map<string, { bags: number; tons: number; tonbagTons: number }>();
+  const stockByCategory = new Map<
+    string,
+    { bagCount: number; bagTons: number; tonbagCount: number; tonbagTons: number }
+  >();
   let stockTotalTons = 0;
   for (const it of stockItems) {
     const category = classifyCategory(it.category, it.sub);
     if (!category) continue;
     const tons = (it.stock * (it.bag_kg ?? 0)) / 1000;
-    const entry = stockByCategory.get(category) ?? { bags: 0, tons: 0, tonbagTons: 0 };
-    entry.bags += it.stock;
-    entry.tons += tons;
-    if (it.category === "톤백") entry.tonbagTons += tons;
+    const entry = stockByCategory.get(category) ?? { bagCount: 0, bagTons: 0, tonbagCount: 0, tonbagTons: 0 };
+    if (it.category === "톤백") {
+      entry.tonbagCount += it.stock;
+      entry.tonbagTons += tons;
+    } else {
+      entry.bagCount += it.stock;
+      entry.bagTons += tons;
+    }
     stockByCategory.set(category, entry);
     stockTotalTons += tons;
   }
-  const stockRows = DISPLAY_CATEGORIES.map((category) => ({
-    category,
-    bags: Math.round(stockByCategory.get(category)?.bags ?? 0),
-    tons: Number((stockByCategory.get(category)?.tons ?? 0).toFixed(1)),
-    tonbagTons: Number((stockByCategory.get(category)?.tonbagTons ?? 0).toFixed(1)),
-  }));
+  const stockRows = DISPLAY_CATEGORIES.map((category) => {
+    const c = stockByCategory.get(category) ?? { bagCount: 0, bagTons: 0, tonbagCount: 0, tonbagTons: 0 };
+    return {
+      category,
+      bagCount: Math.round(c.bagCount),
+      bagTons: Number(c.bagTons.toFixed(1)),
+      tonbagCount: Math.round(c.tonbagCount),
+      tonbagTons: Number(c.tonbagTons.toFixed(1)),
+      tons: Number((c.bagTons + c.tonbagTons).toFixed(1)),
+    };
+  });
 
   // 근태현황: 주간조/야간조 정상출근 명단 + 연차·기타 통합 명단 (일일 출근부 로직과 동일 기준)
   const workers = db
@@ -196,7 +222,11 @@ export async function GET(req: NextRequest) {
     shipment: { tons: Number(shipmentTons.toFixed(1)), byCategory: toByCategory(shipmentByCat) },
     seasonProduction,
     seasonShipment,
-    inbound: { tons: Number(inboundTotal.toFixed(1)), top: inboundTop },
+    inbound: {
+      tons: Number(inboundTotal.toFixed(1)),
+      monthTons: Number(monthInboundTotal.toFixed(1)),
+      top: inboundTop,
+    },
     stock: { byCategory: stockRows, totalTons: Number(stockTotalTons.toFixed(1)) },
     attendance: {
       day: { normal: dayNormal },
