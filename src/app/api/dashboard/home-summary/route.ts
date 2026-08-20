@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getSeasonProductionBagTonbag, getSeasonShipmentBagTonbag } from "@/lib/homeSummarySeason";
+import { stripCode } from "@/lib/packingClient";
 import { DailyAttendanceStatus, Nationality, ShiftType } from "@/lib/types";
 
 const DISPLAY_CATEGORIES = ["석회고토", "입상규산", "칼슘유황"];
@@ -30,7 +31,7 @@ function classifyCategory(category: string | null, sub: string | null): string |
   if (cat.includes("입상규산")) return "입상규산";
   if (cat.includes("석회고토")) return "석회고토";
   if (cat.includes("칼슘") || cat.includes("유황")) return "칼슘유황";
-  if (cat === "톤백") {
+  if (stripCode(cat) === "톤백") {
     const s = sub ?? "";
     if (s.includes("석회고토")) return "석회고토";
     if (s.includes("규산")) return "입상규산";
@@ -170,7 +171,7 @@ export async function GET(req: NextRequest) {
     if (!category) continue;
     const tons = (it.stock * (it.bag_kg ?? 0)) / 1000;
     const entry = stockByCategory.get(category) ?? { bagCount: 0, bagTons: 0, tonbagCount: 0, tonbagTons: 0 };
-    if (it.category === "톤백") {
+    if (stripCode(it.category) === "톤백") {
       entry.tonbagCount += it.stock;
       entry.tonbagTons += tons;
     } else {

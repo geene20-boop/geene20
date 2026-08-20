@@ -385,7 +385,7 @@ export default function QcPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-bold">QC측정 입력 (비료시료 강도테스트)</h1>
+        <h1 className="text-xl font-bold">측정데이터 (비료시료 강도테스트)</h1>
         <p className="text-sm text-slate-500 mt-1">
           시료 20개 경도값을 입력하면 합계·평균이 자동 계산되고, 날짜·시간으로 조(주/야)가 자동
           판별되어 생산일지와 연동됩니다.

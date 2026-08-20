@@ -46,8 +46,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/monthly", label: "월간 시트" },
       { href: "/electricity", label: "전력사용량" },
       { href: "/utility", label: "월별 유틸리티" },
-      { href: "/qc", label: "QC측정 입력" },
-      { href: "/dashboard", label: "통합 대시보드" },
+      { href: "/qc", label: "측정데이터" },
+      { href: "/dashboard", label: "품질 요약" },
     ],
   },
   {

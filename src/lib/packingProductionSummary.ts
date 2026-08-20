@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { stripCode } from "@/lib/packingClient";
 
 export interface MonthlyProductionRow {
   month: string; // "YYYY-MM"
@@ -234,7 +235,7 @@ function classifyCategoryWithTonbag(category: string | null, sub: string | null)
   if (cat.includes("입상규산")) return "입상규산";
   if (cat.includes("석회고토")) return "석회고토";
   if (cat.includes("칼슘") || cat.includes("유황")) return "칼슘유황";
-  if (cat === "톤백") {
+  if (stripCode(cat) === "톤백") {
     const s = sub ?? "";
     if (s.includes("석회고토")) return "석회고토";
     if (s.includes("규산")) return "입상규산";
