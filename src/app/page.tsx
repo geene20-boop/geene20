@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useState } from "react";
 import { apiGet } from "@/lib/apiClient";
 import { BoardPost, LeaveRequest, Nationality } from "@/lib/types";
 import { BOARD_CATEGORY_STYLE } from "@/lib/boardCategory";
 import { getBoardLastSeen } from "@/lib/boardRead";
 import { getLeaveLastSeen } from "@/lib/leaveRead";
+import { getPinnedMaterialKeys, togglePinnedMaterialKey } from "@/lib/inboundPins";
 import { useSiteSession } from "@/lib/useSiteSession";
 import Modal from "@/components/Modal";
 
@@ -33,14 +35,28 @@ interface HomeSummary {
   shipment: { tons: number; byCategory: CategoryTons[] };
   seasonProduction: CategoryBagTonbag[];
   seasonShipment: CategoryBagTonbag[];
-  inbound: { tons: number; top: { name: string; qty: number }[] };
-  stock: { byCategory: { category: string; bags: number; tons: number; tonbagTons: number }[]; totalTons: number };
+  inbound: {
+    tons: number;
+    monthTons: number;
+    top: { key: string; name: string; qty: number; monthQty: number }[];
+  };
+  stock: {
+    byCategory: {
+      category: string;
+      bagCount: number;
+      bagTons: number;
+      tonbagCount: number;
+      tonbagTons: number;
+      tons: number;
+    }[];
+    totalTons: number;
+  };
   attendance: {
     day: { normal: AttendancePerson[] };
     night: { normal: AttendancePerson[] };
     leaveEtc: AttendanceLeaveEntry[];
   };
-  notices: { text: string; level: "red" | "amber" }[];
+  notices: { text: string; level: "red" | "amber"; link: string; linkLabel: string }[];
 }
 
 function BoardPreview() {
@@ -107,15 +123,34 @@ function useLeaveUnreadCount(): number {
   return count;
 }
 
-function Kpi({ label, value, unit, alert }: { label: string; value: string; unit: string; alert?: boolean }) {
+function Kpi({
+  label,
+  value,
+  unit,
+  alert,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+  alert?: boolean;
+  onClick?: () => void;
+}) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className={`rounded-xl border p-5 ${alert ? "bg-amber-50 border-amber-200" : "bg-white border-slate-200"}`}>
+    <Tag
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      className={`rounded-xl border p-5 text-left w-full ${
+        alert ? "bg-amber-50 border-amber-200" : "bg-white border-slate-200"
+      } ${onClick ? "hover:border-slate-300 cursor-pointer" : ""}`}
+    >
       <div className={`text-xs mb-2 ${alert ? "text-amber-800" : "text-slate-500"}`}>{label}</div>
       <div className={`text-2xl font-extrabold ${alert ? "text-amber-700" : "text-slate-900"}`}>
         {value}
         <span className={`text-sm font-semibold ml-1 ${alert ? "text-amber-600" : "text-slate-400"}`}>{unit}</span>
       </div>
-    </div>
+    </Tag>
   );
 }
 
@@ -179,12 +214,10 @@ function SeasonTable({ title, rows }: { title: string; rows: CategoryBagTonbag[]
                   {fmtTon(r.bag + r.tonbag)}톤
                 </td>
               </tr>
-              {r.tonbag > 0 && (
-                <tr>
-                  <td className="py-1 pl-4 text-slate-500">포장지 {fmtTon(r.bag)}톤 · 톤백 {fmtTon(r.tonbag)}톤</td>
-                  <td />
-                </tr>
-              )}
+              <tr>
+                <td className="py-1 pl-4 text-slate-500">포장지 {fmtTon(r.bag)}톤 · 톤백 {fmtTon(r.tonbag)}톤</td>
+                <td />
+              </tr>
             </Fragment>
           ))}
         </tbody>
@@ -200,6 +233,7 @@ function SeasonTable({ title, rows }: { title: string; rows: CategoryBagTonbag[]
 }
 
 export default function Home() {
+  const router = useRouter();
   const leaveUnread = useLeaveUnreadCount();
   const [refDate, setRefDate] = useState<string | null>(null);
   const [summary, setSummary] = useState<HomeSummary | null>(null);
@@ -208,16 +242,20 @@ export default function Home() {
     | { title: string; kind: "leave"; rows: AttendanceLeaveEntry[] }
     | null
   >(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [pinnedKeys, setPinnedKeys] = useState<string[]>([]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRefDate(addDaysLocal(localDateStr(new Date()), -1));
+    setPinnedKeys(getPinnedMaterialKeys());
   }, []);
 
   useEffect(() => {
     if (!refDate) return;
     let cancelled = false;
-    apiGet<HomeSummary>(`/api/dashboard/home-summary?date=${refDate}`)
+    const pinnedParam = pinnedKeys.length > 0 ? `&pinned=${pinnedKeys.join(",")}` : "";
+    apiGet<HomeSummary>(`/api/dashboard/home-summary?date=${refDate}${pinnedParam}`)
       .then((d) => {
         if (!cancelled) setSummary(d);
       })
@@ -227,7 +265,11 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [refDate]);
+  }, [refDate, pinnedKeys]);
+
+  function togglePin(key: string) {
+    setPinnedKeys(togglePinnedMaterialKey(key));
+  }
 
   if (!refDate) return null;
 
@@ -245,7 +287,7 @@ export default function Home() {
       <div>
         <h1 className="text-xl font-bold">전일 현황</h1>
         <p className="text-sm text-slate-500 mt-1">
-          로고를 누르면 언제든 이 화면으로 돌아옵니다. 메뉴는 상단 드롭다운에서 이용하세요.
+          로고를 누르면 언제든 이 화면으로 돌아옵니다. 메뉴는 왼쪽(모바일은 상단 ☰)에서 이용하세요.
         </p>
       </div>
 
@@ -268,6 +310,32 @@ export default function Home() {
             <span className="ml-2 text-[11px] font-medium text-slate-600 bg-slate-100 border rounded-full px-2 py-0.5">
               오늘
             </span>
+          )}
+        </div>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowDatePicker((v) => !v)}
+            title="달력에서 날짜 선택"
+            className={`border rounded-md w-8 h-8 flex items-center justify-center text-sm hover:bg-slate-50 ${
+              showDatePicker ? "border-slate-400 bg-slate-50" : ""
+            }`}
+          >
+            📅
+          </button>
+          {showDatePicker && (
+            <div className="absolute right-0 top-full mt-1 bg-white border rounded-md shadow-lg p-2 z-20">
+              <input
+                type="date"
+                value={refDate}
+                max={todayStr}
+                onChange={(e) => {
+                  if (e.target.value) setRefDate(e.target.value);
+                  setShowDatePicker(false);
+                }}
+                className="border rounded-md px-2 py-1.5 text-sm"
+              />
+            </div>
           )}
         </div>
         <button
@@ -293,6 +361,7 @@ export default function Home() {
               value={String(summary.notices.length)}
               unit="건"
               alert={summary.notices.length > 0}
+              onClick={() => document.getElementById("home-notices")?.scrollIntoView({ behavior: "smooth", block: "center" })}
             />
           </div>
 
@@ -301,44 +370,111 @@ export default function Home() {
               <h2 className="text-sm font-semibold text-slate-700 mb-3">제품 재고현황 (품목대분류별, 현재)</h2>
               <div className="flex flex-col divide-y text-sm">
                 {summary.stock.byCategory.map((c) => (
-                  <Fragment key={c.category}>
-                    <div className="flex justify-between py-1.5">
+                  <Link
+                    key={c.category}
+                    href="/packing"
+                    className="group flex flex-col py-1.5 -mx-2 px-2 rounded-md hover:bg-slate-50"
+                  >
+                    <div className="flex justify-between">
                       <span className="text-slate-600">{c.category}</span>
-                      <span className="tabular-nums text-slate-800">
-                        {c.bags.toLocaleString()}포 ({c.tons.toFixed(1)}t)
+                      <span className="tabular-nums text-slate-800 font-semibold flex items-center gap-1">
+                        {c.tons.toFixed(1)}t
+                        <span className="text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity">
+                          ›
+                        </span>
                       </span>
                     </div>
-                    {c.tonbagTons > 0 && (
-                      <div className="flex justify-between py-1 pl-3 text-xs text-slate-500">
-                        <span>포장지 {(c.tons - c.tonbagTons).toFixed(1)}t · 톤백 {c.tonbagTons.toFixed(1)}t</span>
-                      </div>
-                    )}
-                  </Fragment>
+                    <div className="flex justify-between py-0.5 pl-3 text-xs text-slate-500">
+                      <span>포장지</span>
+                      <span className="tabular-nums">
+                        {c.bagCount.toLocaleString()}포 ({c.bagTons.toFixed(1)}t)
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-0.5 pl-3 text-xs text-slate-500">
+                      <span>톤백</span>
+                      <span className="tabular-nums">
+                        {c.tonbagCount.toLocaleString()}개 ({c.tonbagTons.toFixed(1)}t)
+                      </span>
+                    </div>
+                  </Link>
                 ))}
                 <div className="flex justify-between py-1.5 font-bold text-slate-900">
                   <span>전체 합계</span>
-                  <span className="tabular-nums">{summary.stock.totalTons.toFixed(1)}t</span>
+                  <span className="tabular-nums">
+                    포장지 {summary.stock.byCategory.reduce((s, c) => s + c.bagTons, 0).toFixed(1)}t + 톤백{" "}
+                    {summary.stock.byCategory.reduce((s, c) => s + c.tonbagTons, 0).toFixed(1)}t ={" "}
+                    {summary.stock.totalTons.toFixed(1)}t
+                  </span>
                 </div>
               </div>
             </div>
 
             <div className="bg-white rounded-xl border p-5">
               <h2 className="text-sm font-semibold text-slate-700 mb-3">원재료 입고현황</h2>
-              <div className="flex flex-col divide-y text-sm">
-                {summary.inbound.top.map((r) => (
-                  <div key={r.name} className="flex justify-between py-1.5">
-                    <span className="text-slate-600">{r.name}</span>
-                    <span className="tabular-nums text-slate-800">{r.qty.toLocaleString()}</span>
-                  </div>
-                ))}
-                {summary.inbound.top.length === 0 && <p className="text-sm text-slate-400 py-2">입고 기록이 없습니다.</p>}
-                {summary.inbound.top.length > 0 && (
-                  <div className="flex justify-between py-1.5 font-bold text-slate-900">
-                    <span>합계</span>
-                    <span className="tabular-nums">{summary.inbound.tons.toFixed(1)}t</span>
-                  </div>
-                )}
-              </div>
+              {summary.inbound.top.length === 0 ? (
+                <p className="text-sm text-slate-400 py-2">입고 기록이 없습니다.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-slate-400">
+                      <th className="text-center font-medium pb-1.5 w-6">★</th>
+                      <th className="text-left font-medium pb-1.5">품목</th>
+                      <th className="text-right font-medium pb-1.5">금일 입고</th>
+                      <th className="text-right font-medium pb-1.5">{Number(refDate.slice(5, 7))}월 누계</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {[...summary.inbound.top]
+                      .sort((a, b) => Number(pinnedKeys.includes(b.key)) - Number(pinnedKeys.includes(a.key)))
+                      .map((r) => {
+                        const pinned = pinnedKeys.includes(r.key);
+                        return (
+                          <tr
+                            key={r.key}
+                            onClick={() => router.push(`/raw-material/inbound-summary?material=${encodeURIComponent(r.key)}`)}
+                            className={`cursor-pointer hover:bg-slate-50 ${pinned ? "bg-amber-50/60" : ""}`}
+                          >
+                            <td className="py-1.5 text-center">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  togglePin(r.key);
+                                }}
+                                title={pinned ? "고정 해제" : "즐겨찾기로 고정"}
+                                className={pinned ? "text-amber-500" : "text-slate-300 hover:text-slate-400"}
+                              >
+                                {pinned ? "★" : "☆"}
+                              </button>
+                            </td>
+                            <td className="py-1.5 text-slate-600">
+                              {r.name}
+                              {pinned && r.qty === 0 && (
+                                <span className="ml-1.5 text-[10px] font-medium text-amber-700 bg-amber-100 rounded px-1.5 py-0.5">
+                                  오늘 입고 없음
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-1.5 text-right tabular-nums text-slate-800">
+                              {r.qty === 0 ? "-" : r.qty.toLocaleString()}
+                            </td>
+                            <td className="py-1.5 text-right tabular-nums text-slate-500">
+                              {r.monthQty.toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="font-bold text-slate-900">
+                      <td></td>
+                      <td className="py-1.5">합계</td>
+                      <td className="py-1.5 text-right tabular-nums">{summary.inbound.tons.toFixed(1)}t</td>
+                      <td className="py-1.5 text-right tabular-nums">{summary.inbound.monthTons.toFixed(1)}t</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
             </div>
 
             <div className="bg-white rounded-xl border p-5">
@@ -399,24 +535,29 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl border p-5 lg:col-span-2">
+            <div id="home-notices" className="bg-white rounded-xl border p-5 lg:col-span-2 scroll-mt-4">
               <h2 className="text-sm font-semibold text-slate-700 mb-3">알림</h2>
               <div className="flex flex-col divide-y text-sm">
                 {leaveUnread > 0 && (
                   <Link href="/attendance" className="flex items-start gap-2 py-2 hover:bg-slate-50 -mx-2 px-2 rounded-md">
                     <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-red-500" />
-                    <span className="text-slate-700">내 연차 신청 결과 {leaveUnread}건이 처리되었습니다.</span>
+                    <span className="text-slate-700 flex-1">내 연차 신청 결과 {leaveUnread}건이 처리되었습니다.</span>
                   </Link>
                 )}
                 {summary.notices.map((n, i) => (
-                  <div key={i} className="flex items-start gap-2 py-2">
+                  <Link
+                    key={i}
+                    href={n.link}
+                    className="flex items-start gap-2 py-2 hover:bg-slate-50 -mx-2 px-2 rounded-md"
+                  >
                     <span
                       className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${
                         n.level === "red" ? "bg-red-500" : "bg-amber-500"
                       }`}
                     />
-                    <span className="text-slate-700">{n.text}</span>
-                  </div>
+                    <span className="text-slate-700 flex-1">{n.text}</span>
+                    <span className="text-xs text-emerald-700 whitespace-nowrap">{n.linkLabel} ›</span>
+                  </Link>
                 ))}
                 {summary.notices.length === 0 && leaveUnread === 0 && (
                   <p className="text-sm text-slate-400 py-2">확인할 알림이 없습니다.</p>
