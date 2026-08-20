@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getAdminName, isAdminRequest } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { deleteAttachmentFile } from "@/lib/fileStorage";
 import { DocumentFile } from "@/lib/types";
 
 const METADATA_COLUMNS =
@@ -24,11 +25,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params;
   const db = getDb();
   const row = db
-    .prepare("SELECT doc_type, item_name, filename FROM document_file WHERE id = ?")
-    .get(id) as { doc_type: string; item_name: string; filename: string } | undefined;
+    .prepare("SELECT doc_type, item_name, filename, file_path FROM document_file WHERE id = ?")
+    .get(id) as { doc_type: string; item_name: string; filename: string; file_path: string } | undefined;
   if (!row) return NextResponse.json({ error: "문서를 찾을 수 없습니다." }, { status: 404 });
 
   db.prepare("DELETE FROM document_file WHERE id = ?").run(id);
+  deleteAttachmentFile(row.file_path);
   logAudit(
     "document_file",
     `[${row.doc_type}] ${row.item_name}`,

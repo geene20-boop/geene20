@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
+import { saveAttachmentFile } from "@/lib/fileStorage";
 
 const DATA_DIR = process.env.DB_DIR ?? path.join(process.cwd(), "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -10,6 +11,125 @@ const DB_PATH = path.join(DATA_DIR, "app.db");
 
 declare global {
   var __db: Database.Database | undefined;
+}
+
+// 예전 버전에서 만들어진 DB는 첨부 원본을 data BLOB 컬럼에 그대로 들고 있다.
+// 그 컬럼이 아직 남아있으면(=파일 분리 이전 DB) 한 번만 파일로 옮기고 테이블을 다시 만든다.
+// (SQLite는 컬럼 삭제를 ALTER TABLE로 직접 지원하지 않아 테이블을 재생성한다.)
+function migrateBoardAttachmentBlobsToFiles(db: Database.Database): void {
+  const cols = new Set(
+    (db.prepare("PRAGMA table_info(board_attachment)").all() as { name: string }[]).map((c) => c.name)
+  );
+  if (!cols.has("data")) return; // 이미 마이그레이션됨
+
+  const rows = db
+    .prepare("SELECT id, post_id, filename, mime_type, size, data, created_at FROM board_attachment")
+    .all() as {
+    id: number;
+    post_id: number;
+    filename: string;
+    mime_type: string | null;
+    size: number;
+    data: Buffer;
+    created_at: string;
+  }[];
+
+  const runMigration = db.transaction(() => {
+    db.exec("ALTER TABLE board_attachment RENAME TO board_attachment_old_blob");
+    db.exec(`
+      CREATE TABLE board_attachment (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        post_id INTEGER NOT NULL REFERENCES board_post(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        mime_type TEXT,
+        size INTEGER NOT NULL,
+        file_path TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    const insert = db.prepare(
+      "INSERT INTO board_attachment (id, post_id, filename, mime_type, size, file_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    );
+    for (const row of rows) {
+      const filePath = saveAttachmentFile("board", row.filename, row.data);
+      insert.run(row.id, row.post_id, row.filename, row.mime_type, row.size, filePath, row.created_at);
+    }
+    db.exec("DROP TABLE board_attachment_old_blob");
+  });
+  runMigration();
+  db.exec("CREATE INDEX IF NOT EXISTS idx_board_attachment_post ON board_attachment(post_id)");
+}
+
+function migrateDocumentFileBlobsToFiles(db: Database.Database): void {
+  const cols = new Set(
+    (db.prepare("PRAGMA table_info(document_file)").all() as { name: string }[]).map((c) => c.name)
+  );
+  if (!cols.has("data")) return; // 이미 마이그레이션됨
+
+  const rows = db
+    .prepare(
+      `SELECT id, doc_type, category, item_name, language, ref_date, filename, mime_type, size, data, entered_by, created_at
+       FROM document_file`
+    )
+    .all() as {
+    id: number;
+    doc_type: string;
+    category: string;
+    item_name: string;
+    language: string | null;
+    ref_date: string | null;
+    filename: string;
+    mime_type: string | null;
+    size: number;
+    data: Buffer;
+    entered_by: string;
+    created_at: string;
+  }[];
+
+  const runMigration = db.transaction(() => {
+    db.exec("ALTER TABLE document_file RENAME TO document_file_old_blob");
+    db.exec(`
+      CREATE TABLE document_file (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        doc_type TEXT NOT NULL,
+        category TEXT NOT NULL,
+        item_name TEXT NOT NULL,
+        language TEXT,
+        ref_date TEXT,
+        filename TEXT NOT NULL,
+        mime_type TEXT,
+        size INTEGER NOT NULL,
+        file_path TEXT NOT NULL,
+        entered_by TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    const insert = db.prepare(
+      `INSERT INTO document_file
+         (id, doc_type, category, item_name, language, ref_date, filename, mime_type, size, file_path, entered_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const row of rows) {
+      const filePath = saveAttachmentFile("documents", row.filename, row.data);
+      insert.run(
+        row.id,
+        row.doc_type,
+        row.category,
+        row.item_name,
+        row.language,
+        row.ref_date,
+        row.filename,
+        row.mime_type,
+        row.size,
+        filePath,
+        row.entered_by,
+        row.created_at
+      );
+    }
+    db.exec("DROP TABLE document_file_old_blob");
+  });
+  runMigration();
+  db.exec("CREATE INDEX IF NOT EXISTS idx_document_file_type ON document_file(doc_type, item_name)");
 }
 
 export function getDb(): Database.Database {
@@ -402,13 +522,15 @@ export function getDb(): Database.Database {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- 첨부 원본 바이트는 DB가 아니라 파일(ATTACHMENTS_DIR)에 저장하고, file_path에는
+    -- 그 상대경로만 넣는다 (백업 시 DB 파일이 첨부 용량만큼 비대해지는 것을 막기 위함).
     CREATE TABLE IF NOT EXISTS board_attachment (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       post_id INTEGER NOT NULL REFERENCES board_post(id) ON DELETE CASCADE,
       filename TEXT NOT NULL,
       mime_type TEXT,
       size INTEGER NOT NULL,
-      data BLOB NOT NULL,
+      file_path TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_board_attachment_post ON board_attachment(post_id);
@@ -438,7 +560,7 @@ export function getDb(): Database.Database {
       filename TEXT NOT NULL,
       mime_type TEXT,
       size INTEGER NOT NULL,
-      data BLOB NOT NULL,
+      file_path TEXT NOT NULL,
       entered_by TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -587,6 +709,9 @@ export function getDb(): Database.Database {
     ["disclosure_valid_from", "TEXT"],
     ["disclosure_valid_to", "TEXT"],
   ]);
+
+  migrateBoardAttachmentBlobsToFiles(db);
+  migrateDocumentFileBlobsToFiles(db);
 
   const specCount = db.prepare("SELECT COUNT(*) as c FROM spec_limit").get() as { c: number };
   if (specCount.c === 0) {
