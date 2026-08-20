@@ -24,6 +24,15 @@ function makeDb(): Database.Database {
       file_path TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      table_name TEXT NOT NULL,
+      record_key TEXT NOT NULL,
+      action TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      summary TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
   return db;
 }
@@ -85,5 +94,25 @@ describe("cleanupExpiredBoardPosts", () => {
 
     const attachments = db.prepare("SELECT id FROM board_attachment").all();
     expect(attachments).toHaveLength(0);
+  });
+
+  it("자동삭제 시 감사 로그를 남긴다", () => {
+    const db = makeDb();
+    insertPost(db, { title: "오래된 글", pinned: 0, daysAgo: 40 });
+    insertPost(db, { title: "최근 글", pinned: 0, daysAgo: 1 });
+    insertPost(db, { title: "오래된 고정 글", pinned: 1, daysAgo: 60 });
+
+    cleanupExpiredBoardPosts(db);
+
+    const logs = db
+      .prepare("SELECT table_name, record_key, action, actor FROM audit_log")
+      .all() as { table_name: string; record_key: string; action: string; actor: string }[];
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      table_name: "board_post",
+      record_key: "오래된 글",
+      action: "delete",
+      actor: "시스템(자동삭제)",
+    });
   });
 });

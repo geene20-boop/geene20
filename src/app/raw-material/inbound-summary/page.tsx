@@ -94,10 +94,14 @@ export default function RawMaterialInboundSummaryPage() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     apiGet<RawMaterial[]>("/api/raw-material").then(setMaterials);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
+    // 전일현황 등 다른 화면에서 특정 품목으로 좁혀서 들어온 경우 그 품목으로 바로 조회한다.
+    const initialMaterial = new URLSearchParams(window.location.search).get("material") ?? "";
+    if (initialMaterial) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMaterialKey(initialMaterial);
+    }
+    load({ materialKey: initialMaterial || undefined });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

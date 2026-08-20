@@ -431,7 +431,7 @@ export default function Home() {
                         return (
                           <tr
                             key={r.key}
-                            onClick={() => router.push("/raw-material/inbound-summary")}
+                            onClick={() => router.push(`/raw-material/inbound-summary?material=${encodeURIComponent(r.key)}`)}
                             className={`cursor-pointer hover:bg-slate-50 ${pinned ? "bg-amber-50/60" : ""}`}
                           >
                             <td className="py-1.5 text-center">
