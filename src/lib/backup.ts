@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { getDb } from "@/lib/db";
 import { ATTACHMENTS_DIR } from "@/lib/fileStorage";
+import { syncOffsiteBackup } from "@/lib/offsiteBackup";
 
 const BACKUP_KEEP = 14; // 최근 백업 보관 개수
 const BACKUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6시간마다 자동 스냅샷
@@ -28,6 +29,14 @@ export async function createBackupSnapshot(): Promise<string> {
   pruneOldBackups();
   mirrorAttachments();
   return dest;
+}
+
+// 로컬 스냅샷을 만들고, 그걸 로컬 볼륨 밖(R2)으로도 올린다. 오프사이트가 설정 안 돼 있으면
+// syncOffsiteBackup이 조용히 스킵한다. 자동 백업 주기와 관리자 화면의 수동 버튼이 이 함수를
+// 함께 쓴다.
+export async function createBackupAndSyncOffsite() {
+  const dest = await createBackupSnapshot();
+  return syncOffsiteBackup(dest);
 }
 
 // 첨부파일(게시판/문서관리)은 DB 밖 파일로 저장되므로 db.backup()에 포함되지 않는다.
@@ -96,12 +105,12 @@ declare global {
 export function ensureBackupScheduler(): void {
   if (global.__backupTimer) return;
   global.__backupTimer = setInterval(() => {
-    createBackupSnapshot().catch((err) => {
+    createBackupAndSyncOffsite().catch((err) => {
       console.error("자동 백업 실패:", err);
     });
   }, BACKUP_INTERVAL_MS);
   // 서버가 막 시작됐을 때도 한 번 백업해둔다
-  createBackupSnapshot().catch((err) => {
+  createBackupAndSyncOffsite().catch((err) => {
     console.error("초기 백업 실패:", err);
   });
 }

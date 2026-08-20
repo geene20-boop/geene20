@@ -228,6 +228,13 @@ export function getDb(): Database.Database {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- 오프사이트(R2) 백업으로 이미 올린 첨부파일을 기록해, 매번 전체를 다시 올리지
+    -- 않고 아직 안 올린 파일만 골라 올릴 수 있게 한다.
+    CREATE TABLE IF NOT EXISTS offsite_upload_log (
+      file_path TEXT PRIMARY KEY,  -- data/attachments/ 기준 상대경로 (board/..., documents/...)
+      uploaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS admin_auth (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       password_hash TEXT,
