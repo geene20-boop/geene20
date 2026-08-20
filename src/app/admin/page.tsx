@@ -408,6 +408,10 @@ function BackupCard() {
   const [message, setMessage] = useState<string | null>(null);
   const [testingEmail, setTestingEmail] = useState(false);
   const [emailMessage, setEmailMessage] = useState<string | null>(null);
+  const [offsiteConfigured, setOffsiteConfigured] = useState(false);
+  const [offsiteLastSync, setOffsiteLastSync] = useState<string | null>(null);
+  const [syncingOffsite, setSyncingOffsite] = useState(false);
+  const [offsiteMessage, setOffsiteMessage] = useState<string | null>(null);
 
   async function refresh() {
     const res = await fetch("/api/admin/backup");
@@ -415,6 +419,8 @@ function BackupCard() {
     const data = await res.json();
     setBackups(data.backups ?? []);
     setEmailConfigured(!!data.emailConfigured);
+    setOffsiteConfigured(!!data.offsiteConfigured);
+    setOffsiteLastSync(data.offsiteLastSync ?? null);
   }
 
   useEffect(() => {
@@ -448,6 +454,24 @@ function BackupCard() {
       setEmailMessage(`오류: ${(err as Error).message}`);
     } finally {
       setTestingEmail(false);
+    }
+  }
+
+  async function syncOffsiteNow() {
+    setSyncingOffsite(true);
+    setOffsiteMessage(null);
+    try {
+      const res = await fetch("/api/admin/backup/offsite-sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "실패했습니다.");
+      setOffsiteMessage(
+        `동기화 완료 (DB ${data.result.dbUploaded ? "업로드됨" : "실패"}, 첨부파일 ${data.result.filesUploaded}건 업로드)`
+      );
+      refresh();
+    } catch (err) {
+      setOffsiteMessage(`오류: ${(err as Error).message}`);
+    } finally {
+      setSyncingOffsite(false);
     }
   }
 
@@ -494,6 +518,37 @@ function BackupCard() {
         ) : (
           <p className="text-xs text-amber-600 mt-1">
             아직 설정되지 않았습니다. SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, BACKUP_EMAIL_TO
+            환경변수를 Railway 프로젝트 설정(Variables)에 추가하면 자동으로 활성화됩니다.
+          </p>
+        )}
+      </div>
+
+      <div className="border-t pt-3">
+        <p className="text-sm font-medium text-slate-700">오프사이트 백업 (Cloudflare R2)</p>
+        <p className="text-xs text-slate-500 mt-1">
+          위 스냅샷·이메일은 모두 이 서버 볼륨을 거치기 때문에, 볼륨 자체에 문제가 생기면 함께
+          사라질 수 있습니다. R2를 설정하면 DB와 첨부파일 원본을 서버 밖에도 자동으로 복사해둡니다.
+        </p>
+        {offsiteConfigured ? (
+          <>
+            <p className="text-xs text-slate-500 mt-1">
+              설정되어 있습니다. 6시간마다 자동 백업과 함께 동기화됩니다.
+              {offsiteLastSync && (
+                <> 마지막 동기화: {new Date(offsiteLastSync).toLocaleString("ko-KR")}</>
+              )}
+            </p>
+            <button
+              onClick={syncOffsiteNow}
+              disabled={syncingOffsite}
+              className="mt-2 border rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
+            >
+              {syncingOffsite ? "동기화 중..." : "지금 오프사이트 동기화"}
+            </button>
+            {offsiteMessage && <p className="text-sm text-slate-600 mt-1">{offsiteMessage}</p>}
+          </>
+        ) : (
+          <p className="text-xs text-amber-600 mt-1">
+            아직 설정되지 않았습니다. R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
             환경변수를 Railway 프로젝트 설정(Variables)에 추가하면 자동으로 활성화됩니다.
           </p>
         )}
