@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { isAdminRequest, isModifierRequest } from "@/lib/auth";
 import { requireActor, logAudit } from "@/lib/audit";
 import { saveAttachmentFile } from "@/lib/fileStorage";
+import { cleanupExpiredBoardPosts } from "@/lib/boardCleanup";
 import { BoardAttachment, BoardCategory, BoardPost } from "@/lib/types";
 
 const CATEGORIES: BoardCategory[] = ["생산계획", "보수계획", "휴무일", "기타"];
@@ -14,6 +15,7 @@ function canWriteBoard(req: NextRequest): boolean {
 
 export async function GET(req: NextRequest) {
   const db = getDb();
+  cleanupExpiredBoardPosts(db);
   const category = req.nextUrl.searchParams.get("category");
   const posts = (
     category
