@@ -26,14 +26,16 @@ function levelStats(rows: { date: string; value: number }[]) {
 }
 
 // 전일 대비 증감형 지표(조립제·LNG 사용량 증감)의 평균 증감/최대 증가/최대 감소/증가·감소 일수를 계산한다.
+// 늘어난 날이 하루도 없으면 maxUp을(줄어든 날이 없으면 maxDown을) null로 반환한다 —
+// 그렇지 않으면 감소만 있는 달에서 "최대 증가"가 음수로 표시되는 등 부호가 뒤섞여 보인다.
 function deltaStats(rows: { date: string; value: number }[]) {
   if (rows.length === 0) return null;
   const total = rows.reduce((s, r) => s + r.value, 0);
-  const maxUp = rows.reduce((a, b) => (b.value > a.value ? b : a));
-  const maxDown = rows.reduce((a, b) => (b.value < a.value ? b : a));
-  const upDays = rows.filter((r) => r.value > 0).length;
-  const downDays = rows.filter((r) => r.value < 0).length;
-  return { average: total / rows.length, maxUp, maxDown, upDays, downDays };
+  const upRows = rows.filter((r) => r.value > 0);
+  const downRows = rows.filter((r) => r.value < 0);
+  const maxUp = upRows.length > 0 ? upRows.reduce((a, b) => (b.value > a.value ? b : a)) : null;
+  const maxDown = downRows.length > 0 ? downRows.reduce((a, b) => (b.value < a.value ? b : a)) : null;
+  return { average: total / rows.length, maxUp, maxDown, upDays: upRows.length, downDays: downRows.length };
 }
 
 function StatCard({
@@ -199,11 +201,15 @@ export default function MonthlyPage() {
                   { label: "일평균 증감", value: fmt(statAgg.granulationDelta.average) },
                   {
                     label: "최대 증가",
-                    value: `+${fmt(statAgg.granulationDelta.maxUp.value)} (${dday(statAgg.granulationDelta.maxUp.date)})`,
+                    value: statAgg.granulationDelta.maxUp
+                      ? `+${fmt(statAgg.granulationDelta.maxUp.value)} (${dday(statAgg.granulationDelta.maxUp.date)})`
+                      : "늘어난 날 없음",
                   },
                   {
                     label: "최대 감소",
-                    value: `${fmt(statAgg.granulationDelta.maxDown.value)} (${dday(statAgg.granulationDelta.maxDown.date)})`,
+                    value: statAgg.granulationDelta.maxDown
+                      ? `${fmt(statAgg.granulationDelta.maxDown.value)} (${dday(statAgg.granulationDelta.maxDown.date)})`
+                      : "줄어든 날 없음",
                   },
                   {
                     label: "늘어난 날 / 줄어든 날",
@@ -234,11 +240,15 @@ export default function MonthlyPage() {
                   { label: "일평균 증감", value: `${fmt(statAgg.gasDelta.average)}㎥` },
                   {
                     label: "최대 증가",
-                    value: `+${fmt(statAgg.gasDelta.maxUp.value)}㎥ (${dday(statAgg.gasDelta.maxUp.date)})`,
+                    value: statAgg.gasDelta.maxUp
+                      ? `+${fmt(statAgg.gasDelta.maxUp.value)}㎥ (${dday(statAgg.gasDelta.maxUp.date)})`
+                      : "늘어난 날 없음",
                   },
                   {
                     label: "최대 감소",
-                    value: `${fmt(statAgg.gasDelta.maxDown.value)}㎥ (${dday(statAgg.gasDelta.maxDown.date)})`,
+                    value: statAgg.gasDelta.maxDown
+                      ? `${fmt(statAgg.gasDelta.maxDown.value)}㎥ (${dday(statAgg.gasDelta.maxDown.date)})`
+                      : "줄어든 날 없음",
                   },
                   {
                     label: "늘어난 날 / 줄어든 날",
