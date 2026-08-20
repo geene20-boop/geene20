@@ -143,7 +143,7 @@ export default function ElectricityPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-bold">전력사용량 입력</h1>
+        <h1 className="text-xl font-bold">전력 모니터링</h1>
         <p className="text-sm text-slate-500 mt-1">
           1공장(저압)·2공장(고압) 일일 전력 사용량(kWh)을 입력합니다. 같은 날짜·공장으로 다시
           저장하면 기존 기록이 수정됩니다.

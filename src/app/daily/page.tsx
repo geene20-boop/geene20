@@ -216,7 +216,7 @@ export default function DailyDashboardPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold">일자별 대시보드</h1>
+          <h1 className="text-xl font-bold">일자별 요약</h1>
           <p className="text-sm text-slate-500 mt-1">
             하루 단위로 생산·설비·품질 기록을 크게 확인하거나, 기간을 정해 합계·평균을 확인합니다.
           </p>
