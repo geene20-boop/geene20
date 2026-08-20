@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { stripCode } from "@/lib/packingClient";
 
 // 홈화면 "전일현황"의 시즌누계(7월~다음해 6월) 집계. packingProductionSummary/packingShipmentSummary와
 // 분류 기준(대분류 3종 + 톤백 귀속)은 동일하지만, 포장지 제품/톤백 제품을 나눠서 반환한다는 점이 다르다.
@@ -11,7 +12,7 @@ function classifyCategory(category: string | null, sub: string | null): HomeCate
   if (cat.includes("입상규산")) return "입상규산";
   if (cat.includes("석회고토")) return "석회고토";
   if (cat.includes("칼슘") || cat.includes("유황")) return "칼슘유황";
-  if (cat === "톤백") {
+  if (stripCode(cat) === "톤백") {
     const s = sub ?? "";
     if (s.includes("석회고토")) return "석회고토";
     if (s.includes("규산")) return "입상규산";
@@ -51,7 +52,7 @@ function seasonBagTonbag(db: Database.Database, referenceDate: string, type: "pa
     if (!cat) continue;
     const tons = (r.qty * (r.bag_kg ?? 0)) / 1000;
     const entry = byCat.get(cat) ?? { bag: 0, tonbag: 0 };
-    if (r.category === "톤백") entry.tonbag += tons;
+    if (stripCode(r.category) === "톤백") entry.tonbag += tons;
     else entry.bag += tons;
     byCat.set(cat, entry);
   }
