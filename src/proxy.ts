@@ -29,10 +29,10 @@ const SELF_SERVICE_WRITE_PREFIXES = ["/api/leave-request"];
 //  "/api/raw-material"은 raw-material, raw-material-inbound, raw-material-supplier,
 //  raw-material-document, raw-material-price-history, raw-material-inbound-summary를 모두 포함)
 const GROUP_API_PREFIXES: [string, string][] = [
-  ["/api/raw-material", "원재료관리"],
-  ["/api/documents", "문서관리"],
-  ["/api/self-test", "문서관리"],
-  ["/api/lab-journal", "문서관리"],
+  ["/api/raw-material", "원재료·문서"],
+  ["/api/documents", "원재료·문서"],
+  ["/api/self-test", "원재료·문서"],
+  ["/api/lab-journal", "원재료·문서"],
   ["/api/board", "게시판"],
 ];
 

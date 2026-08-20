@@ -95,33 +95,65 @@ export async function GET(req: NextRequest) {
   // 원재료 입고
   const inboundRows = db
     .prepare(
-      `SELECT ri.qty as qty, ri.judgment as judgment, rm.name as name, rm.form as form
+      `SELECT ri.qty as qty, ri.judgment as judgment, rm.key as material_key, rm.name as name, rm.form as form
        FROM raw_material_inbound ri JOIN raw_material rm ON ri.material_key = rm.key
        WHERE ri.date = ?`
     )
-    .all(targetDate) as { qty: number; judgment: string; name: string; form: string }[];
+    .all(targetDate) as { qty: number; judgment: string; material_key: string; name: string; form: string }[];
   const inboundTotal = inboundRows.reduce((s, r) => s + r.qty, 0);
-  const inboundByMaterial = new Map<string, number>();
-  for (const r of inboundRows) inboundByMaterial.set(r.name, (inboundByMaterial.get(r.name) ?? 0) + r.qty);
+  const inboundByMaterial = new Map<string, { name: string; qty: number }>();
+  for (const r of inboundRows) {
+    const entry = inboundByMaterial.get(r.material_key) ?? { name: r.name, qty: 0 };
+    entry.qty += r.qty;
+    inboundByMaterial.set(r.material_key, entry);
+  }
   const inboundNgCount = inboundRows.filter((r) => r.judgment === "NG").length;
 
   // 원재료 입고 월 누계(이번 달 1일 ~ 기준일), 품목별
   const monthStart = `${targetDate.slice(0, 7)}-01`;
   const monthInboundRows = db
     .prepare(
-      `SELECT ri.qty as qty, rm.name as name
+      `SELECT ri.qty as qty, rm.key as material_key, rm.name as name
        FROM raw_material_inbound ri JOIN raw_material rm ON ri.material_key = rm.key
        WHERE ri.date >= ? AND ri.date <= ?`
     )
-    .all(monthStart, targetDate) as { qty: number; name: string }[];
+    .all(monthStart, targetDate) as { qty: number; material_key: string; name: string }[];
   const monthInboundTotal = monthInboundRows.reduce((s, r) => s + r.qty, 0);
   const monthByMaterial = new Map<string, number>();
-  for (const r of monthInboundRows) monthByMaterial.set(r.name, (monthByMaterial.get(r.name) ?? 0) + r.qty);
+  for (const r of monthInboundRows) {
+    monthByMaterial.set(r.material_key, (monthByMaterial.get(r.material_key) ?? 0) + r.qty);
+  }
 
-  const inboundTop = [...inboundByMaterial.entries()]
-    .sort((a, b) => b[1] - a[1])
+  // 즐겨찾기(고정)한 품목은 그날 입고가 없어도 계속 보이도록, 상위 5건 목록에 함께 포함한다.
+  const pinnedParam = req.nextUrl.searchParams.get("pinned");
+  const pinnedKeys = pinnedParam ? pinnedParam.split(",").filter(Boolean) : [];
+
+  const nameByKey = new Map<string, string>();
+  for (const [key, v] of inboundByMaterial) nameByKey.set(key, v.name);
+  for (const r of monthInboundRows) if (!nameByKey.has(r.material_key)) nameByKey.set(r.material_key, r.name);
+  const missingPinnedKeys = pinnedKeys.filter((k) => !nameByKey.has(k));
+  if (missingPinnedKeys.length > 0) {
+    const placeholders = missingPinnedKeys.map(() => "?").join(",");
+    const rows = db
+      .prepare(`SELECT key, name FROM raw_material WHERE key IN (${placeholders})`)
+      .all(...missingPinnedKeys) as { key: string; name: string }[];
+    for (const r of rows) nameByKey.set(r.key, r.name);
+  }
+
+  const topKeys = [...inboundByMaterial.entries()]
+    .sort((a, b) => b[1].qty - a[1].qty)
     .slice(0, 5)
-    .map(([name, qty]) => ({ name, qty, monthQty: Number((monthByMaterial.get(name) ?? 0).toFixed(2)) }));
+    .map(([key]) => key);
+  const includedKeys = new Set([...topKeys, ...pinnedKeys.filter((k) => nameByKey.has(k))]);
+
+  const inboundTop = [...includedKeys]
+    .map((key) => ({
+      key,
+      name: nameByKey.get(key) ?? key,
+      qty: Number((inboundByMaterial.get(key)?.qty ?? 0).toFixed(2)),
+      monthQty: Number((monthByMaterial.get(key) ?? 0).toFixed(2)),
+    }))
+    .sort((a, b) => b.qty - a.qty);
 
   // 현재 제품 재고 (품목대분류별, 톤) — 항상 "지금 시점" 실재고를 보여준다 (과거 마감재고 역산은 하지 않음)
   // 시즌누계와 동일하게, 톤백 제품(category === "톤백")은 별도로 나눠 표시할 수 있도록 함께 집계한다.
@@ -201,10 +233,15 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 알림: 원재료 입고검수 NG, 생산일지 미확정
-  const notices: { text: string; level: "red" | "amber" }[] = [];
+  // 알림: 원재료 입고검수 NG, 생산일지 미확정 (누르면 처리 화면으로 바로 이동할 수 있도록 링크 포함)
+  const notices: { text: string; level: "red" | "amber"; link: string; linkLabel: string }[] = [];
   if (inboundNgCount > 0) {
-    notices.push({ text: `${targetDate} 원재료 입고검수 NG ${inboundNgCount}건`, level: "red" });
+    notices.push({
+      text: `${targetDate} 원재료 입고검수 NG ${inboundNgCount}건`,
+      level: "red",
+      link: "/raw-material/nonconformance",
+      linkLabel: "부적합 발생이력",
+    });
   }
   const prodLocks = db
     .prepare("SELECT shift, locked FROM production_log WHERE date = ?")
@@ -212,7 +249,12 @@ export async function GET(req: NextRequest) {
   const lockedByShift = new Map(prodLocks.map((r) => [r.shift, r.locked]));
   for (const shift of ["주", "야"]) {
     if (!lockedByShift.get(shift)) {
-      notices.push({ text: `${targetDate} ${shift}조 생산일지 미확정`, level: "amber" });
+      notices.push({
+        text: `${targetDate} ${shift}조 생산일지 미확정`,
+        level: "amber",
+        link: "/production",
+        linkLabel: "생산일지 입력",
+      });
     }
   }
 

@@ -1,15 +1,6 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { apiGet } from "@/lib/apiClient";
 import { DailySheetRow } from "@/lib/analytics";
 
@@ -21,29 +12,48 @@ function fmt(v: number | null | undefined, digits = 1): string {
   return v == null ? "-" : v.toFixed(digits);
 }
 
-function MiniChart({
+function dday(date: string): string {
+  return date.slice(8);
+}
+
+// 일 합계형 지표(비가동시간·실제 가동시간)의 합계/평균/최고/최저를 계산한다.
+function levelStats(rows: { date: string; value: number }[]) {
+  if (rows.length === 0) return null;
+  const total = rows.reduce((s, r) => s + r.value, 0);
+  const max = rows.reduce((a, b) => (b.value > a.value ? b : a));
+  const min = rows.reduce((a, b) => (b.value < a.value ? b : a));
+  return { total, average: total / rows.length, max, min };
+}
+
+// 전일 대비 증감형 지표(조립제·LNG 사용량 증감)의 평균 증감/최대 증가/최대 감소/증가·감소 일수를 계산한다.
+function deltaStats(rows: { date: string; value: number }[]) {
+  if (rows.length === 0) return null;
+  const total = rows.reduce((s, r) => s + r.value, 0);
+  const maxUp = rows.reduce((a, b) => (b.value > a.value ? b : a));
+  const maxDown = rows.reduce((a, b) => (b.value < a.value ? b : a));
+  const upDays = rows.filter((r) => r.value > 0).length;
+  const downDays = rows.filter((r) => r.value < 0).length;
+  return { average: total / rows.length, maxUp, maxDown, upDays, downDays };
+}
+
+function StatCard({
   title,
-  data,
-  dataKey,
-  color,
+  rows,
 }: {
   title: string;
-  data: { label: string; value: number | null }[];
-  dataKey: string;
-  color: string;
+  rows: { label: string; value: string }[];
 }) {
   return (
-    <div className="bg-white rounded-xl border p-4">
-      <h3 className="text-xs font-semibold text-slate-600 mb-2">{title}</h3>
-      <ResponsiveContainer width="100%" height={140}>
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-          <XAxis dataKey="label" tick={{ fontSize: 9 }} interval={2} />
-          <YAxis tick={{ fontSize: 9 }} width={32} />
-          <Tooltip />
-          <Line type="monotone" dataKey="value" name={dataKey} stroke={color} dot={false} strokeWidth={2} />
-        </LineChart>
-      </ResponsiveContainer>
+    <div className="bg-white rounded-xl border p-4 border-l-4 border-l-slate-800">
+      <h3 className="text-xs font-semibold text-slate-600 mb-2.5">{title}</h3>
+      <div className="flex flex-col gap-1.5">
+        {rows.map((r) => (
+          <div key={r.label} className="flex justify-between text-sm">
+            <span className="text-slate-400">{r.label}</span>
+            <span className="font-semibold text-slate-800">{r.value}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -108,18 +118,23 @@ export default function MonthlyPage() {
     return { total, average, dayCount: n };
   }, [rows]);
 
-  const chartData = useMemo(
-    () => ({
-      downtime: rows.map((r) => ({ label: r.date.slice(8), value: r.dayTotal.downtimeHours || null })),
-      granulationDelta: rows.map((r) => ({
-        label: r.date.slice(8),
-        value: r.deltaFromPrevDay.granulationUsageTotal,
-      })),
-      lineHours: rows.map((r) => ({ label: r.date.slice(8), value: r.dayTotal.lineHoursTotal || null })),
-      gasDelta: rows.map((r) => ({ label: r.date.slice(8), value: r.deltaFromPrevDay.gasUsageShift })),
-    }),
-    [rows]
-  );
+  const statAgg = useMemo(() => {
+    const daysWithData = rows.filter((r) => r.shifts.length > 0);
+    return {
+      downtime: levelStats(daysWithData.map((r) => ({ date: r.date, value: r.dayTotal.downtimeHours }))),
+      lineHours: levelStats(daysWithData.map((r) => ({ date: r.date, value: r.dayTotal.lineHoursTotal }))),
+      granulationDelta: deltaStats(
+        rows
+          .filter((r) => r.deltaFromPrevDay.granulationUsageTotal != null)
+          .map((r) => ({ date: r.date, value: r.deltaFromPrevDay.granulationUsageTotal as number }))
+      ),
+      gasDelta: deltaStats(
+        rows
+          .filter((r) => r.deltaFromPrevDay.gasUsageShift != null)
+          .map((r) => ({ date: r.date, value: r.deltaFromPrevDay.gasUsageShift as number }))
+      ),
+    };
+  }, [rows]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -144,7 +159,7 @@ export default function MonthlyPage() {
       <div className="flex gap-2 border-b">
         {(
           [
-            { key: "chart", label: "월간 그래프" },
+            { key: "chart", label: "월간 요약" },
             { key: "daily", label: "일자별 조회" },
           ] as const
         ).map((t) => (
@@ -163,19 +178,75 @@ export default function MonthlyPage() {
 
       {tab === "chart" && (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <MiniChart title="비가동시간 (일 합계, h)" data={chartData.downtime} dataKey="비가동" color="#dc2626" />
-        <MiniChart
-          title="조립제 사용량 증감 (전일 대비)"
-          data={chartData.granulationDelta}
-          dataKey="증감"
-          color="#7c3aed"
+        <StatCard
+          title="비가동시간 (일 합계, h)"
+          rows={
+            statAgg.downtime
+              ? [
+                  { label: "이번 달 합계", value: `${fmt(statAgg.downtime.total)}h` },
+                  { label: "일평균", value: `${fmt(statAgg.downtime.average)}h` },
+                  { label: "최고", value: `${fmt(statAgg.downtime.max.value)}h (${dday(statAgg.downtime.max.date)})` },
+                  { label: "최저", value: `${fmt(statAgg.downtime.min.value)}h (${dday(statAgg.downtime.min.date)})` },
+                ]
+              : [{ label: "데이터 없음", value: "-" }]
+          }
         />
-        <MiniChart title="실제 가동시간 (일 합계, h)" data={chartData.lineHours} dataKey="가동시간" color="#16a34a" />
-        <MiniChart
+        <StatCard
+          title="조립제 사용량 증감 (전일 대비)"
+          rows={
+            statAgg.granulationDelta
+              ? [
+                  { label: "일평균 증감", value: fmt(statAgg.granulationDelta.average) },
+                  {
+                    label: "최대 증가",
+                    value: `+${fmt(statAgg.granulationDelta.maxUp.value)} (${dday(statAgg.granulationDelta.maxUp.date)})`,
+                  },
+                  {
+                    label: "최대 감소",
+                    value: `${fmt(statAgg.granulationDelta.maxDown.value)} (${dday(statAgg.granulationDelta.maxDown.date)})`,
+                  },
+                  {
+                    label: "늘어난 날 / 줄어든 날",
+                    value: `${statAgg.granulationDelta.upDays}일 / ${statAgg.granulationDelta.downDays}일`,
+                  },
+                ]
+              : [{ label: "데이터 없음", value: "-" }]
+          }
+        />
+        <StatCard
+          title="실제 가동시간 (일 합계, h)"
+          rows={
+            statAgg.lineHours
+              ? [
+                  { label: "이번 달 합계", value: `${fmt(statAgg.lineHours.total)}h` },
+                  { label: "일평균", value: `${fmt(statAgg.lineHours.average)}h` },
+                  { label: "최고", value: `${fmt(statAgg.lineHours.max.value)}h (${dday(statAgg.lineHours.max.date)})` },
+                  { label: "최저", value: `${fmt(statAgg.lineHours.min.value)}h (${dday(statAgg.lineHours.min.date)})` },
+                ]
+              : [{ label: "데이터 없음", value: "-" }]
+          }
+        />
+        <StatCard
           title="LNG 사용량 증감 (전일 대비, ㎥)"
-          data={chartData.gasDelta}
-          dataKey="증감"
-          color="#ea580c"
+          rows={
+            statAgg.gasDelta
+              ? [
+                  { label: "일평균 증감", value: `${fmt(statAgg.gasDelta.average)}㎥` },
+                  {
+                    label: "최대 증가",
+                    value: `+${fmt(statAgg.gasDelta.maxUp.value)}㎥ (${dday(statAgg.gasDelta.maxUp.date)})`,
+                  },
+                  {
+                    label: "최대 감소",
+                    value: `${fmt(statAgg.gasDelta.maxDown.value)}㎥ (${dday(statAgg.gasDelta.maxDown.date)})`,
+                  },
+                  {
+                    label: "늘어난 날 / 줄어든 날",
+                    value: `${statAgg.gasDelta.upDays}일 / ${statAgg.gasDelta.downDays}일`,
+                  },
+                ]
+              : [{ label: "데이터 없음", value: "-" }]
+          }
         />
       </div>
       )}

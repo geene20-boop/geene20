@@ -8,10 +8,9 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-// 외국인 근로자와 연동된 계정은 생산가동/품질관리/제품포장만 이용할 수 있다.
+// 외국인 근로자와 연동된 계정은 생산·품질/제품포장만 이용할 수 있다.
 export const FOREIGN_WORKER_RESTRICTED_GROUPS = new Set([
-  "원재료관리",
-  "문서관리",
+  "원재료·문서",
   "근태관리",
   "게시판",
   "시스템관리",
@@ -19,7 +18,7 @@ export const FOREIGN_WORKER_RESTRICTED_GROUPS = new Set([
 
 // 특정 개인(이름)에게만 숨기는 메뉴. 근로자 단위의 세부 권한 체계가 아직 없어
 // 요청받은 이름을 그대로 매칭한다 — 근로자명부 이름이 바뀌면 이 목록도 함께 갱신해야 한다.
-export const NAME_RESTRICTED_GROUPS = new Set(["원재료관리", "문서관리"]);
+export const NAME_RESTRICTED_GROUPS = new Set(["원재료·문서"]);
 export const NAME_RESTRICTED_DISPLAY_NAMES = new Set(["김상순", "김춘수", "이재혁"]);
 
 // 관리자(공용 비밀번호) 세션은 어떤 메뉴도 제한하지 않는다 — 관리자로 로그인하며 입력한
@@ -40,18 +39,13 @@ export function isGroupBlockedForSession(
 
 export const NAV_GROUPS: NavGroup[] = [
   {
-    label: "생산가동",
+    label: "생산·품질",
     items: [
       { href: "/production", label: "생산일지 입력" },
       { href: "/daily", label: "일자별 대시보드" },
       { href: "/monthly", label: "월간 시트" },
       { href: "/electricity", label: "전력사용량" },
       { href: "/utility", label: "월별 유틸리티" },
-    ],
-  },
-  {
-    label: "품질관리",
-    items: [
       { href: "/qc", label: "QC측정 입력" },
       { href: "/dashboard", label: "통합 대시보드" },
     ],
@@ -71,7 +65,7 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: "원재료관리",
+    label: "원재료·문서",
     items: [
       { href: "/raw-material/entry", label: "입고검수·입력" },
       { href: "/raw-material/ledger", label: "입고대장" },
@@ -81,20 +75,15 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/raw-material/nonconformance", label: "부적합이력" },
       { href: "/raw-material/price-history", label: "단가이력" },
       { href: "/raw-material/documents", label: "양식출력" },
-    ],
-  },
-  {
-    label: "근태관리",
-    items: [{ href: "/attendance", label: "근태 신청·연차현황" }],
-  },
-  {
-    label: "문서관리",
-    items: [
       { href: "/test-reports", label: "외부기관 시험성적서" },
       { href: "/msds", label: "MSDS" },
       { href: "/self-test", label: "자체시험성적서" },
       { href: "/lab-journal", label: "연구실험일지" },
     ],
+  },
+  {
+    label: "근태관리",
+    items: [{ href: "/attendance", label: "근태 신청·연차현황" }],
   },
   {
     label: "시스템관리",
