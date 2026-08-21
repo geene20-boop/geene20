@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { getSessionWorkerId, isAdminRequest } from "@/lib/auth";
+import { getSessionWorkerId, isAttendanceAdminRequest } from "@/lib/auth";
 import { buildXlsxBuffer, xlsxResponseHeaders } from "@/lib/exportXlsx";
 
 const DEDUCTING_TYPES = ["연차", "반차(오전)", "반차(오후)"];
@@ -28,7 +28,7 @@ function computeMonthlyUsedDays(workerId: number, year: number): number[] {
 export async function GET(req: NextRequest) {
   const db = getDb();
   const year = Number(req.nextUrl.searchParams.get("year") ?? new Date().getFullYear());
-  const admin = isAdminRequest(req);
+  const admin = isAttendanceAdminRequest(req);
   const paramWorkerId = req.nextUrl.searchParams.get("workerId");
 
   let workers: { id: number; name: string; hire_date: string | null }[];

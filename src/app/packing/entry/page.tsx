@@ -363,13 +363,13 @@ export default function PackingEntryPage() {
 
         {form.type === "pack" && (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 border-t pt-3">
-            <div className="flex gap-2">
-              <label className="flex flex-col gap-1 text-sm flex-1">
+            <div className="flex gap-2 min-w-0">
+              <label className="flex flex-col gap-1 text-sm flex-1 min-w-0">
                 <span className="text-slate-600">탑시트 품목</span>
                 <select
                   value={form.topsheetKey}
                   onChange={(e) => set("topsheetKey", e.target.value)}
-                  className="border rounded-md px-2 py-1.5"
+                  className="border rounded-md px-2 py-1.5 w-full min-w-0"
                 >
                   <option value="">선택안함</option>
                   {bagmatItems
@@ -382,23 +382,23 @@ export default function PackingEntryPage() {
                     ))}
                 </select>
               </label>
-              <label className="flex flex-col gap-1 text-sm w-24">
+              <label className="flex flex-col gap-1 text-sm w-20 shrink-0">
                 <span className="text-slate-600">수량</span>
                 <input
                   type="number"
                   value={form.topsheetQty}
                   onChange={(e) => set("topsheetQty", e.target.value)}
-                  className="border rounded-md px-2 py-1.5"
+                  className="border rounded-md px-2 py-1.5 w-full min-w-0"
                 />
               </label>
             </div>
-            <div className="flex gap-2">
-              <label className="flex flex-col gap-1 text-sm flex-1">
+            <div className="flex gap-2 min-w-0">
+              <label className="flex flex-col gap-1 text-sm flex-1 min-w-0">
                 <span className="text-slate-600">랩(스트레치필름)</span>
                 <select
                   value={form.wrapKey}
                   onChange={(e) => set("wrapKey", e.target.value)}
-                  className="border rounded-md px-2 py-1.5"
+                  className="border rounded-md px-2 py-1.5 w-full min-w-0"
                 >
                   <option value="">선택안함</option>
                   {auxItems
@@ -410,13 +410,13 @@ export default function PackingEntryPage() {
                     ))}
                 </select>
               </label>
-              <label className="flex flex-col gap-1 text-sm w-24">
+              <label className="flex flex-col gap-1 text-sm w-20 shrink-0">
                 <span className="text-slate-600">수량</span>
                 <input
                   type="number"
                   value={form.wrapQty}
                   onChange={(e) => set("wrapQty", e.target.value)}
-                  className="border rounded-md px-2 py-1.5"
+                  className="border rounded-md px-2 py-1.5 w-full min-w-0"
                 />
               </label>
             </div>
@@ -440,13 +440,13 @@ export default function PackingEntryPage() {
                 </span>
               </label>
             ) : (
-              <div className="flex gap-2">
-                <label className="flex flex-col gap-1 text-sm flex-1">
+              <div className="flex gap-2 min-w-0">
+                <label className="flex flex-col gap-1 text-sm flex-1 min-w-0">
                   <span className="text-slate-600">기타 부자재</span>
                   <select
                     value={form.auxUseKey}
                     onChange={(e) => set("auxUseKey", e.target.value)}
-                    className="border rounded-md px-2 py-1.5"
+                    className="border rounded-md px-2 py-1.5 w-full min-w-0"
                   >
                     <option value="">선택안함</option>
                     {auxItems
@@ -458,13 +458,13 @@ export default function PackingEntryPage() {
                       ))}
                   </select>
                 </label>
-                <label className="flex flex-col gap-1 text-sm w-24">
+                <label className="flex flex-col gap-1 text-sm w-20 shrink-0">
                   <span className="text-slate-600">수량</span>
                   <input
                     type="number"
                     value={form.auxUseQty}
                     onChange={(e) => set("auxUseQty", e.target.value)}
-                    className="border rounded-md px-2 py-1.5"
+                    className="border rounded-md px-2 py-1.5 w-full min-w-0"
                   />
                 </label>
               </div>

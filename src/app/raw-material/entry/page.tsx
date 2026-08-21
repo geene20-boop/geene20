@@ -55,6 +55,11 @@ export default function RawMaterialEntryPage() {
   const admin = useAdminSession();
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [rangeFrom, setRangeFrom] = useState(todayStr());
+  const [rangeTo, setRangeTo] = useState(todayStr());
+  const [pendingAction, setPendingAction] = useState<{ type: "edit" | "lock"; row: RawMaterialInbound } | null>(
+    null
+  );
   const session = useSiteSession();
 
   useEffect(() => {
@@ -71,9 +76,22 @@ export default function RawMaterialEntryPage() {
   async function loadSuppliers() {
     setSuppliers(await apiGet<RawMaterialSupplier[]>("/api/raw-material-supplier"));
   }
-  async function loadEntries() {
-    const today = todayStr();
-    setEntries(await apiGet<RawMaterialInbound[]>(`/api/raw-material-inbound?from=${today}&to=${today}`));
+  async function loadEntries(from?: string, to?: string) {
+    setEntries(
+      await apiGet<RawMaterialInbound[]>(`/api/raw-material-inbound?from=${from ?? rangeFrom}&to=${to ?? rangeTo}`)
+    );
+  }
+
+  function showAll() {
+    const from = "2000-01-01";
+    const to = todayStr();
+    setRangeFrom(from);
+    setRangeTo(to);
+    loadEntries(from, to);
+  }
+
+  function downloadXlsx() {
+    window.location.href = `/api/raw-material-inbound/export?from=${rangeFrom}&to=${rangeTo}`;
   }
 
   useEffect(() => {
@@ -178,16 +196,16 @@ export default function RawMaterialEntryPage() {
     await Promise.all([loadMaterials(), loadEntries()]);
   }
 
-  async function toggleLock(row: RawMaterialInbound) {
-    if (!enteredBy.trim()) {
+  async function toggleLock(row: RawMaterialInbound, actorOverride?: string) {
+    const actor = actorOverride ?? enteredBy;
+    if (!actor.trim()) {
       setNameError(true);
       return;
     }
-    await apiPut(`/api/raw-material-inbound/${row.id}/lock`, { entered_by: enteredBy, locked: !row.locked });
+    await apiPut(`/api/raw-material-inbound/${row.id}/lock`, { entered_by: actor, locked: !row.locked });
     await loadEntries();
   }
 
-  const canManage = admin.loggedIn || session.isModifier;
   function canEditRow(row: RawMaterialInbound) {
     return !row.locked && (admin.loggedIn || session.isModifier);
   }
@@ -195,6 +213,36 @@ export default function RawMaterialEntryPage() {
     if (row.locked) return false;
     if (admin.loggedIn) return true;
     return session.isModifier && !row.approved_at;
+  }
+
+  // 수정·승인은 관리자/수정권한 계정에게만 실제로 허용되지만, 그 권한이 없는 상태에서도 버튼은
+  // 입고 내역 옆에 바로 보이게 해서 누르면 관리자 로그인부터 이어서 진행할 수 있게 한다.
+  function handleEditClick(row: RawMaterialInbound) {
+    if (canEditRow(row)) {
+      startEdit(row);
+    } else {
+      setPendingAction({ type: "edit", row });
+      setShowAdminModal(true);
+    }
+  }
+  function handleLockClick(row: RawMaterialInbound) {
+    if (admin.loggedIn) {
+      toggleLock(row);
+    } else {
+      setPendingAction({ type: "lock", row });
+      setShowAdminModal(true);
+    }
+  }
+
+  // 관리자 로그인 모달에서 로그인이 실제로 성공한 시점(onSuccess)에 이어서 실행한다 (아래 모달 참고).
+  // 로그인 직후에는 session/enteredBy state가 아직 갱신되기 전일 수 있어, 승인 처리에는 방금 로그인한
+  // 관리자 이름(freshAdminName)을 직접 넘겨 빈 이름으로 막히는 일이 없게 한다.
+  function runPendingAction(freshAdminName?: string | null) {
+    if (!pendingAction) return;
+    const { type, row } = pendingAction;
+    setPendingAction(null);
+    if (type === "edit") startEdit(row);
+    else toggleLock(row, freshAdminName ?? undefined);
   }
 
   return (
@@ -399,7 +447,51 @@ export default function RawMaterialEntryPage() {
       </form>
 
       <div className="bg-white rounded-xl border overflow-x-auto">
-        <h2 className="text-sm font-semibold text-slate-700 px-4 pt-4">오늘 입고 내역</h2>
+        <div className="flex items-center justify-between px-4 pt-4 flex-wrap gap-2">
+          <h2 className="text-sm font-semibold text-slate-700">입고 내역</h2>
+          <div className="flex items-end gap-2 flex-wrap">
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="text-slate-500">조회기간</span>
+              <input
+                type="date"
+                value={rangeFrom}
+                onChange={(e) => setRangeFrom(e.target.value)}
+                className="border rounded-md px-2 py-1 text-xs"
+              />
+            </label>
+            <span className="text-xs text-slate-400 pb-1.5">~</span>
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="text-slate-500 opacity-0">종료일</span>
+              <input
+                type="date"
+                value={rangeTo}
+                onChange={(e) => setRangeTo(e.target.value)}
+                className="border rounded-md px-2 py-1 text-xs"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => loadEntries()}
+              className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-xs font-medium"
+            >
+              조회
+            </button>
+            <button
+              type="button"
+              onClick={showAll}
+              className="border rounded-md px-3 py-1.5 text-xs font-medium bg-white"
+            >
+              전체보기
+            </button>
+            <button
+              type="button"
+              onClick={downloadXlsx}
+              className="bg-emerald-700 text-white rounded-md px-3 py-1.5 text-xs font-semibold"
+            >
+              ⬇ 엑셀 다운로드
+            </button>
+          </div>
+        </div>
         <table className="w-full text-sm mt-2">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
@@ -410,7 +502,7 @@ export default function RawMaterialEntryPage() {
               <th className="text-right px-3 py-2">단가</th>
               <th className="text-right px-3 py-2">금액</th>
               <th className="text-left px-3 py-2">판정</th>
-              {canManage && <th className="text-left px-3 py-2">관리</th>}
+              <th className="text-left px-3 py-2">관리</th>
             </tr>
           </thead>
           <tbody>
@@ -438,37 +530,33 @@ export default function RawMaterialEntryPage() {
                       {row.judgment}
                     </span>
                   </td>
-                  {canManage && (
-                    <td className="px-3 py-2">
-                      <div className="flex gap-2 flex-wrap">
-                        {canEditRow(row) && (
-                          <button onClick={() => startEdit(row)} className="text-xs border rounded-md px-2 py-1 bg-white">
-                            수정
-                          </button>
-                        )}
-                        {canDeleteRow(row) && (
-                          <button
-                            onClick={() => removeEntry(row.id)}
-                            className="text-xs border rounded-md px-2 py-1 bg-white text-red-600"
-                          >
-                            삭제
-                          </button>
-                        )}
-                        {admin.loggedIn && (
-                          <button onClick={() => toggleLock(row)} className="text-xs border rounded-md px-2 py-1 bg-white">
-                            {row.locked ? "승인해제" : "승인"}
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  )}
+                  <td className="px-3 py-2">
+                    <div className="flex gap-2 flex-wrap">
+                      {!row.locked && (
+                        <button onClick={() => handleEditClick(row)} className="text-xs border rounded-md px-2 py-1 bg-white">
+                          수정
+                        </button>
+                      )}
+                      {canDeleteRow(row) && (
+                        <button
+                          onClick={() => removeEntry(row.id)}
+                          className="text-xs border rounded-md px-2 py-1 bg-white text-red-600"
+                        >
+                          삭제
+                        </button>
+                      )}
+                      <button onClick={() => handleLockClick(row)} className="text-xs border rounded-md px-2 py-1 bg-white">
+                        {row.locked ? "승인해제" : "승인"}
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
             {entries.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
-                  오늘 입고 기록이 없습니다.
+                  해당 기간에 입고 기록이 없습니다.
                 </td>
               </tr>
             )}
@@ -486,11 +574,15 @@ export default function RawMaterialEntryPage() {
       )}
       {showAdminModal && (
         <AdminLoginModal
-          onClose={() => setShowAdminModal(false)}
-          onSuccess={() => {
-            admin.refresh();
+          onClose={() => {
+            setShowAdminModal(false);
+            setPendingAction(null);
+          }}
+          onSuccess={async () => {
+            const info = await admin.refresh();
             session.refresh();
             setShowAdminModal(false);
+            runPendingAction(info.name);
           }}
         />
       )}

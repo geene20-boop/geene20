@@ -52,6 +52,7 @@ interface HomeSummary {
     totalTons: number;
   };
   attendance: {
+    date: string;
     day: { normal: AttendancePerson[] };
     night: { normal: AttendancePerson[] };
     leaveEtc: AttendanceLeaveEntry[];
@@ -486,7 +487,12 @@ export default function Home() {
             </div>
 
             <div className="bg-white rounded-xl border p-5">
-              <h2 className="text-sm font-semibold text-slate-700 mb-3">근태현황 (주간·야간)</h2>
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className="text-sm font-semibold text-slate-700">근태현황 (주간·야간)</h2>
+                <span className="text-[11px] font-medium text-slate-500 bg-slate-100 border rounded-full px-2 py-0.5">
+                  {summary.attendance.date} 기준 · 오늘
+                </span>
+              </div>
               <div className="flex flex-col divide-y text-sm">
                 <button
                   type="button"

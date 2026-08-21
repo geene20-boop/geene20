@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { isAdminRequest } from "@/lib/auth";
+import { isAttendanceAdminRequest } from "@/lib/auth";
 import { buildXlsxBuffer, xlsxResponseHeaders } from "@/lib/exportXlsx";
 import { DailyAttendanceStatus, Nationality, ShiftType } from "@/lib/types";
 import { STATUS_LABELS } from "../route";
@@ -13,7 +13,7 @@ function isValidDate(s: string): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAdminRequest(req)) {
+  if (!isAttendanceAdminRequest(req)) {
     return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 403 });
   }
   const date = req.nextUrl.searchParams.get("date") ?? new Date().toISOString().slice(0, 10);

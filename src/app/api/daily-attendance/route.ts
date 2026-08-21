@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { getAdminName, isAdminRequest } from "@/lib/auth";
+import { getAttendanceActorName, isAttendanceAdminRequest } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { DailyAttendanceRow, DailyAttendanceStatus, Nationality, ShiftType } from "@/lib/types";
 
@@ -18,7 +18,7 @@ function isValidDate(s: string): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAdminRequest(req)) {
+  if (!isAttendanceAdminRequest(req)) {
     return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 403 });
   }
   const date = req.nextUrl.searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  if (!isAdminRequest(req)) {
+  if (!isAttendanceAdminRequest(req)) {
     return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 403 });
   }
   const db = getDb();
@@ -152,7 +152,7 @@ export async function PUT(req: NextRequest) {
       : null
     : existing?.status_detail ?? null;
 
-  const updatedBy = getAdminName(req) ?? "관리자";
+  const updatedBy = getAttendanceActorName(req) ?? "관리자";
   db.prepare(
     `INSERT INTO daily_attendance (worker_id, date, shift, status, status_detail, updated_by)
      VALUES (?, ?, ?, ?, ?, ?)
