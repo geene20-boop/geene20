@@ -14,6 +14,7 @@ import {
   shiftSeason,
   todayStr,
 } from "@/lib/rawMaterialClient";
+import DateNav from "@/components/DateNav";
 
 interface DailyInboundRow {
   date: string;
@@ -105,16 +106,6 @@ export default function RawMaterialInboundSummaryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function goDay(delta: number) {
-    const next = shiftDate(day, delta);
-    setDay(next);
-    load({ day: next });
-  }
-  function goToday() {
-    const next = todayStr();
-    setDay(next);
-    load({ day: next });
-  }
   function goMonth(delta: number) {
     const next = shiftMonth(month, delta);
     setMonth(next);
@@ -196,18 +187,7 @@ export default function RawMaterialInboundSummaryPage() {
         <div className="w-px h-5 bg-slate-200 mx-1" />
 
         {tab === "daily" && (
-          <>
-            <button onClick={() => goDay(-1)} className="border rounded-md px-3 py-1.5 text-sm">
-              ← 전날
-            </button>
-            <input type="date" value={day} onChange={(e) => { setDay(e.target.value); load({ day: e.target.value }); }} className="border rounded-md px-2 py-1.5 text-sm" />
-            <button onClick={() => goDay(1)} className="border rounded-md px-3 py-1.5 text-sm">
-              다음날 →
-            </button>
-            <button onClick={goToday} className="border rounded-md px-3 py-1.5 text-sm text-slate-500">
-              오늘
-            </button>
-          </>
+          <DateNav value={day} onChange={(v) => { setDay(v); load({ day: v }); }} />
         )}
         {tab === "monthly" && (
           <>

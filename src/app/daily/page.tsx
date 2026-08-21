@@ -4,16 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/apiClient";
 import { MergedShiftRow } from "@/lib/analytics";
 import { ElectricityUsage } from "@/lib/types";
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function shiftDate(date: string, delta: number): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + delta);
-  return d.toISOString().slice(0, 10);
-}
+import { shiftDate, today } from "@/lib/dateNav";
+import DateNav from "@/components/DateNav";
 
 function daysAgo(n: number) {
   return shiftDate(today(), -n);
@@ -250,26 +242,7 @@ export default function DailyDashboardPage() {
 
       {mode === "day" ? (
         <>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setDate(shiftDate(date, -1))}
-              className="border rounded-md px-3 py-1.5 text-sm bg-white"
-            >
-              ◀ 전날
-            </button>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="border rounded-md px-3 py-1.5 text-sm font-medium"
-            />
-            <button
-              onClick={() => setDate(shiftDate(date, 1))}
-              className="border rounded-md px-3 py-1.5 text-sm bg-white"
-            >
-              다음날 ▶
-            </button>
-          </div>
+          <DateNav value={date} onChange={setDate} size="md" />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {dayRows.map((r) => (

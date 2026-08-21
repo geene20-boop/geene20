@@ -57,6 +57,14 @@ export default function LabJournalViewPage() {
           <button onClick={() => window.print()} className="bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium">
             🖨️ 인쇄 / PDF저장
           </button>
+          {session.canWrite && (
+            <Link
+              href={`/lab-journal/${entry.id}/edit`}
+              className="border rounded-md px-4 py-2 text-sm font-medium hover:bg-slate-50"
+            >
+              수정
+            </Link>
+          )}
           {session.isAdmin && (
             <button onClick={remove} className="text-red-500 hover:underline text-sm">
               삭제

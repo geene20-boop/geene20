@@ -59,6 +59,8 @@ export interface QcTest {
   granulation_input: number | null;
   fine_powder: number | null;
   hopper: number | null;
+  hopper_a: number | null;
+  hopper_b: number | null;
   moisture: number | null;
   moisture_note: string | null;
   worker: string | null;
@@ -123,6 +125,10 @@ export interface MonthlyUtility {
   elec2_won: number | null;
   lng_m3: number | null;
   lng_won: number | null;
+  lng_dryer_m3: number | null;
+  lng_dryer_won: number | null;
+  lng_rto_m3: number | null;
+  lng_rto_won: number | null;
   diesel_liter: number | null;
   diesel_won: number | null;
   production_ton: number | null;
@@ -151,6 +157,8 @@ export interface UtilityMonthRow {
   lngM3: number | null;
   lngWon: number | null;
   lngUnitPrice: number | null;
+  lngDryerM3: number | null; // 건조로 LNG 사용량 (실청구금액 입력에서 반영, 없으면 null)
+  lngRtoM3: number | null; // RTO LNG 사용량 (실청구금액 입력에서 반영, 없으면 null)
   // 경유
   dieselLiter: number | null;
   dieselWon: number | null;

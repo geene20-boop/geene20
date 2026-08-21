@@ -6,6 +6,7 @@ import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import { DailyAttendanceRow, DailyAttendanceStatus, LeaveBalance, LeaveRequest, LeaveType, ShiftType } from "@/lib/types";
 import { markLeaveSeen } from "@/lib/leaveRead";
 import Modal from "@/components/Modal";
+import DateNav from "@/components/DateNav";
 
 const LEAVE_TYPES: LeaveType[] = ["연차", "반차(오전)", "반차(오후)", "외출", "조퇴", "무급휴무", "유급휴무"];
 const HALF_DAY_TYPES: LeaveType[] = ["반차(오전)", "반차(오후)"];
@@ -193,14 +194,120 @@ function RequestList({
   canCancel: boolean;
   onChanged: () => void;
 }) {
+  const [filterWorker, setFilterWorker] = useState("");
+  const [filterType, setFilterType] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
+
   async function cancel(id: number) {
     if (!confirm("이 신청을 취소할까요?")) return;
     await apiDelete(`/api/leave-request/${id}`);
     onChanged();
   }
 
+  const workerNames = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.worker_name))).sort(),
+    [rows]
+  );
+
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) => {
+      if (filterWorker && r.worker_name !== filterWorker) return false;
+      if (filterType && r.type !== filterType) return false;
+      if (filterStatus && r.status !== filterStatus) return false;
+      if (filterFrom && r.end_date < filterFrom) return false;
+      if (filterTo && r.start_date > filterTo) return false;
+      return true;
+    });
+  }, [rows, filterWorker, filterType, filterStatus, filterFrom, filterTo]);
+
+  const hasFilter = filterWorker || filterType || filterStatus || filterFrom || filterTo;
+
   return (
     <div className="bg-white rounded-xl border overflow-x-auto">
+      <div className="flex flex-wrap items-center gap-2 px-3 pt-3 pb-1">
+        {showWorkerName && (
+          <select
+            value={filterWorker}
+            onChange={(e) => setFilterWorker(e.target.value)}
+            className="border rounded-md px-2 py-1 text-xs"
+          >
+            <option value="">신청자 전체</option>
+            {workerNames.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        )}
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          className="border rounded-md px-2 py-1 text-xs"
+        >
+          <option value="">유형 전체</option>
+          {LEAVE_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="border rounded-md px-2 py-1 text-xs"
+        >
+          <option value="">상태 전체</option>
+          {Object.entries(STATUS_LABEL).map(([key, label]) => (
+            <option key={key} value={key}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <input
+          type="date"
+          value={filterFrom}
+          onChange={(e) => setFilterFrom(e.target.value)}
+          className="border rounded-md px-2 py-1 text-xs"
+          aria-label="기간 시작"
+        />
+        <span className="text-xs text-slate-400">~</span>
+        <input
+          type="date"
+          value={filterTo}
+          onChange={(e) => setFilterTo(e.target.value)}
+          className="border rounded-md px-2 py-1 text-xs"
+          aria-label="기간 종료"
+        />
+        <button
+          type="button"
+          onClick={() => setFilterStatus((s) => (s === "pending" ? "" : "pending"))}
+          className={`rounded-full px-3 py-1 text-xs font-medium border ${
+            filterStatus === "pending"
+              ? "bg-amber-500 border-amber-500 text-white"
+              : "bg-white border-amber-300 text-amber-700"
+          }`}
+        >
+          ● 대기중만 보기
+        </button>
+        {hasFilter && (
+          <button
+            type="button"
+            onClick={() => {
+              setFilterWorker("");
+              setFilterType("");
+              setFilterStatus("");
+              setFilterFrom("");
+              setFilterTo("");
+            }}
+            className="text-xs text-slate-400 underline"
+          >
+            필터 초기화
+          </button>
+        )}
+        <span className="text-xs text-slate-400 ml-auto">{filteredRows.length}건</span>
+      </div>
       <table className="w-full text-sm">
         <thead className="bg-slate-100 text-slate-600">
           <tr>
@@ -215,7 +322,7 @@ function RequestList({
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {filteredRows.map((r) => (
             <tr key={r.id} className="border-t">
               <td className="px-3 py-2">{r.created_at.slice(0, 10)}</td>
               {showWorkerName && <td className="px-3 py-2">{r.worker_name}</td>}
@@ -240,10 +347,10 @@ function RequestList({
               </td>
             </tr>
           ))}
-          {rows.length === 0 && (
+          {filteredRows.length === 0 && (
             <tr>
               <td colSpan={showWorkerName ? 8 : 7} className="px-3 py-8 text-center text-slate-400">
-                신청 내역이 없습니다.
+                {rows.length === 0 ? "신청 내역이 없습니다." : "조건에 맞는 신청 내역이 없습니다."}
               </td>
             </tr>
           )}
@@ -643,12 +750,6 @@ const DAILY_STATUS_LABELS: Record<UiDailyStatus, string> = {
   other: "기타",
 };
 
-function addDays(date: string, delta: number): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + delta);
-  return d.toISOString().slice(0, 10);
-}
-
 function DailyRosterRow({ row, onChanged }: { row: DailyAttendanceRow; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<UiDailyStatus>(row.status ?? "normal");
@@ -782,23 +883,8 @@ function DailyRosterTab() {
       <div className="flex items-center justify-between px-3 pt-3 pb-2 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <span className="font-semibold text-slate-800 text-sm">일일 출근부</span>
-          <button
-            type="button"
-            onClick={() => setDate((d) => addDays(d, -1))}
-            className="border rounded-md px-3 py-1 text-xs bg-white"
-          >
-            ◀ 전날
-          </button>
-          <span className="text-xs text-slate-600 border rounded-md px-3 py-1">
-            {date} ({weekday})
-          </span>
-          <button
-            type="button"
-            onClick={() => setDate((d) => addDays(d, 1))}
-            className="border rounded-md px-3 py-1 text-xs bg-white"
-          >
-            다음날 ▶
-          </button>
+          <DateNav value={date} onChange={setDate} />
+          <span className="text-xs text-slate-500">({weekday})</span>
           <select
             value={shiftFilter}
             onChange={(e) => setShiftFilter(e.target.value as ShiftFilter)}
@@ -1208,15 +1294,6 @@ export default function AttendancePage() {
         />
       )}
 
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="border rounded-md px-4 py-1.5 text-sm font-medium bg-white"
-        >
-          ↑ 맨 위로
-        </button>
-      </div>
     </div>
   );
 }

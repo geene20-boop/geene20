@@ -8,6 +8,7 @@ import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import { useSiteSession } from "@/lib/useSiteSession";
 import { getLabel, PRODUCTION_LABELS } from "@/lib/i18n";
+import DateNav from "@/components/DateNav";
 
 export const PRODUCT_OPTIONS = ["입상규산", "석회고토", "칼슘유황"];
 export const GRANULATION_AGENT_OPTIONS = ["당밀계열", "전분계열", "CMC계열"];
@@ -44,12 +45,6 @@ type FormState = {
 
 const today = () => new Date().toISOString().slice(0, 10);
 const nowHHMM = () => new Date().toISOString().slice(11, 16);
-
-function shiftDate(date: string, delta: number): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + delta);
-  return d.toISOString().slice(0, 10);
-}
 
 function formatDateForSampleNo(date: string): string {
   return date.replace(/-/g, ".");
@@ -674,33 +669,7 @@ export default function ProductionPage() {
         <div className="flex items-center justify-between px-3 pt-3 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-semibold text-slate-700">최근 생산일지</h2>
-            <button
-              type="button"
-              onClick={() => setLogsDate((d) => shiftDate(d, -1))}
-              className="border rounded-md px-2 py-1 text-xs"
-            >
-              ◀ 전날
-            </button>
-            <input
-              type="date"
-              value={logsDate}
-              onChange={(e) => setLogsDate(e.target.value)}
-              className="border rounded-md px-2 py-1 text-xs"
-            />
-            <button
-              type="button"
-              onClick={() => setLogsDate((d) => shiftDate(d, 1))}
-              className="border rounded-md px-2 py-1 text-xs"
-            >
-              다음날 ▶
-            </button>
-            <button
-              type="button"
-              onClick={() => setLogsDate(today())}
-              className="border rounded-md px-2 py-1 text-xs"
-            >
-              오늘
-            </button>
+            <DateNav value={logsDate} onChange={setLogsDate} />
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -1265,27 +1234,10 @@ export default function ProductionPage() {
               {locked ? "🔒 해제" : "🔓 확정"}
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            className="border rounded-md px-4 py-2 text-sm font-medium"
-          >
-            ↑ 맨 위로
-          </button>
           {message && <span className="text-sm text-slate-600">{message}</span>}
         </div>
       </form>
       )}
-
-
-      <button
-        type="button"
-        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-        className="fixed bottom-6 right-6 bg-slate-900 text-white rounded-full w-12 h-12 shadow-lg text-sm font-medium"
-        aria-label="맨 위로"
-      >
-        ↑ 맨위
-      </button>
     </div>
   );
 }
