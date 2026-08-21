@@ -318,6 +318,10 @@ export function isSiteRequest(req: {
 export function isEditorRequest(req: {
   cookies: { get(name: string): { value: string } | undefined };
 }): boolean {
+  // 계정이 하나도 없는 개방 모드에서는 다른 입력 화면(원재료·포장 등)과 동일하게 누구나 입력할 수
+  // 있어야 한다. 이 함수만 그 기준을 빼먹어서, 계정을 만들기 전에는 문서관리(연구실험일지·자체시험
+  // 성적서 등) 저장이 항상 "수정 권한 이상만 가능합니다" 오류로 막혔었다.
+  if (!hasAnyAccount()) return true;
   if (isAdminRequest(req)) return true;
   const role = getUserSession(req)?.role;
   return role === "editor" || role === "modifier";
