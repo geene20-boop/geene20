@@ -325,15 +325,6 @@ export default function WorkerPage() {
         </p>
       </div>
       <WorkerRosterCard />
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="border rounded-md px-4 py-1.5 text-sm font-medium bg-white"
-        >
-          ↑ 맨 위로
-        </button>
-      </div>
     </div>
   );
 }

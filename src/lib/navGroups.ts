@@ -1,12 +1,16 @@
 export interface NavItem {
   href: string;
   label: string;
+  subgroup?: string; // "원재료·문서"처럼 항목이 많은 그룹 안에서 중분류로 묶어 색으로 구분할 때 사용
 }
 
 export interface NavGroup {
   label: string;
   items: NavItem[];
 }
+
+// 사이드바 맨 위에 고정 노출할 자주 쓰는 입력 화면 3종 (href는 NAV_GROUPS의 항목과 같은 값을 가리킨다).
+export const QUICK_ACCESS_HREFS = ["/production", "/packing/entry", "/raw-material/entry"];
 
 // 외국인 근로자와 연동된 계정은 생산·품질/제품포장만 이용할 수 있다.
 export const FOREIGN_WORKER_RESTRICTED_GROUPS = new Set([
@@ -46,6 +50,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/monthly", label: "월별 요약" },
       { href: "/electricity", label: "전력 모니터링" },
       { href: "/utility", label: "월별 유틸리티" },
+      { href: "/utility/billing", label: "실청구금액 입력" },
       { href: "/qc", label: "측정데이터" },
       { href: "/dashboard", label: "품질 요약" },
     ],
@@ -67,18 +72,18 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "원재료·문서",
     items: [
-      { href: "/raw-material/entry", label: "입고검수·입력" },
-      { href: "/raw-material/ledger", label: "입고대장" },
-      { href: "/raw-material/inbound-summary", label: "입고누계" },
-      { href: "/raw-material/items", label: "품목관리" },
-      { href: "/raw-material/suppliers", label: "공급처관리" },
-      { href: "/raw-material/nonconformance", label: "부적합이력" },
-      { href: "/raw-material/price-history", label: "단가이력" },
-      { href: "/raw-material/documents", label: "양식출력" },
-      { href: "/test-reports", label: "외부기관 시험성적서" },
-      { href: "/msds", label: "MSDS" },
-      { href: "/self-test", label: "자체시험성적서" },
-      { href: "/lab-journal", label: "연구실험일지" },
+      { href: "/raw-material/entry", label: "입고검수·입력", subgroup: "원재료" },
+      { href: "/raw-material/ledger", label: "입고대장", subgroup: "원재료" },
+      { href: "/raw-material/inbound-summary", label: "입고누계", subgroup: "원재료" },
+      { href: "/raw-material/items", label: "품목관리", subgroup: "원재료" },
+      { href: "/raw-material/suppliers", label: "공급처관리", subgroup: "원재료" },
+      { href: "/raw-material/nonconformance", label: "부적합이력", subgroup: "원재료" },
+      { href: "/raw-material/price-history", label: "단가이력", subgroup: "원재료" },
+      { href: "/raw-material/documents", label: "양식출력", subgroup: "원재료" },
+      { href: "/test-reports", label: "외부기관 시험성적서", subgroup: "문서" },
+      { href: "/msds", label: "MSDS", subgroup: "문서" },
+      { href: "/self-test", label: "자체시험성적서", subgroup: "문서" },
+      { href: "/lab-journal", label: "연구실험일지", subgroup: "문서" },
     ],
   },
   {

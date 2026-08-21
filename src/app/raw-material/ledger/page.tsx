@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/apiClient";
 import { RawMaterial, RawMaterialInbound, RawMaterialSupplier, RAW_MATERIAL_FORM_LABELS } from "@/lib/types";
 import { materialLabel, shiftDate, todayStr } from "@/lib/rawMaterialClient";
+import DateNav from "@/components/DateNav";
 
 type ViewMode = "daily" | "range";
 
@@ -179,21 +180,7 @@ export default function RawMaterialLedgerPage() {
 
         {mode === "daily" ? (
           <>
-            <button onClick={() => setDate((d) => shiftDate(d, -1))} className="border rounded-md px-3 py-1.5 text-sm">
-              ← 전날
-            </button>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="border rounded-md px-2 py-1.5 text-sm"
-            />
-            <button onClick={() => setDate((d) => shiftDate(d, 1))} className="border rounded-md px-3 py-1.5 text-sm">
-              다음날 →
-            </button>
-            <button onClick={() => setDate(todayStr())} className="border rounded-md px-3 py-1.5 text-sm text-slate-500">
-              오늘
-            </button>
+            <DateNav value={date} onChange={setDate} />
             <button onClick={load} className="bg-slate-900 text-white rounded-md px-4 py-1.5 text-sm font-medium">
               조회
             </button>

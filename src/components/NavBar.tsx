@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { useSiteSession } from "@/lib/useSiteSession";
 import { useAdminSession } from "@/components/AdminUnlock";
 import HanilLogo from "@/components/HanilLogo";
-import { isGroupBlockedForSession, NAV_GROUPS, NavGroup } from "@/lib/navGroups";
+import { isGroupBlockedForSession, NAV_GROUPS, NavGroup, QUICK_ACCESS_HREFS } from "@/lib/navGroups";
 import { apiGet } from "@/lib/apiClient";
 import { LeaveRequest } from "@/lib/types";
 
@@ -18,6 +18,12 @@ const GROUP_ICON: Record<string, string> = {
   "원재료·문서": "🧾",
   근태: "👥",
   시스템: "⚙️",
+};
+
+// "원재료·문서"처럼 항목이 많은 그룹의 중분류 라벨 색상 (원재료=하늘색, 문서=주황색 계열)
+const SUBGROUP_COLOR: Record<string, string> = {
+  원재료: "text-sky-400",
+  문서: "text-amber-400",
 };
 
 function isGroupActive(group: NavGroup, pathname: string): boolean {
@@ -131,6 +137,11 @@ export default function NavBar() {
     return group;
   }).filter((g): g is typeof NAV_GROUPS[0] => g !== null);
 
+  // 자주 쓰는 입력 화면 3종을 최상단에 고정 노출 (권한상 숨겨진 그룹의 항목은 자동으로 빠진다)
+  const quickAccessItems = visibleGroups
+    .flatMap((g) => g.items)
+    .filter((item) => QUICK_ACCESS_HREFS.includes(item.href));
+
   // 현재 페이지가 속한 그룹은 자동으로 펼쳐서 어디에 있는지 바로 보이게 한다.
   useEffect(() => {
     const active = visibleGroups.find((g) => isGroupActive(g, pathname));
@@ -179,6 +190,47 @@ export default function NavBar() {
           </Link>
         </div>
 
+        {quickAccessItems.length > 0 && (
+          <div className={`shrink-0 border-b border-white/10 ${collapsed ? "px-1 py-2" : "px-2 py-2"}`}>
+            {!collapsed && (
+              <div className="px-2 pb-1 text-[10px] font-semibold tracking-wide text-amber-300/80">
+                ★ 빠른입력
+              </div>
+            )}
+            <div className="flex flex-col gap-0.5">
+              {quickAccessItems.map((item) => {
+                const itemActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                if (collapsed) {
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      title={item.label}
+                      className={`flex items-center justify-center w-10 h-10 mx-auto rounded-md text-sm ${
+                        itemActive ? "bg-white/10 text-white" : "text-amber-300/90 hover:bg-white/10"
+                      }`}
+                    >
+                      ★
+                    </Link>
+                  );
+                }
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[13px] font-medium whitespace-nowrap ${
+                      itemActive ? "bg-white/10 text-white" : "text-white/80 hover:bg-white/10 hover:text-white"
+                    }`}
+                  >
+                    <span className="text-amber-300">★</span>
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <nav className="flex-1 overflow-y-auto py-2 px-2 flex flex-col gap-0.5">
           {visibleGroups.map((group) => {
             const active = isGroupActive(group, pathname);
@@ -221,20 +273,34 @@ export default function NavBar() {
                 </button>
                 {open && (
                   <div className="mt-0.5 mb-1 ml-3 pl-3 border-l border-white/10 flex flex-col gap-0.5">
-                    {group.items.map((item) => {
+                    {group.items.map((item, idx) => {
                       const itemActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                      const prevSubgroup = idx > 0 ? group.items[idx - 1].subgroup : undefined;
+                      const showSubgroupLabel = item.subgroup && item.subgroup !== prevSubgroup;
+                      const isQuickAccess = QUICK_ACCESS_HREFS.includes(item.href);
                       return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          className={`px-2.5 py-1.5 rounded-md text-[13px] whitespace-nowrap ${
-                            itemActive
-                              ? "bg-white/10 text-white font-medium"
-                              : "text-white/60 hover:bg-white/5 hover:text-white"
-                          }`}
-                        >
-                          {item.label}
-                        </Link>
+                        <div key={item.href}>
+                          {showSubgroupLabel && (
+                            <div
+                              className={`px-2.5 pt-1.5 pb-0.5 text-[10px] font-semibold tracking-wide ${
+                                SUBGROUP_COLOR[item.subgroup!] ?? "text-white/40"
+                              }`}
+                            >
+                              {item.subgroup}
+                            </div>
+                          )}
+                          <Link
+                            href={item.href}
+                            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-[13px] whitespace-nowrap ${
+                              itemActive
+                                ? "bg-white/10 text-white font-medium"
+                                : "text-white/60 hover:bg-white/5 hover:text-white"
+                            }`}
+                          >
+                            {isQuickAccess && <span className="text-amber-300">★</span>}
+                            {item.label}
+                          </Link>
+                        </div>
                       );
                     })}
                   </div>
@@ -300,6 +366,30 @@ export default function NavBar() {
                 닫기 ✕
               </button>
             </div>
+            {quickAccessItems.length > 0 && (
+              <div className="border-b border-white/10 pb-2 mb-1">
+                <div className="px-2 pt-1 pb-1 text-[10px] font-semibold tracking-wide text-amber-300/80">
+                  ★ 빠른입력
+                </div>
+                <div className="flex flex-col">
+                  {quickAccessItems.map((item) => {
+                    const itemActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium ${
+                          itemActive ? "bg-white/10 text-white" : "text-white/80"
+                        }`}
+                      >
+                        <span className="text-amber-300">★</span>
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {visibleGroups.map((group) => {
               const active = isGroupActive(group, pathname);
               const expanded = mobileExpanded === group.label || active;
@@ -321,18 +411,32 @@ export default function NavBar() {
                   </button>
                   {expanded && (
                     <div className="flex flex-col pb-2">
-                      {group.items.map((item) => {
+                      {group.items.map((item, idx) => {
                         const itemActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                        const prevSubgroup = idx > 0 ? group.items[idx - 1].subgroup : undefined;
+                        const showSubgroupLabel = item.subgroup && item.subgroup !== prevSubgroup;
+                        const isQuickAccess = QUICK_ACCESS_HREFS.includes(item.href);
                         return (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            className={`px-4 py-2 rounded-md text-sm ${
-                              itemActive ? "bg-white/10 text-white font-medium" : "text-white/60"
-                            }`}
-                          >
-                            {item.label}
-                          </Link>
+                          <div key={item.href}>
+                            {showSubgroupLabel && (
+                              <div
+                                className={`px-4 pt-2 pb-0.5 text-[10px] font-semibold tracking-wide ${
+                                  SUBGROUP_COLOR[item.subgroup!] ?? "text-white/40"
+                                }`}
+                              >
+                                {item.subgroup}
+                              </div>
+                            )}
+                            <Link
+                              href={item.href}
+                              className={`flex items-center gap-1 px-4 py-2 rounded-md text-sm ${
+                                itemActive ? "bg-white/10 text-white font-medium" : "text-white/60"
+                              }`}
+                            >
+                              {isQuickAccess && <span className="text-amber-300">★</span>}
+                              {item.label}
+                            </Link>
+                          </div>
                         );
                       })}
                     </div>

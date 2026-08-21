@@ -447,8 +447,12 @@ export function getUtilityMonthlySheet(months: string[]): UtilityMonthRow[] {
     const elec2Won = u?.elec2_won ?? null;
     const elecTotalWon = sumOrNull(elec1Won, elec2Won);
 
-    const lngM3 = u?.lng_m3 ?? agg.lngM3;
-    const lngWon = u?.lng_won ?? null;
+    // LNG: 실청구금액 입력(건조로/RTO)에서 반영된 값을 우선 쓰고, 없으면 예전 방식(lng_m3/lng_won)
+    // 또는 일별 생산일지 가스 사용량 합산으로 대체한다.
+    const lngDryerM3 = u?.lng_dryer_m3 ?? null;
+    const lngRtoM3 = u?.lng_rto_m3 ?? null;
+    const lngM3 = sumOrNull(lngDryerM3, lngRtoM3) ?? u?.lng_m3 ?? agg.lngM3;
+    const lngWon = sumOrNull(u?.lng_dryer_won ?? null, u?.lng_rto_won ?? null) ?? u?.lng_won ?? null;
 
     const dieselLiter = u?.diesel_liter ?? null;
     const dieselWon = u?.diesel_won ?? null;
@@ -469,6 +473,8 @@ export function getUtilityMonthlySheet(months: string[]): UtilityMonthRow[] {
       lngM3,
       lngWon,
       lngUnitPrice: ratio(lngWon, lngM3),
+      lngDryerM3,
+      lngRtoM3,
       dieselLiter,
       dieselWon,
       dieselUnitPrice: ratio(dieselWon, dieselLiter),

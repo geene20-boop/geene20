@@ -195,7 +195,9 @@ export function getDb(): Database.Database {
       granulation_brix REAL,            -- 생산조건 - 조립제 당도
       granulation_input REAL,           -- 생산조건 - 조립제 투입량
       fine_powder REAL,                 -- 생산조건 - 미분말
-      hopper REAL,                      -- 생산조건 - 호퍼
+      hopper REAL,                      -- 생산조건 - 호퍼 (구버전, hopper_a/b로 대체됨)
+      hopper_a REAL,                    -- 생산조건 - 호퍼 A
+      hopper_b REAL,                    -- 생산조건 - 호퍼 B
       moisture REAL,                    -- 수분
       worker TEXT,                      -- 작업자
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -266,8 +268,12 @@ export function getDb(): Database.Database {
       elec1_won REAL,                   -- 1공장 전력 금액(원)
       elec2_kwh REAL,                   -- 2공장 전력 사용량(kWh)
       elec2_won REAL,                   -- 2공장 전력 금액(원)
-      lng_m3 REAL,                      -- LNG 사용량(㎥)
-      lng_won REAL,                     -- LNG 금액(원)
+      lng_m3 REAL,                      -- LNG 사용량(㎥) (구버전, lng_dryer_m3/lng_rto_m3로 대체됨)
+      lng_won REAL,                     -- LNG 금액(원) (구버전, lng_dryer_won/lng_rto_won로 대체됨)
+      lng_dryer_m3 REAL,                -- 건조로 LNG 사용량(㎥) - 실청구금액 입력에서 입력
+      lng_dryer_won REAL,               -- 건조로 LNG 금액(원) - 실청구금액 입력에서 입력
+      lng_rto_m3 REAL,                  -- RTO LNG 사용량(㎥) - 실청구금액 입력에서 입력
+      lng_rto_won REAL,                 -- RTO LNG 금액(원) - 실청구금액 입력에서 입력
       diesel_liter REAL,               -- 경유 사용량(ℓ)
       diesel_won REAL,                  -- 경유 금액(원)
       production_ton REAL,             -- 생산량(ton) 보정값(비우면 일별 합산 사용)
@@ -668,6 +674,8 @@ export function getDb(): Database.Database {
     ["measured_date", "TEXT"],
     ["measured_time", "TEXT"],
     ["moisture_note", "TEXT"],
+    ["hopper_a", "REAL"],
+    ["hopper_b", "REAL"],
   ]);
   migrateColumns("electricity_usage", [
     ["entered_by", "TEXT"],
@@ -679,6 +687,10 @@ export function getDb(): Database.Database {
     ["locked", "INTEGER NOT NULL DEFAULT 0"],
     ["approved_by", "TEXT"],
     ["approved_at", "TEXT"],
+    ["lng_dryer_m3", "REAL"],
+    ["lng_dryer_won", "REAL"],
+    ["lng_rto_m3", "REAL"],
+    ["lng_rto_won", "REAL"],
   ]);
   migrateColumns("spec_limit", [["updated_by", "TEXT"]]);
   migrateColumns("packing_item", [

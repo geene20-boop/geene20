@@ -41,7 +41,8 @@ type FormState = {
   granulation_brix: string;
   granulation_input: string;
   fine_powder: string;
-  hopper: string;
+  hopper_a: string;
+  hopper_b: string;
   moisture: string;
   moisture_note: string;
   worker: string;
@@ -59,7 +60,8 @@ const emptyForm = (): FormState => ({
   granulation_brix: "",
   granulation_input: "",
   fine_powder: "",
-  hopper: "",
+  hopper_a: "",
+  hopper_b: "",
   moisture: "",
   moisture_note: "",
   worker: "",
@@ -188,10 +190,6 @@ export default function QcPage() {
         if (cancelled) return;
         const match = rows.find((r) => r.shift === shift);
         if (!match) return;
-        const hopperSum =
-          match.feed_hopper_a != null || match.feed_hopper_b != null
-            ? (match.feed_hopper_a ?? 0) + (match.feed_hopper_b ?? 0)
-            : null;
         // A라인/B라인 중 실제로 가동한(값이 적힌) 라인의 건조로 셋팅온도만 버너에 반영 (동시 가동 없음)
         const burnerTemp = match.dryer_temp_a ?? match.dryer_temp_b ?? null;
         setForm((f) => ({
@@ -200,7 +198,8 @@ export default function QcPage() {
           granulation_brix: match.brix != null ? String(match.brix) : f.granulation_brix,
           granulation_input: match.feed_total != null ? String(match.feed_total) : f.granulation_input,
           fine_powder: match.feed_fine_powder != null ? String(match.feed_fine_powder) : f.fine_powder,
-          hopper: hopperSum != null ? String(hopperSum) : f.hopper,
+          hopper_a: match.feed_hopper_a != null ? String(match.feed_hopper_a) : f.hopper_a,
+          hopper_b: match.feed_hopper_b != null ? String(match.feed_hopper_b) : f.hopper_b,
           worker: match.worker ?? f.worker,
         }));
       })
@@ -308,7 +307,8 @@ export default function QcPage() {
         granulation_brix: n(form.granulation_brix),
         granulation_input: n(form.granulation_input),
         fine_powder: n(form.fine_powder),
-        hopper: n(form.hopper),
+        hopper_a: n(form.hopper_a),
+        hopper_b: n(form.hopper_b),
         moisture: n(form.moisture),
         moisture_note: form.moisture_note || null,
         worker: form.worker || null,
@@ -352,7 +352,8 @@ export default function QcPage() {
       granulation_brix: t.granulation_brix != null ? String(t.granulation_brix) : "",
       granulation_input: t.granulation_input != null ? String(t.granulation_input) : "",
       fine_powder: t.fine_powder != null ? String(t.fine_powder) : "",
-      hopper: t.hopper != null ? String(t.hopper) : "",
+      hopper_a: t.hopper_a != null ? String(t.hopper_a) : "",
+      hopper_b: t.hopper_b != null ? String(t.hopper_b) : "",
       moisture: t.moisture != null ? String(t.moisture) : "",
       moisture_note: t.moisture_note ?? "",
       worker: t.worker ?? "",
@@ -574,12 +575,22 @@ export default function QcPage() {
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-slate-600">호퍼</span>
+              <span className="text-slate-600">호퍼 A</span>
               <input
                 type="number"
                 step="any"
-                value={form.hopper}
-                onChange={(e) => set("hopper", e.target.value)}
+                value={form.hopper_a}
+                onChange={(e) => set("hopper_a", e.target.value)}
+                className="border rounded-md px-2 py-1.5"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-slate-600">호퍼 B</span>
+              <input
+                type="number"
+                step="any"
+                value={form.hopper_b}
+                onChange={(e) => set("hopper_b", e.target.value)}
                 className="border rounded-md px-2 py-1.5"
               />
             </label>
@@ -646,13 +657,6 @@ export default function QcPage() {
             className="border rounded-md px-4 py-2 text-sm font-medium"
           >
             새로 측정하기
-          </button>
-          <button
-            type="button"
-            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            className="border rounded-md px-4 py-2 text-sm font-medium"
-          >
-            ↑ 맨 위로
           </button>
           {message && <span className="text-sm text-slate-600">{message}</span>}
         </div>
@@ -749,7 +753,8 @@ export default function QcPage() {
                           <span>조립제 당도(Brix): {t.granulation_brix ?? "-"}</span>
                           <span>조립제 투입량: {t.granulation_input ?? "-"}</span>
                           <span>미분말: {t.fine_powder ?? "-"}</span>
-                          <span>호퍼: {t.hopper ?? "-"}</span>
+                          <span>호퍼 A: {t.hopper_a ?? "-"}</span>
+                          <span>호퍼 B: {t.hopper_b ?? "-"}</span>
                           <span>시료No.: {t.sample_no ?? "-"}</span>
                         </div>
                       </td>
