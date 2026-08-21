@@ -57,6 +57,9 @@ export default function RawMaterialEntryPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [rangeFrom, setRangeFrom] = useState(todayStr());
   const [rangeTo, setRangeTo] = useState(todayStr());
+  const [pendingAction, setPendingAction] = useState<{ type: "edit" | "lock"; row: RawMaterialInbound } | null>(
+    null
+  );
   const session = useSiteSession();
 
   useEffect(() => {
@@ -193,16 +196,16 @@ export default function RawMaterialEntryPage() {
     await Promise.all([loadMaterials(), loadEntries()]);
   }
 
-  async function toggleLock(row: RawMaterialInbound) {
-    if (!enteredBy.trim()) {
+  async function toggleLock(row: RawMaterialInbound, actorOverride?: string) {
+    const actor = actorOverride ?? enteredBy;
+    if (!actor.trim()) {
       setNameError(true);
       return;
     }
-    await apiPut(`/api/raw-material-inbound/${row.id}/lock`, { entered_by: enteredBy, locked: !row.locked });
+    await apiPut(`/api/raw-material-inbound/${row.id}/lock`, { entered_by: actor, locked: !row.locked });
     await loadEntries();
   }
 
-  const canManage = admin.loggedIn || session.isModifier;
   function canEditRow(row: RawMaterialInbound) {
     return !row.locked && (admin.loggedIn || session.isModifier);
   }
@@ -210,6 +213,36 @@ export default function RawMaterialEntryPage() {
     if (row.locked) return false;
     if (admin.loggedIn) return true;
     return session.isModifier && !row.approved_at;
+  }
+
+  // 수정·승인은 관리자/수정권한 계정에게만 실제로 허용되지만, 그 권한이 없는 상태에서도 버튼은
+  // 입고 내역 옆에 바로 보이게 해서 누르면 관리자 로그인부터 이어서 진행할 수 있게 한다.
+  function handleEditClick(row: RawMaterialInbound) {
+    if (canEditRow(row)) {
+      startEdit(row);
+    } else {
+      setPendingAction({ type: "edit", row });
+      setShowAdminModal(true);
+    }
+  }
+  function handleLockClick(row: RawMaterialInbound) {
+    if (admin.loggedIn) {
+      toggleLock(row);
+    } else {
+      setPendingAction({ type: "lock", row });
+      setShowAdminModal(true);
+    }
+  }
+
+  // 관리자 로그인 모달에서 로그인이 실제로 성공한 시점(onSuccess)에 이어서 실행한다 (아래 모달 참고).
+  // 로그인 직후에는 session/enteredBy state가 아직 갱신되기 전일 수 있어, 승인 처리에는 방금 로그인한
+  // 관리자 이름(freshAdminName)을 직접 넘겨 빈 이름으로 막히는 일이 없게 한다.
+  function runPendingAction(freshAdminName?: string | null) {
+    if (!pendingAction) return;
+    const { type, row } = pendingAction;
+    setPendingAction(null);
+    if (type === "edit") startEdit(row);
+    else toggleLock(row, freshAdminName ?? undefined);
   }
 
   return (
@@ -469,7 +502,7 @@ export default function RawMaterialEntryPage() {
               <th className="text-right px-3 py-2">단가</th>
               <th className="text-right px-3 py-2">금액</th>
               <th className="text-left px-3 py-2">판정</th>
-              {canManage && <th className="text-left px-3 py-2">관리</th>}
+              <th className="text-left px-3 py-2">관리</th>
             </tr>
           </thead>
           <tbody>
@@ -497,30 +530,26 @@ export default function RawMaterialEntryPage() {
                       {row.judgment}
                     </span>
                   </td>
-                  {canManage && (
-                    <td className="px-3 py-2">
-                      <div className="flex gap-2 flex-wrap">
-                        {canEditRow(row) && (
-                          <button onClick={() => startEdit(row)} className="text-xs border rounded-md px-2 py-1 bg-white">
-                            수정
-                          </button>
-                        )}
-                        {canDeleteRow(row) && (
-                          <button
-                            onClick={() => removeEntry(row.id)}
-                            className="text-xs border rounded-md px-2 py-1 bg-white text-red-600"
-                          >
-                            삭제
-                          </button>
-                        )}
-                        {admin.loggedIn && (
-                          <button onClick={() => toggleLock(row)} className="text-xs border rounded-md px-2 py-1 bg-white">
-                            {row.locked ? "승인해제" : "승인"}
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  )}
+                  <td className="px-3 py-2">
+                    <div className="flex gap-2 flex-wrap">
+                      {!row.locked && (
+                        <button onClick={() => handleEditClick(row)} className="text-xs border rounded-md px-2 py-1 bg-white">
+                          수정
+                        </button>
+                      )}
+                      {canDeleteRow(row) && (
+                        <button
+                          onClick={() => removeEntry(row.id)}
+                          className="text-xs border rounded-md px-2 py-1 bg-white text-red-600"
+                        >
+                          삭제
+                        </button>
+                      )}
+                      <button onClick={() => handleLockClick(row)} className="text-xs border rounded-md px-2 py-1 bg-white">
+                        {row.locked ? "승인해제" : "승인"}
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -545,11 +574,15 @@ export default function RawMaterialEntryPage() {
       )}
       {showAdminModal && (
         <AdminLoginModal
-          onClose={() => setShowAdminModal(false)}
-          onSuccess={() => {
-            admin.refresh();
+          onClose={() => {
+            setShowAdminModal(false);
+            setPendingAction(null);
+          }}
+          onSuccess={async () => {
+            const info = await admin.refresh();
             session.refresh();
             setShowAdminModal(false);
+            runPendingAction(info.name);
           }}
         />
       )}

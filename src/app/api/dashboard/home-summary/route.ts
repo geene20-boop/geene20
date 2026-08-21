@@ -194,12 +194,15 @@ export async function GET(req: NextRequest) {
   });
 
   // 근태현황: 주간조/야간조 정상출근 명단 + 연차·기타 통합 명단 (일일 출근부 로직과 동일 기준)
+  // 전일 현황의 나머지 항목(생산량 등)은 조회 기준일(targetDate)을 따르지만, 근태현황은 "지금 출근해
+  // 있는 사람"을 보여주는 것이라 조회 기준일과 무관하게 항상 오늘 날짜 기준으로 계산한다.
+  const attendanceDate = today();
   const workers = db
     .prepare("SELECT id, name, nationality FROM worker WHERE active = 1 ORDER BY name")
     .all() as { id: number; name: string; nationality: Nationality }[];
   const dailyRows = db
     .prepare("SELECT worker_id, shift, status, status_detail FROM daily_attendance WHERE date = ?")
-    .all(targetDate) as {
+    .all(attendanceDate) as {
     worker_id: number;
     shift: ShiftType | null;
     status: DailyAttendanceStatus | null;
@@ -210,7 +213,7 @@ export async function GET(req: NextRequest) {
     .prepare(
       `SELECT worker_id, type FROM leave_request WHERE status = 'approved' AND start_date <= ? AND end_date >= ?`
     )
-    .all(targetDate, targetDate) as { worker_id: number; type: string }[];
+    .all(attendanceDate, attendanceDate) as { worker_id: number; type: string }[];
   const leaveByWorker = new Map(leaveRows.map((r) => [r.worker_id, r]));
 
   const dayNormal: AttendancePerson[] = [];
@@ -272,6 +275,7 @@ export async function GET(req: NextRequest) {
     },
     stock: { byCategory: stockRows, totalTons: Number(stockTotalTons.toFixed(1)) },
     attendance: {
+      date: attendanceDate,
       day: { normal: dayNormal },
       night: { normal: nightNormal },
       leaveEtc,
