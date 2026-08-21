@@ -7,6 +7,7 @@ import { DailyAttendanceRow, DailyAttendanceStatus, LeaveBalance, LeaveRequest, 
 import { markLeaveSeen } from "@/lib/leaveRead";
 import Modal from "@/components/Modal";
 import DateNav from "@/components/DateNav";
+import { ATTENDANCE_ADMIN_DISPLAY_NAMES } from "@/lib/navGroups";
 
 const LEAVE_TYPES: LeaveType[] = ["연차", "반차(오전)", "반차(오후)", "외출", "조퇴", "무급휴무", "유급휴무"];
 const HALF_DAY_TYPES: LeaveType[] = ["반차(오전)", "반차(오후)"];
@@ -1110,7 +1111,10 @@ export default function AttendancePage() {
   const [myBalance, setMyBalance] = useState<LeaveBalance | null>(null);
   const [allBalances, setAllBalances] = useState<LeaveBalance[]>([]);
 
-  const isAdmin = session.isAdmin;
+  // 관리자(공용 비밀번호) 세션이거나, 근태관리에 한해 관리자와 동일한 권한을 받은 특정 개인(이름)이면
+  // 이 화면에서는 관리자와 동일하게 취급한다 (다른 화면의 권한에는 영향을 주지 않는다).
+  const isAdmin =
+    session.isAdmin || (!!session.displayName && ATTENDANCE_ADMIN_DISPLAY_NAMES.has(session.displayName));
   const isModifier = session.isModifier;
   const canApprove = isAdmin || isModifier; // 승인관리 화면 접근 (승인은 수정권한 이상, 반려는 관리자만)
   const hasWorker = session.workerId != null;

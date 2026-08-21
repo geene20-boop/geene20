@@ -110,11 +110,21 @@ export default function LabJournalPage() {
                 <td className="px-3 py-2">{r.researcher ?? "-"}</td>
                 <td className="px-3 py-2">{r.entered_by}</td>
                 <td className="px-3 py-2 text-right whitespace-nowrap">
-                  {session.isAdmin && (
-                    <button onClick={() => remove(r.id)} className="text-red-500 hover:underline text-xs">
-                      삭제
-                    </button>
-                  )}
+                  <div className="flex gap-2 justify-end">
+                    {session.canWrite && (
+                      <Link
+                        href={`/lab-journal/${r.id}/edit`}
+                        className="text-xs border rounded-md px-2 py-1 bg-white hover:bg-slate-50"
+                      >
+                        수정
+                      </Link>
+                    )}
+                    {session.isAdmin && (
+                      <button onClick={() => remove(r.id)} className="text-red-500 hover:underline text-xs">
+                        삭제
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

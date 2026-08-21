@@ -55,6 +55,8 @@ export default function RawMaterialEntryPage() {
   const admin = useAdminSession();
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [rangeFrom, setRangeFrom] = useState(todayStr());
+  const [rangeTo, setRangeTo] = useState(todayStr());
   const session = useSiteSession();
 
   useEffect(() => {
@@ -71,9 +73,22 @@ export default function RawMaterialEntryPage() {
   async function loadSuppliers() {
     setSuppliers(await apiGet<RawMaterialSupplier[]>("/api/raw-material-supplier"));
   }
-  async function loadEntries() {
-    const today = todayStr();
-    setEntries(await apiGet<RawMaterialInbound[]>(`/api/raw-material-inbound?from=${today}&to=${today}`));
+  async function loadEntries(from?: string, to?: string) {
+    setEntries(
+      await apiGet<RawMaterialInbound[]>(`/api/raw-material-inbound?from=${from ?? rangeFrom}&to=${to ?? rangeTo}`)
+    );
+  }
+
+  function showAll() {
+    const from = "2000-01-01";
+    const to = todayStr();
+    setRangeFrom(from);
+    setRangeTo(to);
+    loadEntries(from, to);
+  }
+
+  function downloadXlsx() {
+    window.location.href = `/api/raw-material-inbound/export?from=${rangeFrom}&to=${rangeTo}`;
   }
 
   useEffect(() => {
@@ -399,7 +414,51 @@ export default function RawMaterialEntryPage() {
       </form>
 
       <div className="bg-white rounded-xl border overflow-x-auto">
-        <h2 className="text-sm font-semibold text-slate-700 px-4 pt-4">오늘 입고 내역</h2>
+        <div className="flex items-center justify-between px-4 pt-4 flex-wrap gap-2">
+          <h2 className="text-sm font-semibold text-slate-700">입고 내역</h2>
+          <div className="flex items-end gap-2 flex-wrap">
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="text-slate-500">조회기간</span>
+              <input
+                type="date"
+                value={rangeFrom}
+                onChange={(e) => setRangeFrom(e.target.value)}
+                className="border rounded-md px-2 py-1 text-xs"
+              />
+            </label>
+            <span className="text-xs text-slate-400 pb-1.5">~</span>
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="text-slate-500 opacity-0">종료일</span>
+              <input
+                type="date"
+                value={rangeTo}
+                onChange={(e) => setRangeTo(e.target.value)}
+                className="border rounded-md px-2 py-1 text-xs"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => loadEntries()}
+              className="bg-slate-900 text-white rounded-md px-3 py-1.5 text-xs font-medium"
+            >
+              조회
+            </button>
+            <button
+              type="button"
+              onClick={showAll}
+              className="border rounded-md px-3 py-1.5 text-xs font-medium bg-white"
+            >
+              전체보기
+            </button>
+            <button
+              type="button"
+              onClick={downloadXlsx}
+              className="bg-emerald-700 text-white rounded-md px-3 py-1.5 text-xs font-semibold"
+            >
+              ⬇ 엑셀 다운로드
+            </button>
+          </div>
+        </div>
         <table className="w-full text-sm mt-2">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
@@ -468,7 +527,7 @@ export default function RawMaterialEntryPage() {
             {entries.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
-                  오늘 입고 기록이 없습니다.
+                  해당 기간에 입고 기록이 없습니다.
                 </td>
               </tr>
             )}

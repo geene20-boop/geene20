@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { getAdminName, isAdminRequest, isModifierRequest, getSessionWorkerId } from "@/lib/auth";
+import { getAttendanceActorName, isAttendanceAdminRequest, isModifierRequest, getSessionWorkerId } from "@/lib/auth";
 import { logAudit, requireActor } from "@/lib/audit";
 import { LeaveRequest } from "@/lib/types";
 
 // 승인은 수정 권한 이상(수정 등급 + 관리자)이 할 수 있지만, 반려는 관리자만 할 수 있다.
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const admin = isAdminRequest(req);
+  const admin = isAttendanceAdminRequest(req);
   const modifier = isModifierRequest(req);
   if (!admin && !modifier) {
     return NextResponse.json({ error: "수정 권한 이상만 처리할 수 있습니다." }, { status: 403 });
@@ -32,7 +32,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "이미 처리된 신청은 승인할 수 없습니다." }, { status: 409 });
   }
 
-  const decidedBy = admin ? getAdminName(req) ?? "관리자" : requireActor(req, {}) ?? "관리자";
+  const decidedBy = admin ? getAttendanceActorName(req) ?? "관리자" : requireActor(req, {}) ?? "관리자";
   db.prepare(
     "UPDATE leave_request SET status = ?, decided_by = ?, decided_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"
   ).run(status, decidedBy, id);
@@ -65,7 +65,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const row = db.prepare("SELECT * FROM leave_request WHERE id = ?").get(id) as LeaveRequest | undefined;
   if (!row) return NextResponse.json({ error: "신청 내역을 찾을 수 없습니다." }, { status: 404 });
 
-  const admin = isAdminRequest(req);
+  const admin = isAttendanceAdminRequest(req);
   if (!admin) {
     const workerId = getSessionWorkerId(req);
     if (workerId == null || workerId !== row.worker_id) {
@@ -81,7 +81,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     "leave_request",
     `${row.worker_name} ${row.type} ${row.start_date}`,
     "delete",
-    admin ? getAdminName(req) ?? "관리자" : row.worker_name
+    admin ? getAttendanceActorName(req) ?? "관리자" : row.worker_name
   );
   return NextResponse.json({ ok: true });
 }
