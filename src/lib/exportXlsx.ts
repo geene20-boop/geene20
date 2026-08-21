@@ -17,8 +17,12 @@ export function buildXlsxBufferFromAOA(rows: unknown[][], sheetName: string): Bu
 }
 
 export function xlsxResponseHeaders(filename: string): HeadersInit {
+  // 한글 파일명은 filename="..."에 퍼센트 인코딩된 문자열을 그대로 넣으면 브라우저가 인식하지 못해
+  // "download" 같은 이름으로 저장되는 경우가 있다. RFC 5987의 filename*=UTF-8''...를 함께 보내야
+  // 크롬·엣지·파이어폭스 모두에서 한글 파일명이 정상적으로 적용된다.
+  const encoded = encodeURIComponent(filename);
   return {
     "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,
+    "Content-Disposition": `attachment; filename="${encoded}"; filename*=UTF-8''${encoded}`,
   };
 }
