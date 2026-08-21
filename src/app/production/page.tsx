@@ -7,6 +7,8 @@ import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import { useSiteSession } from "@/lib/useSiteSession";
+import { getLabel, PRODUCTION_LABELS } from "@/lib/i18n";
+import DateNav from "@/components/DateNav";
 
 export const PRODUCT_OPTIONS = ["입상규산", "석회고토", "칼슘유황"];
 export const GRANULATION_AGENT_OPTIONS = ["당밀계열", "전분계열", "CMC계열"];
@@ -37,14 +39,15 @@ type FormState = {
   moisture_manual: string;
   hardness_manual: string;
   note: string;
+  time: string;
+  sample_no: string;
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
+const nowHHMM = () => new Date().toISOString().slice(11, 16);
 
-function shiftDate(date: string, delta: number): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + delta);
-  return d.toISOString().slice(0, 10);
+function formatDateForSampleNo(date: string): string {
+  return date.replace(/-/g, ".");
 }
 
 const emptyForm: FormState = {
@@ -73,6 +76,8 @@ const emptyForm: FormState = {
   moisture_manual: "",
   hardness_manual: "",
   note: "",
+  time: nowHHMM(),
+  sample_no: "",
 };
 
 function n(v: string): number | null {
@@ -112,6 +117,8 @@ function fromLog(row: ProductionLog): FormState {
     moisture_manual: toFormValue(row.moisture_manual),
     hardness_manual: toFormValue(row.hardness_manual),
     note: row.note ?? "",
+    time: row.time ?? nowHHMM(),
+    sample_no: row.sample_no ?? "",
   };
 }
 
@@ -215,6 +222,39 @@ export default function ProductionPage() {
   const [nameError, setNameError] = useState(false);
   const session = useSiteSession();
   const [tab, setTab] = useState<"condition" | "material" | "log">("log");
+
+  const labels = useMemo(() => {
+    const lang = session.language as "ko" | "cambodia" | "nepal" | undefined;
+    return {
+      time: getLabel(PRODUCTION_LABELS, lang, "time"),
+      sample_no: getLabel(PRODUCTION_LABELS, lang, "sample_no"),
+      shift: getLabel(PRODUCTION_LABELS, lang, "shift"),
+      worker: getLabel(PRODUCTION_LABELS, lang, "worker"),
+      product: getLabel(PRODUCTION_LABELS, lang, "product"),
+      daily_pack_amount: getLabel(PRODUCTION_LABELS, lang, "daily_pack_amount"),
+      dryer_temp_a: getLabel(PRODUCTION_LABELS, lang, "dryer_temp_a"),
+      dryer_temp_b: getLabel(PRODUCTION_LABELS, lang, "dryer_temp_b"),
+      feed_hopper_a: getLabel(PRODUCTION_LABELS, lang, "feed_hopper_a"),
+      feed_hopper_b: getLabel(PRODUCTION_LABELS, lang, "feed_hopper_b"),
+      feed_fine_powder: getLabel(PRODUCTION_LABELS, lang, "feed_fine_powder"),
+      feed_mixer: getLabel(PRODUCTION_LABELS, lang, "feed_mixer"),
+      feed_molder: getLabel(PRODUCTION_LABELS, lang, "feed_molder"),
+      brix: getLabel(PRODUCTION_LABELS, lang, "brix"),
+      granulation_agent: getLabel(PRODUCTION_LABELS, lang, "granulation_agent"),
+      granulation_usage_per_min: getLabel(PRODUCTION_LABELS, lang, "granulation_usage_per_min"),
+      line_hours_a: getLabel(PRODUCTION_LABELS, lang, "line_hours_a"),
+      line_hours_b: getLabel(PRODUCTION_LABELS, lang, "line_hours_b"),
+      downtime_hours: getLabel(PRODUCTION_LABELS, lang, "downtime_hours"),
+      downtime_reason: getLabel(PRODUCTION_LABELS, lang, "downtime_reason"),
+      lng_dryer: getLabel(PRODUCTION_LABELS, lang, "lng_dryer"),
+      lng_rto: getLabel(PRODUCTION_LABELS, lang, "lng_rto"),
+      carryover_dryer: getLabel(PRODUCTION_LABELS, lang, "carryover_dryer"),
+      carryover_rto: getLabel(PRODUCTION_LABELS, lang, "carryover_rto"),
+      moisture_manual: getLabel(PRODUCTION_LABELS, lang, "moisture_manual"),
+      hardness_manual: getLabel(PRODUCTION_LABELS, lang, "hardness_manual"),
+      note: getLabel(PRODUCTION_LABELS, lang, "note"),
+    };
+  }, [session.language]);
 
   useEffect(() => {
     if (session.loggedIn && session.displayName) {
@@ -344,10 +384,20 @@ export default function ProductionPage() {
       } else {
         setCurrentId(null);
         setLocked(false);
+        // compute next sample number for this date
+        const sameDate = logs.filter((l) => l.date === form.date);
+        const maxNum = sameDate.reduce((m, l) => {
+          if (!l.sample_no) return m;
+          const match = l.sample_no.match(/-(\d+)$/);
+          const num = match ? parseInt(match[1], 10) : 0;
+          return Math.max(m, num);
+        }, 0);
+        const nextNo = `${formatDateForSampleNo(form.date)}-${String(maxNum + 1).padStart(2, "0")}`;
         setForm((f) => ({
           ...emptyForm,
           date: f.date,
           shift: f.shift,
+          sample_no: nextNo,
           carryover_dryer: toFormValue(ctx.carryoverPreview?.dryer),
           carryover_rto: toFormValue(ctx.carryoverPreview?.rto),
           daily_pack_amount:
@@ -370,6 +420,7 @@ export default function ProductionPage() {
       cancelled = true;
     };
   }, [form.date, form.shift]);
+
 
   // 입력 중인 내용을 잠깐 멈춘 사이(0.8초) 브라우저에 임시 저장 - 저장 안 하고 나가도 복구 가능
   useEffect(() => {
@@ -512,6 +563,8 @@ export default function ProductionPage() {
         moisture_manual: n(form.moisture_manual),
         hardness_manual: n(form.hardness_manual),
         note: form.note || null,
+        time: form.time || null,
+        sample_no: form.sample_no || null,
       };
       if (carryoverUnlocked) {
         body.carryOverride = true;
@@ -616,33 +669,7 @@ export default function ProductionPage() {
         <div className="flex items-center justify-between px-3 pt-3 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-semibold text-slate-700">최근 생산일지</h2>
-            <button
-              type="button"
-              onClick={() => setLogsDate((d) => shiftDate(d, -1))}
-              className="border rounded-md px-2 py-1 text-xs"
-            >
-              ◀ 전날
-            </button>
-            <input
-              type="date"
-              value={logsDate}
-              onChange={(e) => setLogsDate(e.target.value)}
-              className="border rounded-md px-2 py-1 text-xs"
-            />
-            <button
-              type="button"
-              onClick={() => setLogsDate((d) => shiftDate(d, 1))}
-              className="border rounded-md px-2 py-1 text-xs"
-            >
-              다음날 ▶
-            </button>
-            <button
-              type="button"
-              onClick={() => setLogsDate(today())}
-              className="border rounded-md px-2 py-1 text-xs"
-            >
-              오늘
-            </button>
+            <DateNav value={logsDate} onChange={setLogsDate} />
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -816,6 +843,28 @@ export default function ProductionPage() {
         {tab === "condition" && (
         <>
         <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${contentLocked ? "opacity-50 pointer-events-none" : ""}`}>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-600">{labels.time}</span>
+            <input
+              type="time"
+              value={form.time}
+              onChange={(e) => set("time", e.target.value)}
+              className="border rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-slate-400"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-600">{labels.sample_no}</span>
+            <input
+              type="text"
+              value={form.sample_no}
+              onChange={(e) => set("sample_no", e.target.value)}
+              placeholder={`${formatDateForSampleNo(form.date)}-01`}
+              className="border rounded-md px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-slate-400 bg-slate-50"
+              readOnly
+            />
+          </label>
+        </div>
+        <div className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${contentLocked ? "opacity-50 pointer-events-none" : ""}`}>
           <EnteredByField
             value={enteredBy}
             onChange={setEnteredBy}
@@ -823,7 +872,7 @@ export default function ProductionPage() {
             lockedValue={session.loggedIn ? session.displayName : null}
           />
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">조 / 작업자</span>
+            <span className="text-slate-600">{labels.shift} / {labels.worker}</span>
             <div className="flex gap-2">
               <select
                 value={form.shift}
@@ -851,11 +900,11 @@ export default function ProductionPage() {
             </div>
           </label>
           <div className="flex flex-col gap-1 text-sm">
-            <SelectField label="생산품목 (제품포장 자동 분류)" value={form.product} onChange={(v) => set("product", v)} options={PRODUCT_OPTIONS} />
+            <SelectField label={`${labels.product} (제품포장 자동 분류)`} value={form.product} onChange={(v) => set("product", v)} options={PRODUCT_OPTIONS} />
           </div>
           <div className="flex flex-col gap-1 text-sm">
             <span className={`flex items-center gap-1 ${packAmountMismatch ? "text-red-600 font-medium" : "text-slate-600"}`}>
-              일일포장량(ton) (제품포장 자동 반영)
+              {labels.daily_pack_amount} (제품포장 자동 반영)
               {packingRef?.tonQty != null && ` (포장일지 참고: ${packingRef.tonQty}톤)`}
             </span>
             <div className="flex gap-2">
@@ -920,21 +969,21 @@ export default function ProductionPage() {
         )}
 
         <Section title="건조로 셋팅 온도 (℃)">
-          <Field label="A라인" value={form.dryer_temp_a} onChange={(v) => set("dryer_temp_a", v)} />
-          <Field label="B라인" value={form.dryer_temp_b} onChange={(v) => set("dryer_temp_b", v)} />
+          <Field label={labels.dryer_temp_a} value={form.dryer_temp_a} onChange={(v) => set("dryer_temp_a", v)} />
+          <Field label={labels.dryer_temp_b} value={form.dryer_temp_b} onChange={(v) => set("dryer_temp_b", v)} />
         </Section>
 
         <Section title="라인 가동 시간 (Hr)">
-          <Field label="A라인" value={form.line_hours_a} onChange={(v) => set("line_hours_a", v)} />
-          <Field label="B라인" value={form.line_hours_b} onChange={(v) => set("line_hours_b", v)} />
-          <Field label="비가동시간" value={form.downtime_hours} onChange={(v) => set("downtime_hours", v)} />
+          <Field label={labels.line_hours_a} value={form.line_hours_a} onChange={(v) => set("line_hours_a", v)} />
+          <Field label={labels.line_hours_b} value={form.line_hours_b} onChange={(v) => set("line_hours_b", v)} />
+          <Field label={labels.downtime_hours} value={form.downtime_hours} onChange={(v) => set("downtime_hours", v)} />
           <div className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">A+B 합계 - 비가동 (자동)</span>
             <div className="border rounded-md px-2 py-1.5 bg-slate-50 text-slate-500">{lineHoursTotal.toFixed(2)}</div>
           </div>
           {(n(form.downtime_hours) ?? 0) > 0 && (
             <label className="flex flex-col gap-1 text-sm col-span-2 md:col-span-4">
-              <span className="text-amber-700 font-medium">비가동발생원인</span>
+              <span className="text-amber-700 font-medium">{labels.downtime_reason}</span>
               <input
                 type="text"
                 value={form.downtime_reason}
@@ -975,7 +1024,7 @@ export default function ProductionPage() {
         <div className="flex flex-wrap items-end gap-3">
           <div className={`flex flex-wrap items-end gap-3 ${contentLocked ? "opacity-50 pointer-events-none" : ""}`}>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-slate-600">조</span>
+              <span className="text-slate-600">{labels.shift}</span>
               <select
                 value={form.shift}
                 onChange={(e) => set("shift", e.target.value as "주" | "야")}
@@ -986,7 +1035,7 @@ export default function ProductionPage() {
               </select>
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-slate-600">작업자</span>
+              <span className="text-slate-600">{labels.worker}</span>
               <select
                 value={form.worker}
                 onChange={(e) => set("worker", e.target.value)}
@@ -1004,7 +1053,7 @@ export default function ProductionPage() {
               </select>
             </label>
             <div className="flex flex-col gap-1 text-sm">
-              <span className="text-slate-600">생산품목</span>
+              <span className="text-slate-600">{labels.product}</span>
               <div className="border rounded-md px-3 py-1.5 bg-slate-50 text-slate-600 min-w-[100px]">
                 {form.product || "-"}
               </div>
@@ -1014,26 +1063,26 @@ export default function ProductionPage() {
 
         <div className={`flex flex-col gap-4 ${contentLocked ? "opacity-50 pointer-events-none" : ""}`}>
         <Section title="원료 피딩 조건 (Hz)">
-          <Field label="A호퍼" value={form.feed_hopper_a} onChange={(v) => set("feed_hopper_a", v)} />
-          <Field label="B호퍼" value={form.feed_hopper_b} onChange={(v) => set("feed_hopper_b", v)} />
-          <Field label="A/B미분" value={form.feed_fine_powder} onChange={(v) => set("feed_fine_powder", v)} />
+          <Field label={labels.feed_hopper_a} value={form.feed_hopper_a} onChange={(v) => set("feed_hopper_a", v)} />
+          <Field label={labels.feed_hopper_b} value={form.feed_hopper_b} onChange={(v) => set("feed_hopper_b", v)} />
+          <Field label={labels.feed_fine_powder} value={form.feed_fine_powder} onChange={(v) => set("feed_fine_powder", v)} />
         </Section>
 
         <Section title="조립제 투입 단위 (ℓ/분)">
           <SelectField
-            label="조립제"
+            label={labels.granulation_agent}
             value={form.granulation_agent}
             onChange={(v) => set("granulation_agent", v)}
             options={GRANULATION_AGENT_OPTIONS}
           />
-          <Field label="혼합기" value={form.feed_mixer} onChange={(v) => set("feed_mixer", v)} />
-          <Field label="성형기" value={form.feed_molder} onChange={(v) => set("feed_molder", v)} />
+          <Field label={labels.feed_mixer} value={form.feed_mixer} onChange={(v) => set("feed_mixer", v)} />
+          <Field label={labels.feed_molder} value={form.feed_molder} onChange={(v) => set("feed_molder", v)} />
           <div className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">합계 (자동)</span>
             <div className="border rounded-md px-2 py-1.5 bg-slate-50 text-slate-500">{feedTotal.toFixed(2)}</div>
           </div>
           <Field
-            label={`조립제 Brix${qcRef.brix != null ? ` (QC평균 참고: ${qcRef.brix.toFixed(2)})` : ""}`}
+            label={`${labels.brix}${qcRef.brix != null ? ` (QC평균 참고: ${qcRef.brix.toFixed(2)})` : ""}`}
             value={form.brix}
             onChange={(v) => set("brix", v)}
           />
@@ -1042,8 +1091,8 @@ export default function ProductionPage() {
         <fieldset className="border rounded-lg p-4">
           <legend className="text-sm font-semibold text-slate-700 px-1">LNG 사용량 (㎥)</legend>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2">
-            <Field label="건조로 누계 (이번 조)" value={form.lng_dryer} onChange={(v) => set("lng_dryer", v)} />
-            <Field label="RTO 누계 (이번 조)" value={form.lng_rto} onChange={(v) => set("lng_rto", v)} />
+            <Field label={labels.lng_dryer} value={form.lng_dryer} onChange={(v) => set("lng_dryer", v)} />
+            <Field label={labels.lng_rto} value={form.lng_rto} onChange={(v) => set("lng_rto", v)} />
             <div className="flex flex-col gap-1 text-sm">
               <span className="text-slate-600">가동시간당 사용량 (자동)</span>
               <div className="border rounded-md px-2 py-1.5 bg-slate-50 text-slate-500">
@@ -1056,7 +1105,7 @@ export default function ProductionPage() {
               <span
                 className={`flex items-center gap-1 ${dryerCarryMismatch ? "text-red-600 font-medium" : "text-slate-600"}`}
               >
-                전일재고 - 건조로 누계
+                {labels.carryover_dryer}
                 {carryoverUnlocked ? (
                   <span className="text-[11px] text-emerald-600 font-normal">(수정 가능)</span>
                 ) : (
@@ -1089,7 +1138,7 @@ export default function ProductionPage() {
               <span
                 className={`flex items-center gap-1 ${rtoCarryMismatch ? "text-red-600 font-medium" : "text-slate-600"}`}
               >
-                전일재고 - RTO 누계
+                {labels.carryover_rto}
                 {carryoverUnlocked ? (
                   <span className="text-[11px] text-emerald-600 font-normal">(수정 가능)</span>
                 ) : (
@@ -1171,36 +1220,24 @@ export default function ProductionPage() {
               휴무일
             </button>
           </div>
-          {currentId != null && !locked && (
+          {currentId != null && (
             <button
               type="button"
-              onClick={onConfirmLock}
-              className="border border-emerald-300 text-emerald-700 rounded-md px-4 py-2 text-sm font-medium"
+              onClick={locked ? requestUnlock : onConfirmLock}
+              title={locked ? "관리자 로그인 후 잠금 해제" : "이 기록을 확정하고 잠그기"}
+              className={`border rounded-md px-4 py-2 text-sm font-medium ${
+                locked
+                  ? "border-slate-300 text-slate-600"
+                  : "border-emerald-300 text-emerald-700"
+              }`}
             >
-              확정
+              {locked ? "🔒 해제" : "🔓 확정"}
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            className="border rounded-md px-4 py-2 text-sm font-medium"
-          >
-            ↑ 맨 위로
-          </button>
           {message && <span className="text-sm text-slate-600">{message}</span>}
         </div>
       </form>
       )}
-
-
-      <button
-        type="button"
-        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-        className="fixed bottom-6 right-6 bg-slate-900 text-white rounded-full w-12 h-12 shadow-lg text-sm font-medium"
-        aria-label="맨 위로"
-      >
-        ↑ 맨위
-      </button>
     </div>
   );
 }

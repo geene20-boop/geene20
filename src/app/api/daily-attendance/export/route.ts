@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { isAdminRequest } from "@/lib/auth";
+import { isAttendanceAdminRequest } from "@/lib/auth";
 import { buildXlsxBuffer, xlsxResponseHeaders } from "@/lib/exportXlsx";
 import { DailyAttendanceStatus, Nationality, ShiftType } from "@/lib/types";
 import { STATUS_LABELS } from "../route";
@@ -13,18 +13,19 @@ function isValidDate(s: string): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  if (!isAdminRequest(req)) {
+  if (!isAttendanceAdminRequest(req)) {
     return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 403 });
   }
   const date = req.nextUrl.searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
   if (!isValidDate(date)) {
     return NextResponse.json({ error: "날짜를 확인해주세요." }, { status: 400 });
   }
+  const shiftFilter = req.nextUrl.searchParams.get("shift");
 
   const db = getDb();
   const workers = db
-    .prepare("SELECT id, name, nationality, shift_type FROM worker WHERE active = 1 ORDER BY name")
-    .all() as { id: number; name: string; nationality: Nationality; shift_type: ShiftType | null }[];
+    .prepare("SELECT id, name, nationality FROM worker WHERE active = 1 ORDER BY name")
+    .all() as { id: number; name: string; nationality: Nationality }[];
 
   const dailyRows = db
     .prepare("SELECT worker_id, shift, status, status_detail FROM daily_attendance WHERE date = ?")
@@ -44,22 +45,20 @@ export async function GET(req: NextRequest) {
     .all(date, date) as { worker_id: number; type: string }[];
   const leaveByWorker = new Map(leaveRows.map((r) => [r.worker_id, r]));
 
-  const sheetRows = workers.map((w) => {
-    const daily = dailyByWorker.get(w.id);
-    const leave = leaveByWorker.get(w.id);
-    const shift = (daily?.shift ?? w.shift_type ?? "day") as ShiftType;
-    const status = leave
-      ? `${leave.type} (자동반영)`
-      : daily?.status
-      ? `${STATUS_LABELS[daily.status]}${daily.status_detail ? ` ${daily.status_detail}` : ""}`
-      : "정상출근";
-    return {
-      이름: w.name,
-      국적: NATIONALITY_LABELS[w.nationality],
-      근무조: SHIFT_LABELS[shift],
-      근태현황: status,
-    };
-  });
+  const sheetRows = workers
+    .map((w) => {
+      const daily = dailyByWorker.get(w.id);
+      const leave = leaveByWorker.get(w.id);
+      const shift = (daily?.shift ?? "day") as ShiftType;
+      const status = leave
+        ? `${leave.type} (자동반영)`
+        : daily?.status
+        ? `${STATUS_LABELS[daily.status]}${daily.status_detail ? ` ${daily.status_detail}` : ""}`
+        : "정상출근";
+      return { shift, sheetRow: { 이름: w.name, 국적: NATIONALITY_LABELS[w.nationality], 근무조: SHIFT_LABELS[shift], 근태현황: status } };
+    })
+    .filter((r) => (shiftFilter !== "day" && shiftFilter !== "night" ? true : r.shift === shiftFilter))
+    .map((r) => r.sheetRow);
 
   const buffer = buildXlsxBuffer(sheetRows, "일일출근부");
   return new NextResponse(new Uint8Array(buffer), {

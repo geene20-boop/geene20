@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getAdminName, isAdminRequest, isModifierRequest } from "@/lib/auth";
 import { logAudit, requireActor } from "@/lib/audit";
+import { deleteAttachmentFile } from "@/lib/fileStorage";
 import { BoardAttachment, BoardPost } from "@/lib/types";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -47,7 +48,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const post = db.prepare("SELECT * FROM board_post WHERE id = ?").get(id) as BoardPost | undefined;
   if (!post) return NextResponse.json({ error: "게시글을 찾을 수 없습니다." }, { status: 404 });
 
+  const attachments = db
+    .prepare("SELECT file_path FROM board_attachment WHERE post_id = ?")
+    .all(id) as { file_path: string }[];
+
+  db.prepare("DELETE FROM board_attachment WHERE post_id = ?").run(id);
   db.prepare("DELETE FROM board_post WHERE id = ?").run(id);
+  for (const a of attachments) deleteAttachmentFile(a.file_path);
+
   const actor = isAdminRequest(req) ? getAdminName(req) ?? "관리자" : requireActor(req, {}) ?? "관리자";
   logAudit("board_post", post.title, "delete", actor);
   return NextResponse.json({ ok: true });

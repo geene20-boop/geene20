@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
+import { saveAttachmentFile } from "@/lib/fileStorage";
 
 const DATA_DIR = process.env.DB_DIR ?? path.join(process.cwd(), "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -10,6 +11,125 @@ const DB_PATH = path.join(DATA_DIR, "app.db");
 
 declare global {
   var __db: Database.Database | undefined;
+}
+
+// 예전 버전에서 만들어진 DB는 첨부 원본을 data BLOB 컬럼에 그대로 들고 있다.
+// 그 컬럼이 아직 남아있으면(=파일 분리 이전 DB) 한 번만 파일로 옮기고 테이블을 다시 만든다.
+// (SQLite는 컬럼 삭제를 ALTER TABLE로 직접 지원하지 않아 테이블을 재생성한다.)
+function migrateBoardAttachmentBlobsToFiles(db: Database.Database): void {
+  const cols = new Set(
+    (db.prepare("PRAGMA table_info(board_attachment)").all() as { name: string }[]).map((c) => c.name)
+  );
+  if (!cols.has("data")) return; // 이미 마이그레이션됨
+
+  const rows = db
+    .prepare("SELECT id, post_id, filename, mime_type, size, data, created_at FROM board_attachment")
+    .all() as {
+    id: number;
+    post_id: number;
+    filename: string;
+    mime_type: string | null;
+    size: number;
+    data: Buffer;
+    created_at: string;
+  }[];
+
+  const runMigration = db.transaction(() => {
+    db.exec("ALTER TABLE board_attachment RENAME TO board_attachment_old_blob");
+    db.exec(`
+      CREATE TABLE board_attachment (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        post_id INTEGER NOT NULL REFERENCES board_post(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        mime_type TEXT,
+        size INTEGER NOT NULL,
+        file_path TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    const insert = db.prepare(
+      "INSERT INTO board_attachment (id, post_id, filename, mime_type, size, file_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    );
+    for (const row of rows) {
+      const filePath = saveAttachmentFile("board", row.filename, row.data);
+      insert.run(row.id, row.post_id, row.filename, row.mime_type, row.size, filePath, row.created_at);
+    }
+    db.exec("DROP TABLE board_attachment_old_blob");
+  });
+  runMigration();
+  db.exec("CREATE INDEX IF NOT EXISTS idx_board_attachment_post ON board_attachment(post_id)");
+}
+
+function migrateDocumentFileBlobsToFiles(db: Database.Database): void {
+  const cols = new Set(
+    (db.prepare("PRAGMA table_info(document_file)").all() as { name: string }[]).map((c) => c.name)
+  );
+  if (!cols.has("data")) return; // 이미 마이그레이션됨
+
+  const rows = db
+    .prepare(
+      `SELECT id, doc_type, category, item_name, language, ref_date, filename, mime_type, size, data, entered_by, created_at
+       FROM document_file`
+    )
+    .all() as {
+    id: number;
+    doc_type: string;
+    category: string;
+    item_name: string;
+    language: string | null;
+    ref_date: string | null;
+    filename: string;
+    mime_type: string | null;
+    size: number;
+    data: Buffer;
+    entered_by: string;
+    created_at: string;
+  }[];
+
+  const runMigration = db.transaction(() => {
+    db.exec("ALTER TABLE document_file RENAME TO document_file_old_blob");
+    db.exec(`
+      CREATE TABLE document_file (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        doc_type TEXT NOT NULL,
+        category TEXT NOT NULL,
+        item_name TEXT NOT NULL,
+        language TEXT,
+        ref_date TEXT,
+        filename TEXT NOT NULL,
+        mime_type TEXT,
+        size INTEGER NOT NULL,
+        file_path TEXT NOT NULL,
+        entered_by TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    const insert = db.prepare(
+      `INSERT INTO document_file
+         (id, doc_type, category, item_name, language, ref_date, filename, mime_type, size, file_path, entered_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const row of rows) {
+      const filePath = saveAttachmentFile("documents", row.filename, row.data);
+      insert.run(
+        row.id,
+        row.doc_type,
+        row.category,
+        row.item_name,
+        row.language,
+        row.ref_date,
+        row.filename,
+        row.mime_type,
+        row.size,
+        filePath,
+        row.entered_by,
+        row.created_at
+      );
+    }
+    db.exec("DROP TABLE document_file_old_blob");
+  });
+  runMigration();
+  db.exec("CREATE INDEX IF NOT EXISTS idx_document_file_type ON document_file(doc_type, item_name)");
 }
 
 export function getDb(): Database.Database {
@@ -75,7 +195,9 @@ export function getDb(): Database.Database {
       granulation_brix REAL,            -- 생산조건 - 조립제 당도
       granulation_input REAL,           -- 생산조건 - 조립제 투입량
       fine_powder REAL,                 -- 생산조건 - 미분말
-      hopper REAL,                      -- 생산조건 - 호퍼
+      hopper REAL,                      -- 생산조건 - 호퍼 (구버전, hopper_a/b로 대체됨)
+      hopper_a REAL,                    -- 생산조건 - 호퍼 A
+      hopper_b REAL,                    -- 생산조건 - 호퍼 B
       moisture REAL,                    -- 수분
       worker TEXT,                      -- 작업자
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -97,6 +219,22 @@ export function getDb(): Database.Database {
       key TEXT PRIMARY KEY,
       value TEXT,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- 로그인 시도 제한(무차별 대입 방지). 예전에는 서버 메모리(Map)에만 있어서 재배포할
+    -- 때마다 초기화됐는데, 여기로 옮겨서 재배포와 무관하게 잠금 상태가 유지되게 한다.
+    CREATE TABLE IF NOT EXISTS login_attempt (
+      key TEXT PRIMARY KEY,       -- 'admin' 또는 'site:<아이디>'
+      count INTEGER NOT NULL DEFAULT 0,
+      locked_until INTEGER NOT NULL DEFAULT 0, -- epoch ms, 0이면 잠기지 않음
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- 오프사이트(R2) 백업으로 이미 올린 첨부파일을 기록해, 매번 전체를 다시 올리지
+    -- 않고 아직 안 올린 파일만 골라 올릴 수 있게 한다.
+    CREATE TABLE IF NOT EXISTS offsite_upload_log (
+      file_path TEXT PRIMARY KEY,  -- data/attachments/ 기준 상대경로 (board/..., documents/...)
+      uploaded_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS admin_auth (
@@ -130,8 +268,12 @@ export function getDb(): Database.Database {
       elec1_won REAL,                   -- 1공장 전력 금액(원)
       elec2_kwh REAL,                   -- 2공장 전력 사용량(kWh)
       elec2_won REAL,                   -- 2공장 전력 금액(원)
-      lng_m3 REAL,                      -- LNG 사용량(㎥)
-      lng_won REAL,                     -- LNG 금액(원)
+      lng_m3 REAL,                      -- LNG 사용량(㎥) (구버전, lng_dryer_m3/lng_rto_m3로 대체됨)
+      lng_won REAL,                     -- LNG 금액(원) (구버전, lng_dryer_won/lng_rto_won로 대체됨)
+      lng_dryer_m3 REAL,                -- 건조로 LNG 사용량(㎥) - 실청구금액 입력에서 입력
+      lng_dryer_won REAL,               -- 건조로 LNG 금액(원) - 실청구금액 입력에서 입력
+      lng_rto_m3 REAL,                  -- RTO LNG 사용량(㎥) - 실청구금액 입력에서 입력
+      lng_rto_won REAL,                 -- RTO LNG 금액(원) - 실청구금액 입력에서 입력
       diesel_liter REAL,               -- 경유 사용량(ℓ)
       diesel_won REAL,                  -- 경유 금액(원)
       production_ton REAL,             -- 생산량(ton) 보정값(비우면 일별 합산 사용)
@@ -240,6 +382,89 @@ export function getDb(): Database.Database {
 
     CREATE INDEX IF NOT EXISTS idx_packing_adjustment_date ON packing_adjustment(date);
 
+    -- ---------- 원재료관리 ----------
+    CREATE TABLE IF NOT EXISTS raw_material (
+      key TEXT PRIMARY KEY,               -- 코드 (예: A01)
+      name TEXT NOT NULL,                 -- 원재료명
+      form TEXT NOT NULL DEFAULT 'solid', -- 'solid'(고상) | 'liquid'(액상)
+      category TEXT,
+      unit TEXT,
+      submit_to TEXT,                     -- 제출처
+      last_price REAL,                    -- 최근 단가 (입고입력 기본값으로 자동 채워짐)
+      stock REAL NOT NULL DEFAULT 0,
+      locked INTEGER NOT NULL DEFAULT 0,
+      approved_by TEXT,
+      approved_at TEXT,
+      entered_by TEXT,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS raw_material_supplier (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      address TEXT,
+      phone TEXT,
+      entered_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS raw_material_inbound (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      material_key TEXT NOT NULL,
+      supplier_id INTEGER,
+      supplier_name TEXT,          -- 입력 시점 공급처명 스냅샷
+      qty REAL NOT NULL,
+      unit TEXT,
+      unit_price REAL,
+      amount REAL,
+      vehicle_no TEXT,             -- 비고(차량번호)
+      judgment TEXT NOT NULL DEFAULT 'OK', -- 'OK' | 'NG'
+      problem TEXT,
+      reason TEXT,
+      action_taken TEXT,
+      judged_by TEXT,
+      locked INTEGER NOT NULL DEFAULT 0,
+      approved_by TEXT,
+      approved_at TEXT,
+      entered_by TEXT,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_raw_material_inbound_date ON raw_material_inbound(date);
+    CREATE INDEX IF NOT EXISTS idx_raw_material_inbound_material ON raw_material_inbound(material_key);
+
+    CREATE TABLE IF NOT EXISTS raw_material_price_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      material_key TEXT NOT NULL,
+      effective_date TEXT NOT NULL,
+      old_price REAL,
+      new_price REAL NOT NULL,
+      changed_by TEXT,
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_raw_material_price_history_key ON raw_material_price_history(material_key);
+
+    -- 양식출력에서 저장한 문서(성적서 발급 이력처럼 다시 조회/다운로드 가능)
+    CREATE TABLE IF NOT EXISTS raw_material_document (
+      id TEXT PRIMARY KEY,
+      doc_type TEXT NOT NULL,      -- 'form19_2' | 'form40' | 'inbound_certificate' | 'product_certificate'
+      title TEXT,
+      target_material TEXT,
+      period_from TEXT,
+      period_to TEXT,
+      data_json TEXT NOT NULL,     -- 생성 시점 데이터 스냅샷(JSON)
+      memo TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_raw_material_document_created ON raw_material_document(created_at);
+
     -- 개인별 계정 (아이디/비밀번호 + 조회/입력 권한). 관리자 비밀번호(admin_auth)와는 별개.
     CREATE TABLE IF NOT EXISTS user_account (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -251,6 +476,22 @@ export function getDb(): Database.Database {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- 모듈별 대분류 권한 (대분류 수준에서 해당 모듈의 모든 기능에 동일하게 적용)
+    CREATE TABLE IF NOT EXISTS module_permission (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES user_account(id) ON DELETE CASCADE,
+      module TEXT NOT NULL,             -- '시스템관리' | '근태관리' | '생산관리' 등
+      can_view INTEGER NOT NULL DEFAULT 0,   -- 1: 조회 가능
+      can_create INTEGER NOT NULL DEFAULT 0, -- 1: 입력 가능
+      can_update INTEGER NOT NULL DEFAULT 0, -- 1: 수정 가능
+      can_delete INTEGER NOT NULL DEFAULT 0, -- 1: 삭제 가능
+      is_hidden INTEGER NOT NULL DEFAULT 0,  -- 1: 화면에 표시 안 함
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, module)
+    );
+    CREATE INDEX IF NOT EXISTS idx_module_permission_user ON module_permission(user_id);
 
     -- 근로자명부 (생산/출하 입력 등에서 작업자를 드롭다운으로 선택하기 위한 목록)
     CREATE TABLE IF NOT EXISTS worker (
@@ -303,13 +544,15 @@ export function getDb(): Database.Database {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- 첨부 원본 바이트는 DB가 아니라 파일(ATTACHMENTS_DIR)에 저장하고, file_path에는
+    -- 그 상대경로만 넣는다 (백업 시 DB 파일이 첨부 용량만큼 비대해지는 것을 막기 위함).
     CREATE TABLE IF NOT EXISTS board_attachment (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       post_id INTEGER NOT NULL REFERENCES board_post(id) ON DELETE CASCADE,
       filename TEXT NOT NULL,
       mime_type TEXT,
       size INTEGER NOT NULL,
-      data BLOB NOT NULL,
+      file_path TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_board_attachment_post ON board_attachment(post_id);
@@ -320,12 +563,82 @@ export function getDb(): Database.Database {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       worker_id INTEGER NOT NULL,
       date TEXT NOT NULL,
-      shift TEXT,               -- 'day' | 'night' (비어있으면 근로자명부 기본 근무형태를 사용)
+      shift TEXT,               -- 'day' | 'night' (비어있으면 주간을 기본값으로 사용)
       status TEXT,              -- 'early_leave' | 'comp_off' | 'late' | 'absent' | 'other' (없으면 정상출근)
       status_detail TEXT,
       updated_by TEXT,
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(worker_id, date)
+    );
+
+    -- 문서관리: 외부기관 시험성적서(test_report) / MSDS(msds) 공용 업로드 파일
+    CREATE TABLE IF NOT EXISTS document_file (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      doc_type TEXT NOT NULL,          -- 'test_report' | 'msds'
+      category TEXT NOT NULL,          -- '원료' | '제품'
+      item_name TEXT NOT NULL,
+      language TEXT,                   -- test_report만 사용: '국문' | '영문' | '기타'
+      ref_date TEXT,                   -- test_report=시험일자, msds=개정일자 (YYYY-MM-DD)
+      filename TEXT NOT NULL,
+      mime_type TEXT,
+      size INTEGER NOT NULL,
+      file_path TEXT NOT NULL,
+      entered_by TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_document_file_type ON document_file(doc_type, item_name);
+
+    -- 자체시험성적서(수출용): 품목별 규격/비고 마스터 (품목 선택 시 자동입력용)
+    CREATE TABLE IF NOT EXISTS self_test_item_spec (
+      item_name TEXT PRIMARY KEY,
+      specification TEXT,
+      remarks TEXT,
+      updated_by TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- 자체시험성적서 발행 이력
+    CREATE TABLE IF NOT EXISTS self_test_certificate (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_no TEXT,
+      item_name TEXT NOT NULL,
+      specification TEXT,
+      remarks TEXT,
+      result TEXT,
+      language TEXT NOT NULL DEFAULT '국문',   -- '국문' | '영문'
+      consignee TEXT,                          -- 발송처 (자유입력)
+      issued_date TEXT NOT NULL,
+      issued_by TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_self_test_certificate_date ON self_test_certificate(issued_date);
+
+    -- 연구실험일지: 항목형 / 자유기술형 / 외부시험연동형 공용
+    CREATE TABLE IF NOT EXISTS lab_journal (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      form_type TEXT NOT NULL,        -- '항목형' | '자유기술형' | '외부시험연동형'
+      date TEXT NOT NULL,
+      researcher TEXT,
+      item_name TEXT,
+      title TEXT NOT NULL,
+      content_json TEXT NOT NULL,     -- 양식별 세부 데이터 (JSON)
+      linked_report_id INTEGER REFERENCES document_file(id) ON DELETE SET NULL,
+      entered_by TEXT NOT NULL,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_lab_journal_date ON lab_journal(date);
+
+    -- 탭 표시 여부 설정 (시스템 전체 사용자에게 일괄 적용)
+    CREATE TABLE IF NOT EXISTS tab_visibility (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      module TEXT NOT NULL,      -- '생산관리' | '생산가동' | '생산/출하입력' 등
+      feature TEXT NOT NULL,     -- 'backup' | 'maintenance' 등 - 탭 이름
+      visible INTEGER NOT NULL DEFAULT 1, -- 1: 표시, 0: 숨김
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(module, feature)
     );
   `);
 
@@ -352,6 +665,8 @@ export function getDb(): Database.Database {
     ["entered_by", "TEXT"],
     ["updated_by", "TEXT"],
     ["locked", "INTEGER NOT NULL DEFAULT 0"],
+    ["time", "TEXT"],
+    ["sample_no", "TEXT"],
   ]);
   migrateColumns("qc_test", [
     ["entered_by", "TEXT"],
@@ -359,6 +674,8 @@ export function getDb(): Database.Database {
     ["measured_date", "TEXT"],
     ["measured_time", "TEXT"],
     ["moisture_note", "TEXT"],
+    ["hopper_a", "REAL"],
+    ["hopper_b", "REAL"],
   ]);
   migrateColumns("electricity_usage", [
     ["entered_by", "TEXT"],
@@ -370,6 +687,10 @@ export function getDb(): Database.Database {
     ["locked", "INTEGER NOT NULL DEFAULT 0"],
     ["approved_by", "TEXT"],
     ["approved_at", "TEXT"],
+    ["lng_dryer_m3", "REAL"],
+    ["lng_dryer_won", "REAL"],
+    ["lng_rto_m3", "REAL"],
+    ["lng_rto_won", "REAL"],
   ]);
   migrateColumns("spec_limit", [["updated_by", "TEXT"]]);
   migrateColumns("packing_item", [
@@ -402,9 +723,23 @@ export function getDb(): Database.Database {
   migrateColumns("board_post", [["pinned", "INTEGER NOT NULL DEFAULT 0"]]);
   migrateColumns("worker", [
     ["hire_date", "TEXT"],
-    ["shift_type", "TEXT"], // 'day' | 'night'
     ["nationality", "TEXT NOT NULL DEFAULT 'domestic'"], // 'domestic' | 'foreign'
+    ["birth_date", "TEXT"],
+    ["foreign_country", "TEXT"], // 'cambodia' | 'nepal' (외국인일 때만 사용)
   ]);
+  migrateColumns("raw_material_supplier", [["country", "TEXT"]]);
+  migrateColumns("raw_material", [
+    // 별지 제40호서식(유기농업자재 공시 원료·재료 수급대장) 발급용, 자재(품목)마다 고정되는 공시 정보
+    ["disclosure_no", "TEXT"],
+    ["disclosure_date", "TEXT"],
+    ["material_type", "TEXT"],
+    ["main_ingredients", "TEXT"],
+    ["disclosure_valid_from", "TEXT"],
+    ["disclosure_valid_to", "TEXT"],
+  ]);
+
+  migrateBoardAttachmentBlobsToFiles(db);
+  migrateDocumentFileBlobsToFiles(db);
 
   const specCount = db.prepare("SELECT COUNT(*) as c FROM spec_limit").get() as { c: number };
   if (specCount.c === 0) {
@@ -483,4 +818,13 @@ export function setSetting(key: string, value: string): void {
     `INSERT INTO app_setting (key, value) VALUES (?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
   ).run(key, value);
+}
+
+export function isTabVisible(module: string, feature: string): boolean {
+  const db = getDb();
+  const row = db.prepare("SELECT visible FROM tab_visibility WHERE module = ? AND feature = ?").get(module, feature) as
+    | { visible: number }
+    | undefined;
+  // 기본값은 표시(1)
+  return row ? row.visible === 1 : true;
 }

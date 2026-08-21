@@ -6,6 +6,7 @@ import {
   getDailyProduction,
   getMonthlyProduction,
   getSeasonProduction,
+  getSeasonProductionByCategory,
 } from "@/lib/packingProductionSummary";
 
 function makeDb(): Database.Database {
@@ -181,5 +182,43 @@ describe("getDailyPackingSummary", () => {
     const db = makeCategoryDb();
     const summary = getDailyPackingSummary(db, "2026-07-01");
     expect(summary).toEqual({ totalTons: 0, suggestedProduct: null });
+  });
+});
+
+describe("getSeasonProductionByCategory", () => {
+  function makeDbWithSub(): Database.Database {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE packing_item (
+        key TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        category TEXT,
+        sub TEXT,
+        bag_kg REAL
+      );
+      CREATE TABLE packing_entry (
+        id TEXT PRIMARY KEY,
+        date TEXT NOT NULL,
+        type TEXT NOT NULL,
+        product_key TEXT NOT NULL,
+        qty REAL NOT NULL
+      );
+    `);
+    return db;
+  }
+
+  it("실제 품목처럼 카테고리에 관리번호가 붙어있어도(\"[04]톤백\") 톤백 제품을 올바른 대분류로 집계한다", () => {
+    const db = makeDbWithSub();
+    db.prepare(
+      "INSERT INTO packing_item (key, kind, category, sub, bag_kg) VALUES ('tonbag_gyusan', 'product', '[04]톤백', '[2-D]규산(1T)', 1000)"
+    ).run();
+    db.prepare(
+      "INSERT INTO packing_entry (id, date, type, product_key, qty) VALUES ('1', '2026-07-01', 'pack', 'tonbag_gyusan', 3)"
+    ).run();
+
+    const rows = getSeasonProductionByCategory(db);
+    const season = rows.find((r) => r.season === "2026-2027");
+    expect(season?.tons).toBe(3);
+    expect(season?.byCategory.find((c) => c.category === "입상규산")?.tons).toBe(3);
   });
 });
