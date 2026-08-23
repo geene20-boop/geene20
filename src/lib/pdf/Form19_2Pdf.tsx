@@ -14,14 +14,16 @@ export type Form19_2PdfRow = {
   isPlaceholder?: boolean;
 };
 
+// 전화번호(예: "054)220-0328", "010-1234-5678")가 잘리거나 옆 칸(생산국가)과 겹치지 않도록
+// phone 칸 폭을 넉넉하게 잡고, 그만큼을 material/company/address/country에서 조금씩 덜어왔다.
 const COL = {
   date: "11%",
   fertType: "9%",
-  material: "11%",
-  company: "9%",
-  address: "15%",
-  phone: "8%",
-  country: "7%",
+  material: "10%",
+  company: "8%",
+  address: "13%",
+  phone: "13%",
+  country: "6%",
   qty: "10%",
   note: "20%",
 };

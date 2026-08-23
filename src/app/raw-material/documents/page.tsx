@@ -78,7 +78,19 @@ export default function RawMaterialDocumentsPage() {
   const materialByKey = useMemo(() => new Map(materials.map((m) => [m.key, m])), [materials]);
 
   function toggleForm40Material(key: string) {
-    setForm40MaterialKeys((keys) => (keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key]));
+    setForm40MaterialKeys((keys) => {
+      const next = keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key];
+      // 대표(맨 처음 체크한) 원재료가 바뀌면, 대상 비종을 아직 직접 입력하지 않은 경우에 한해
+      // 공시서에 기재된 공식 자재명(disclosure_material_name)을 자동으로 채워준다.
+      if (next.length > 0 && next[0] !== keys[0]) {
+        const rep = materialByKey.get(next[0]);
+        if (rep?.disclosure_material_name) {
+          const autoName = rep.disclosure_material_name;
+          setTargetMaterial((cur) => (cur.trim() === "" ? autoName : cur));
+        }
+      }
+      return next;
+    });
   }
 
   async function preview() {

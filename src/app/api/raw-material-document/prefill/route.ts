@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb, getSetting } from "@/lib/db";
-import { RawMaterial, RawMaterialInbound, RawMaterialSupplier } from "@/lib/types";
+import { RawMaterial, RawMaterialDisclosureIngredient, RawMaterialInbound, RawMaterialSupplier } from "@/lib/types";
+
+function parseIngredients(json: string | null): RawMaterialDisclosureIngredient[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 // 양식출력 2단계 "데이터 미리보기"에서 쓰는 자동 프리필 조회.
 // - form19_2: 기간·원재료(단일, 선택 안 하면 전체)로 입고대장 여러 건을 가져온다.
@@ -127,23 +137,45 @@ export async function GET(req: NextRequest) {
     docType === "form40" && materialKeys.length > 0 ? materialByKey.get(materialKeys[0]) : undefined;
   if (from !== "0000-01-01" && to !== "9999-12-31" && primaryMaterial) {
     const quartersWithData = new Set(rows.map((r) => quarterLabel(r.date)));
+    const ingredients = parseIngredients(primaryMaterial.disclosure_ingredients_json);
     const placeholderMaterialName = primaryMaterial.main_ingredients ?? primaryMaterial.name ?? "";
     for (const label of quartersInRange(from, to)) {
       if (quartersWithData.has(label)) continue;
-      rows.push({
-        date: label,
-        materialKey: primaryMaterial?.key,
-        materialName: placeholderMaterialName,
-        category: primaryMaterial?.category ?? "",
-        supplierName: "",
-        supplierAddress: "",
-        supplierPhone: "",
-        supplierCountry: "",
-        qty: null,
-        note: "실적없음",
-        isPlaceholder: true,
-        included: true,
-      });
+      // 성분별 거래처 정보(disclosure_ingredients_json)가 있으면 성분 개수만큼 행을 나눠서
+      // 각 성분의 실제 구입처(업체명·주소·전화)를 자동으로 채운다. 없으면 기존 방식대로 한 줄만 넣는다.
+      if (ingredients.length > 0) {
+        for (const ing of ingredients) {
+          rows.push({
+            date: label,
+            materialKey: primaryMaterial?.key,
+            materialName: ing.name,
+            category: primaryMaterial?.category ?? "",
+            supplierName: ing.supplierName,
+            supplierAddress: ing.supplierAddress,
+            supplierPhone: ing.supplierPhone,
+            supplierCountry: "",
+            qty: null,
+            note: "실적없음",
+            isPlaceholder: true,
+            included: true,
+          });
+        }
+      } else {
+        rows.push({
+          date: label,
+          materialKey: primaryMaterial?.key,
+          materialName: placeholderMaterialName,
+          category: primaryMaterial?.category ?? "",
+          supplierName: "",
+          supplierAddress: "",
+          supplierPhone: "",
+          supplierCountry: "",
+          qty: null,
+          note: "실적없음",
+          isPlaceholder: true,
+          included: true,
+        });
+      }
     }
     rows.sort((a, b) => a.date.localeCompare(b.date));
   }
@@ -151,7 +183,10 @@ export async function GET(req: NextRequest) {
   let meta: Record<string, string> | null = null;
   if (docType === "form40" && materialKeys.length > 0) {
     const primary = materialByKey.get(materialKeys[0]);
-    const allNames = materialKeys.map((k) => materialByKey.get(k)?.name ?? k).join(", ");
+    // 자재의 명칭은 공시서에 기재된 공식 자재명(disclosure_material_name, 예: "규산질")을 우선 쓰고,
+    // 없으면 기존처럼 선택한 원재료들의 내부 품목명을 나열한다.
+    const allNames =
+      primary?.disclosure_material_name || materialKeys.map((k) => materialByKey.get(k)?.name ?? k).join(", ");
     meta = {
       companyName: getSetting("company_name") ?? "",
       companyCeo: getSetting("company_ceo") ?? "",
