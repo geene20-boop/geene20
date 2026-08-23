@@ -57,6 +57,23 @@ function n(v: string): number | null {
   return Number.isNaN(num) ? null : num;
 }
 
+// 목재PLT 자동계산 대상: 석회고토/입상규산의 무상분·유상분·생생나라(유기농) 6개 품목
+const PLT_WOOD_DIVISOR = 90;
+function isPltProduct(item: PackingItem | undefined): boolean {
+  if (!item) return false;
+  const category = stripCode(item.category);
+  const sub = stripCode(item.sub);
+  return (
+    (category === "석회고토" || category === "입상규산") &&
+    (sub === "무상분" || sub === "유상분" || sub === "생생나라(유기농)")
+  );
+}
+function pltWoodQty(qty: string): string {
+  if (qty.trim() === "") return "";
+  const num = Number(qty);
+  return Number.isNaN(num) ? "" : String(Math.round(num / PLT_WOOD_DIVISOR));
+}
+
 export default function PackingEntryPage() {
   const [items, setItems] = useState<PackingItem[]>([]);
   const [entries, setEntries] = useState<PackingEntry[]>([]);
@@ -69,6 +86,8 @@ export default function PackingEntryPage() {
   const admin = useAdminSession();
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [bagMatQtyManual, setBagMatQtyManual] = useState(false);
+  const [auxQtyManual, setAuxQtyManual] = useState(false);
   const [rangeFrom, setRangeFrom] = useState(daysAgo(30));
   const [rangeTo, setRangeTo] = useState(today());
   const session = useSiteSession();
@@ -125,6 +144,11 @@ export default function PackingEntryPage() {
     () => auxItems.filter((i) => i.sub?.includes("10리터") || i.sub?.includes("IBC")),
     [auxItems]
   );
+  const isPltPacked = isPltProduct(selectedProduct);
+  const pltWoodItem = useMemo(
+    () => auxItems.find((i) => stripCode(i.sub) === "목재PLT"),
+    [auxItems]
+  );
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -132,12 +156,38 @@ export default function PackingEntryPage() {
 
   function selectProduct(key: string) {
     const item = itemByKey.get(key);
-    setForm((f) => ({
-      ...f,
-      productKey: key,
-      bagMatQty: item?.bag_mat_key ? f.qty : "",
-      tonbagLinerKey: "",
-    }));
+    const nowPltPacked = isPltProduct(item);
+    setForm((f) => {
+      const next: FormState = {
+        ...f,
+        productKey: key,
+        bagMatQty: item?.bag_mat_key ? f.qty : "",
+        tonbagLinerKey: "",
+      };
+      if (nowPltPacked && pltWoodItem) {
+        next.auxUseKey = pltWoodItem.key;
+        next.auxUseQty = pltWoodQty(f.qty);
+      } else if (isPltProduct(itemByKey.get(f.productKey))) {
+        next.auxUseKey = "";
+        next.auxUseQty = "";
+      }
+      return next;
+    });
+    setBagMatQtyManual(false);
+    setAuxQtyManual(false);
+  }
+
+  function handleQtyChange(value: string) {
+    setForm((f) => {
+      const next: FormState = { ...f, qty: value };
+      if (selectedProduct?.bag_mat_key && !bagMatQtyManual) {
+        next.bagMatQty = value;
+      }
+      if (isPltPacked && pltWoodItem && !auxQtyManual) {
+        next.auxUseQty = pltWoodQty(value);
+      }
+      return next;
+    });
   }
 
   async function submit(e: React.FormEvent) {
@@ -177,6 +227,8 @@ export default function PackingEntryPage() {
       }
       setForm(emptyForm());
       setEditingId(null);
+      setBagMatQtyManual(false);
+      setAuxQtyManual(false);
       await Promise.all([loadItems(), loadEntries()]);
     } catch (err) {
       setMessage(`오류: ${(err as Error).message}`);
@@ -202,6 +254,9 @@ export default function PackingEntryPage() {
       auxUseQty: row.aux_use_qty != null ? String(row.aux_use_qty) : "",
       worker: row.worker ?? "",
     });
+    // 기존 저장값을 불러올 때는 자동계산으로 덮어쓰지 않음(수동 입력값으로 취급)
+    setBagMatQtyManual(true);
+    setAuxQtyManual(true);
   }
 
   async function removeEntry(id: string) {
@@ -323,7 +378,7 @@ export default function PackingEntryPage() {
             <input
               type="number"
               value={form.qty}
-              onChange={(e) => set("qty", e.target.value)}
+              onChange={(e) => handleQtyChange(e.target.value)}
               className="border rounded-md px-2 py-1.5"
               required
             />
@@ -334,9 +389,15 @@ export default function PackingEntryPage() {
               <input
                 type="number"
                 value={form.bagMatQty}
-                onChange={(e) => set("bagMatQty", e.target.value)}
+                onChange={(e) => {
+                  setBagMatQtyManual(true);
+                  set("bagMatQty", e.target.value);
+                }}
                 className="border rounded-md px-2 py-1.5"
               />
+              <span className="text-[11px] text-slate-400">
+                생산수량과 동일하게 자동 반영됩니다 (직접 수정 가능).
+              </span>
             </label>
           )}
           {form.type === "pack" && isTonbag && (
@@ -420,7 +481,28 @@ export default function PackingEntryPage() {
                 />
               </label>
             </div>
-            {isVita ? (
+            {isPltPacked && pltWoodItem ? (
+              <div className="flex flex-col gap-1 text-sm min-w-0">
+                <span className="text-slate-600">기타 부자재</span>
+                <div className="flex gap-2 min-w-0">
+                  <div className="border rounded-md px-2 py-1.5 flex-1 min-w-0 bg-slate-50 text-slate-600 truncate">
+                    {itemLabel(pltWoodItem)}
+                  </div>
+                  <input
+                    type="number"
+                    value={form.auxUseQty}
+                    onChange={(e) => {
+                      setAuxQtyManual(true);
+                      set("auxUseQty", e.target.value);
+                    }}
+                    className="border rounded-md px-2 py-1.5 w-20 shrink-0"
+                  />
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  목재PLT 수량은 생산수량 ÷ {PLT_WOOD_DIVISOR}으로 자동 계산됩니다 (직접 수정 가능).
+                </span>
+              </div>
+            ) : isVita ? (
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-slate-600">포장용기</span>
                 <select
@@ -480,6 +562,8 @@ export default function PackingEntryPage() {
               onClick={() => {
                 setEditingId(null);
                 setForm(emptyForm());
+                setBagMatQtyManual(false);
+                setAuxQtyManual(false);
               }}
               className="border rounded-md px-3 py-1.5 text-sm"
             >
