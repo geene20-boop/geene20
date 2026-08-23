@@ -9,7 +9,6 @@ import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 import { useSiteSession } from "@/lib/useSiteSession";
 
 type NewMaterialForm = {
-  key: string;
   name: string;
   form: RawMaterialForm;
   category: string;
@@ -19,7 +18,15 @@ type NewMaterialForm = {
 };
 
 function emptyMaterialForm(): NewMaterialForm {
-  return { key: "", name: "", form: "solid", category: "", unit: "", submitTo: "", initialStock: "" };
+  return { name: "", form: "solid", category: "", unit: "", submitTo: "", initialStock: "" };
+}
+
+// 유기농업자재 공시 유효기간은 시작일로부터 3년째 되는 날 하루 전까지 (예: 2024.08.08 → 2027.08.07)
+function addThreeYearsMinusOneDay(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setFullYear(d.getFullYear() + 3);
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
 }
 
 type DisclosureForm = {
@@ -88,7 +95,6 @@ export default function RawMaterialItemsPage() {
     try {
       await apiPost("/api/raw-material", {
         entered_by: enteredBy,
-        key: form.key,
         name: form.name,
         form: form.form,
         category: form.category || null,
@@ -206,7 +212,7 @@ export default function RawMaterialItemsPage() {
       <div>
         <h1 className="text-xl font-bold">품목관리 (원재료 마스터)</h1>
         <p className="text-sm text-slate-500 mt-1">
-          원재료 코드·단위·제출처를 등록하면 입고검수·입력부터 부적합이력·양식출력까지 전체 화면의
+          원재료명·단위·제출처를 등록하면 입고검수·입력부터 부적합이력·양식출력까지 전체 화면의
           드롭다운 소스로 사용됩니다. 관리자가 승인(잠금)하면 수정할 수 없습니다. 공급처는{" "}
           <a href="/raw-material/suppliers" className="underline text-sky-700">
             공급처 관리대장
@@ -235,16 +241,6 @@ export default function RawMaterialItemsPage() {
             error={nameError}
             lockedValue={session.loggedIn ? session.displayName : null}
           />
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">코드</span>
-            <input
-              value={form.key}
-              onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))}
-              className="border rounded-md px-2 py-1.5"
-              placeholder="A01"
-              required
-            />
-          </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">원재료명</span>
             <input
@@ -323,7 +319,6 @@ export default function RawMaterialItemsPage() {
         <table className="w-full text-sm mt-2">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
-              <th className="text-left px-3 py-2">코드</th>
               <th className="text-left px-3 py-2">원재료명</th>
               <th className="text-left px-3 py-2">성상</th>
               <th className="text-left px-3 py-2">단위</th>
@@ -337,7 +332,6 @@ export default function RawMaterialItemsPage() {
           <tbody>
             {materials.map((item) => (
               <tr key={item.key} className="border-t">
-                <td className="px-3 py-2 font-mono text-xs font-semibold text-slate-700">{item.key}</td>
                 {editKey === item.key ? (
                   <>
                     <td className="px-3 py-2">
@@ -429,7 +423,7 @@ export default function RawMaterialItemsPage() {
               (item) =>
                 disclosureKey === item.key && (
                   <tr key={`${item.key}-disclosure`} className="border-t bg-sky-50/50">
-                    <td colSpan={9} className="px-4 py-3">
+                    <td colSpan={8} className="px-4 py-3">
                       <div className="text-xs font-semibold text-sky-800 mb-2">
                         [{item.key}] {item.name} — 별지 제40호서식 공시정보
                       </div>
@@ -475,18 +469,26 @@ export default function RawMaterialItemsPage() {
                           <input
                             type="date"
                             value={disclosureForm.disclosureValidFrom}
-                            onChange={(e) => setDisclosureForm((f) => ({ ...f, disclosureValidFrom: e.target.value }))}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setDisclosureForm((f) => ({
+                                ...f,
+                                disclosureValidFrom: value,
+                                disclosureValidTo: value ? addThreeYearsMinusOneDay(value) : f.disclosureValidTo,
+                              }));
+                            }}
                             className="border rounded-md px-2 py-1"
                           />
                         </label>
                         <label className="flex flex-col gap-1 text-xs">
-                          <span className="text-slate-500">공시 유효기간(종료)</span>
+                          <span className="text-slate-500">공시 유효기간(종료) <span className="text-emerald-600">자동계산</span></span>
                           <input
                             type="date"
                             value={disclosureForm.disclosureValidTo}
                             onChange={(e) => setDisclosureForm((f) => ({ ...f, disclosureValidTo: e.target.value }))}
                             className="border rounded-md px-2 py-1"
                           />
+                          <span className="text-[10px] text-slate-400">시작일 + 3년 − 1일로 자동 채워짐 (직접 수정 가능)</span>
                         </label>
                       </div>
                       <div className="flex justify-end gap-2 mt-2">
@@ -503,7 +505,7 @@ export default function RawMaterialItemsPage() {
             )}
             {materials.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
                   등록된 원재료가 없습니다.
                 </td>
               </tr>

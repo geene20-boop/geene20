@@ -3,18 +3,20 @@ import { getDb } from "@/lib/db";
 import { RawMaterialDocType, RawMaterialDocument, RAW_MATERIAL_DOC_LABELS } from "@/lib/types";
 import { logAudit, requireActor } from "@/lib/audit";
 
-const VALID_DOC_TYPES: RawMaterialDocType[] = [
-  "form19_2",
-  "form40",
-  "inbound_certificate",
-  "product_certificate",
-];
+const VALID_DOC_TYPES: RawMaterialDocType[] = ["form19_2", "form40"];
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const db = getDb();
-  const rows = db
-    .prepare("SELECT * FROM raw_material_document ORDER BY created_at DESC")
-    .all() as RawMaterialDocument[];
+  const { searchParams } = new URL(req.url);
+  const from = searchParams.get("from");
+  const to = searchParams.get("to");
+  const rows = from && to
+    ? (db
+        .prepare(
+          "SELECT * FROM raw_material_document WHERE date(created_at) BETWEEN ? AND ? ORDER BY created_at DESC"
+        )
+        .all(from, to) as RawMaterialDocument[])
+    : (db.prepare("SELECT * FROM raw_material_document ORDER BY created_at DESC").all() as RawMaterialDocument[]);
   return NextResponse.json(rows);
 }
 

@@ -15,7 +15,7 @@ export async function GET() {
     const material = materialByKey.get(r.material_key);
     return {
       적용일: r.effective_date,
-      원재료: material ? `[${material.key}] ${material.name}` : r.material_key,
+      원재료: material ? material.name : r.material_key,
       이전단가: r.old_price ?? "",
       신규단가: r.new_price,
       증감: r.old_price != null ? r.new_price - r.old_price : "",
