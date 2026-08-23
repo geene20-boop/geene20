@@ -78,19 +78,31 @@ function migrateBoardAttachmentBlobsToFiles(db: Database.Database): void {
   db.exec("CREATE INDEX IF NOT EXISTS idx_board_attachment_post ON board_attachment(post_id)");
 }
 
+// 유기농업자재 공시 유효기간은 시작일로부터 3년째 되는 날 하루 전까지 (예: 2024-08-08 → 2027-08-07)
+function addThreeYearsMinusOneDay(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setFullYear(d.getFullYear() + 3);
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 // 유기농업자재 공시 3종 + 비료관리법 원료장부 2종(양식출력)에 쓰이는 원재료 마스터데이터를 채워 넣는다.
-// 이름으로 이미 등록되어 있으면 건드리지 않는다(운영 중인 실제 데이터를 덮어쓰지 않기 위함).
+// 이름으로 이미 등록되어 있으면 새로 만들지 않되, 공시정보(disclosure_no)가 아직 비어있는 경우에는
+// 채워 넣는다 — 화면에서 원재료만 먼저 등록해두고 공시정보는 비어있던 경우를 자동으로 보완하기 위함.
+// 이미 공시정보가 입력되어 있으면(누군가 직접 채워뒀으면) 절대 덮어쓰지 않는다.
 function seedDisclosureRawMaterials(db: Database.Database): void {
-  const existingNames = new Set(
-    (db.prepare("SELECT name FROM raw_material").all() as { name: string }[]).map((r) => r.name)
-  );
+  const existing = db
+    .prepare("SELECT key, name, disclosure_no FROM raw_material")
+    .all() as { key: string; name: string; disclosure_no: string | null }[];
+  const byName = new Map(existing.map((r) => [r.name, r]));
+
   function nextKey(): string {
-    const existing = new Set(
+    const keys = new Set(
       (db.prepare("SELECT key FROM raw_material").all() as { key: string }[]).map((r) => r.key)
     );
-    let n = existing.size + 1;
+    let n = keys.size + 1;
     let key = `RM${String(n).padStart(3, "0")}`;
-    while (existing.has(key)) {
+    while (keys.has(key)) {
       n += 1;
       key = `RM${String(n).padStart(3, "0")}`;
     }
@@ -102,6 +114,12 @@ function seedDisclosureRawMaterials(db: Database.Database): void {
      (key, name, form, unit, disclosure_no, disclosure_date, material_type, main_ingredients, disclosure_valid_from, disclosure_valid_to)
      VALUES (?, ?, 'solid', ?, ?, ?, ?, ?, ?, ?)`
   );
+  const backfill = db.prepare(
+    `UPDATE raw_material SET
+       disclosure_no = ?, disclosure_date = ?, material_type = ?, main_ingredients = ?,
+       disclosure_valid_from = ?, disclosure_valid_to = ?
+     WHERE key = ?`
+  );
 
   // 별지 제40호서식(유기농업자재 공시) 대표 자재 3종 — 공시정보 포함
   const disclosureMaterials: {
@@ -111,7 +129,6 @@ function seedDisclosureRawMaterials(db: Database.Database): void {
     materialType: string;
     mainIngredients: string;
     validFrom: string;
-    validTo: string;
   }[] = [
     {
       name: "생생나라 고토",
@@ -120,7 +137,6 @@ function seedDisclosureRawMaterials(db: Database.Database): void {
       materialType: "토양개량 및 작물생육용",
       mainIngredients: "백운석 95%, 당밀 5%",
       validFrom: "2024-08-08",
-      validTo: "2027-08-07",
     },
     {
       name: "생생나라 규산",
@@ -129,7 +145,6 @@ function seedDisclosureRawMaterials(db: Database.Database): void {
       materialType: "토양개량 및 작물생육용",
       mainIngredients: "베이직슬래그 95%, 당밀 5%",
       validFrom: "2024-08-08",
-      validTo: "2027-08-07",
     },
     {
       name: "생생황마그유황칼슘",
@@ -138,20 +153,27 @@ function seedDisclosureRawMaterials(db: Database.Database): void {
       materialType: "토양개량 및 작물생육용",
       mainIngredients: "가용성고토 9.8%, 알카리분 45.3%, 황전량 16%",
       validFrom: "2025-02-20",
-      validTo: "2028-02-19",
     },
   ];
   for (const m of disclosureMaterials) {
-    if (existingNames.has(m.name)) continue;
-    insert.run(nextKey(), m.name, "kg", m.disclosureNo, m.disclosureDate, m.materialType, m.mainIngredients, m.validFrom, m.validTo);
-    existingNames.add(m.name);
+    const validTo = addThreeYearsMinusOneDay(m.validFrom);
+    const found = byName.get(m.name);
+    if (!found) {
+      const key = nextKey();
+      insert.run(key, m.name, "kg", m.disclosureNo, m.disclosureDate, m.materialType, m.mainIngredients, m.validFrom, validTo);
+      byName.set(m.name, { key, name: m.name, disclosure_no: m.disclosureNo });
+    } else if (!found.disclosure_no) {
+      backfill.run(m.disclosureNo, m.disclosureDate, m.materialType, m.mainIngredients, m.validFrom, validTo, found.key);
+      found.disclosure_no = m.disclosureNo;
+    }
   }
 
   // 별지 제19호의2서식(비료관리법 원료장부)에 쓰이는 원료 2종 — 공시정보 없이 이름만
   for (const name of ["분백운석", "수재슬래그"]) {
-    if (existingNames.has(name)) continue;
-    insert.run(nextKey(), name, "kg", null, null, null, null, null, null);
-    existingNames.add(name);
+    if (byName.has(name)) continue;
+    const key = nextKey();
+    insert.run(key, name, "kg", null, null, null, null, null, null);
+    byName.set(name, { key, name, disclosure_no: null });
   }
 }
 

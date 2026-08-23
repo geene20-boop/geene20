@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { apiGet, apiPost } from "@/lib/apiClient";
+import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
 import { RawMaterial, RawMaterialDocType, RawMaterialDocument, RAW_MATERIAL_DOC_LABELS } from "@/lib/types";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import { materialLabel, shiftDate, todayStr } from "@/lib/rawMaterialClient";
+import { useSiteSession } from "@/lib/useSiteSession";
 
 type PrefillRow = {
   date: string;
@@ -58,6 +59,8 @@ export default function RawMaterialDocumentsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const { enteredBy, setEnteredBy } = useEnteredBy();
   const [nameError, setNameError] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const session = useSiteSession();
 
   async function loadDocuments(f?: string, t?: string) {
     setDocuments(
@@ -117,26 +120,71 @@ export default function RawMaterialDocumentsPage() {
       return;
     }
     setNameError(false);
+    const payload = {
+      entered_by: enteredBy,
+      docType,
+      title: RAW_MATERIAL_DOC_LABELS[docType],
+      targetMaterial:
+        targetMaterial ||
+        (docType === "form40"
+          ? form40MaterialKeys.map((k) => materialLabel(materialByKey.get(k)!)).join(", ") || null
+          : materialKey
+            ? materialLabel(materialByKey.get(materialKey)!)
+            : null),
+      periodFrom: from,
+      periodTo: to,
+      rows,
+      meta,
+      memo: memo || null,
+    };
     try {
-      await apiPost("/api/raw-material-document", {
-        entered_by: enteredBy,
-        docType,
-        title: RAW_MATERIAL_DOC_LABELS[docType],
-        targetMaterial:
-          targetMaterial ||
-          (docType === "form40"
-            ? form40MaterialKeys.map((k) => materialLabel(materialByKey.get(k)!)).join(", ") || null
-            : materialKey
-              ? materialLabel(materialByKey.get(materialKey)!)
-              : null),
-        periodFrom: from,
-        periodTo: to,
-        rows,
-        meta,
-        memo: memo || null,
-      });
-      setMessage("문서함에 저장되었습니다.");
+      if (editingId) {
+        await apiPut(`/api/raw-material-document/${editingId}`, payload);
+        setMessage("문서가 수정되었습니다.");
+        setEditingId(null);
+      } else {
+        await apiPost("/api/raw-material-document", payload);
+        setMessage("문서함에 저장되었습니다.");
+      }
       setMemo("");
+      await loadDocuments();
+    } catch (err) {
+      setMessage(`오류: ${(err as Error).message}`);
+    }
+  }
+
+  function startEditDocument(d: RawMaterialDocument) {
+    const parsed = JSON.parse(d.data_json);
+    const parsedRows: PrefillRow[] = Array.isArray(parsed) ? parsed : (parsed.rows ?? []);
+    const parsedMeta: Form40Meta | null = Array.isArray(parsed) ? null : (parsed.meta ?? null);
+    setEditingId(d.id);
+    setDocType(d.doc_type);
+    setMaterialKey("");
+    setForm40MaterialKeys([]);
+    setTargetMaterial(d.target_material ?? "");
+    if (d.period_from) setFrom(d.period_from);
+    if (d.period_to) setTo(d.period_to);
+    setRows(parsedRows.map((r) => ({ ...r, included: r.included !== false })));
+    setMeta(parsedMeta);
+    setMessage(`"${d.target_material ?? RAW_MATERIAL_DOC_LABELS[d.doc_type]}" 문서를 수정 중입니다.`);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setRows([]);
+    setMeta(null);
+    setMessage(null);
+  }
+
+  async function removeDocument(id: string) {
+    if (!enteredBy.trim()) {
+      setNameError(true);
+      return;
+    }
+    if (!confirm("이 문서를 삭제할까요? 되돌릴 수 없습니다.")) return;
+    try {
+      await apiDelete(`/api/raw-material-document/${id}`, { entered_by: enteredBy });
+      if (editingId === id) cancelEdit();
       await loadDocuments();
     } catch (err) {
       setMessage(`오류: ${(err as Error).message}`);
@@ -355,9 +403,14 @@ export default function RawMaterialDocumentsPage() {
           </label>
 
           {message && <p className="text-sm text-slate-600">{message}</p>}
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            {editingId && (
+              <button onClick={cancelEdit} className="border rounded-md px-3 py-2 text-sm">
+                취소
+              </button>
+            )}
             <button onClick={save} className="bg-slate-900 text-white rounded-md px-5 py-2 text-sm font-semibold">
-              저장 → 문서함에 등록
+              {editingId ? "수정 저장" : "저장 → 문서함에 등록"}
             </button>
           </div>
         </div>
@@ -403,11 +456,12 @@ export default function RawMaterialDocumentsPage() {
               <th className="text-left px-3 py-2">조회기간</th>
               <th className="text-left px-3 py-2">작성자</th>
               <th className="text-left px-3 py-2">다운로드</th>
+              {session.canWrite && <th className="text-left px-3 py-2">관리</th>}
             </tr>
           </thead>
           <tbody>
             {documents.map((d) => (
-              <tr key={d.id} className="border-t">
+              <tr key={d.id} className={`border-t ${editingId === d.id ? "bg-sky-50" : ""}`}>
                 <td className="px-3 py-2">{d.created_at.slice(0, 10)}</td>
                 <td className="px-3 py-2">{RAW_MATERIAL_DOC_LABELS[d.doc_type]}</td>
                 <td className="px-3 py-2">{d.target_material ?? "-"}</td>
@@ -421,11 +475,29 @@ export default function RawMaterialDocumentsPage() {
                     PDF
                   </a>
                 </td>
+                {session.canWrite && (
+                  <td className="px-3 py-2">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => startEditDocument(d)}
+                        className="text-xs border rounded-md px-2 py-1 bg-white"
+                      >
+                        수정
+                      </button>
+                      <button
+                        onClick={() => removeDocument(d.id)}
+                        className="text-xs border rounded-md px-2 py-1 bg-white text-red-600"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
             {documents.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={session.canWrite ? 7 : 6} className="px-3 py-8 text-center text-slate-400">
                   해당 기간에 저장된 문서가 없습니다.
                 </td>
               </tr>
