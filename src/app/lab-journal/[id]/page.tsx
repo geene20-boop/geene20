@@ -141,6 +141,9 @@ function FreeformView({ content }: { content: FreeformContent }) {
 function LinkedView({ content, report }: { content: LinkedContent; report: DocumentFile | null }) {
   return (
     <div className="flex flex-col gap-4 print:gap-2">
+      <div className="print:break-inside-avoid">
+        <Section title="해석/소견" text={content.interpretation} />
+      </div>
       <div>
         <h3 className="text-sm font-semibold text-slate-600 mb-2 print:mb-1">연동된 외부기관 시험성적서</h3>
         {report ? (
@@ -158,9 +161,6 @@ function LinkedView({ content, report }: { content: LinkedContent; report: Docum
         ) : (
           <p className="text-sm text-slate-400">연동된 문서가 없습니다.</p>
         )}
-      </div>
-      <div className="print:break-inside-avoid">
-        <Section title="해석/소견" text={content.interpretation} />
       </div>
     </div>
   );
