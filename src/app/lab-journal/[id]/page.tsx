@@ -7,6 +7,7 @@ import { apiDelete, apiGet } from "@/lib/apiClient";
 import { useSiteSession } from "@/lib/useSiteSession";
 import { DocumentFile, LabJournal } from "@/lib/types";
 import { FreeformContent, ItemizedContent, LinkedContent } from "@/lib/labJournalContent";
+import DocumentPreview from "@/components/DocumentPreview";
 
 export default function LabJournalViewPage() {
   const params = useParams<{ id: string }>();
@@ -143,14 +144,17 @@ function LinkedView({ content, report }: { content: LinkedContent; report: Docum
       <div>
         <h3 className="text-sm font-semibold text-slate-600 mb-2">연동된 외부기관 시험성적서</h3>
         {report ? (
-          <a
-            href={`/api/documents/file/${report.id}`}
-            target="_blank"
-            rel="noreferrer"
-            className="text-blue-600 hover:underline text-sm"
-          >
-            📄 {report.item_name} ({report.ref_date ?? "날짜없음"}) - {report.filename}
-          </a>
+          <div className="flex flex-col gap-2">
+            <DocumentPreview fileId={report.id} mimeType={report.mime_type} filename={report.filename} />
+            <a
+              href={`/api/documents/file/${report.id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-blue-600 hover:underline text-sm print:hidden"
+            >
+              새 탭에서 열기
+            </a>
+          </div>
         ) : (
           <p className="text-sm text-slate-400">연동된 문서가 없습니다.</p>
         )}
