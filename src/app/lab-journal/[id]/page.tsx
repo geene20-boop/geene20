@@ -74,21 +74,21 @@ export default function LabJournalViewPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border p-10 print:border-0 print:rounded-none print:p-0 flex flex-col gap-4">
-        <h2 className="text-center text-2xl font-bold mb-4 tracking-wide">연구실험일지</h2>
-        <table className="w-full text-sm border-collapse mb-4">
+      <div className="bg-white rounded-xl border p-10 print:border-0 print:rounded-none print:p-0 flex flex-col gap-4 print:gap-2">
+        <h2 className="text-center text-2xl font-bold mb-4 print:mb-2 print:text-xl tracking-wide">연구실험일지</h2>
+        <table className="w-full text-sm border-collapse mb-4 print:mb-2">
           <tbody>
             <tr className="border-b">
-              <th className="w-32 text-left bg-slate-50 px-3 py-2 font-semibold text-slate-600">양식</th>
-              <td className="px-3 py-2">{entry.form_type}</td>
-              <th className="w-32 text-left bg-slate-50 px-3 py-2 font-semibold text-slate-600">일자</th>
-              <td className="px-3 py-2">{entry.date}</td>
+              <th className="w-32 text-left bg-slate-50 px-3 py-2 print:py-1 font-semibold text-slate-600">양식</th>
+              <td className="px-3 py-2 print:py-1">{entry.form_type}</td>
+              <th className="w-32 text-left bg-slate-50 px-3 py-2 print:py-1 font-semibold text-slate-600">일자</th>
+              <td className="px-3 py-2 print:py-1">{entry.date}</td>
             </tr>
             <tr className="border-b">
-              <th className="text-left bg-slate-50 px-3 py-2 font-semibold text-slate-600">연구자</th>
-              <td className="px-3 py-2">{entry.researcher ?? "-"}</td>
-              <th className="text-left bg-slate-50 px-3 py-2 font-semibold text-slate-600">품목명</th>
-              <td className="px-3 py-2">{entry.item_name ?? "-"}</td>
+              <th className="text-left bg-slate-50 px-3 py-2 print:py-1 font-semibold text-slate-600">연구자</th>
+              <td className="px-3 py-2 print:py-1">{entry.researcher ?? "-"}</td>
+              <th className="text-left bg-slate-50 px-3 py-2 print:py-1 font-semibold text-slate-600">품목명</th>
+              <td className="px-3 py-2 print:py-1">{entry.item_name ?? "-"}</td>
             </tr>
           </tbody>
         </table>
@@ -140,11 +140,11 @@ function FreeformView({ content }: { content: FreeformContent }) {
 
 function LinkedView({ content, report }: { content: LinkedContent; report: DocumentFile | null }) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 print:gap-2">
       <div>
-        <h3 className="text-sm font-semibold text-slate-600 mb-2">연동된 외부기관 시험성적서</h3>
+        <h3 className="text-sm font-semibold text-slate-600 mb-2 print:mb-1">연동된 외부기관 시험성적서</h3>
         {report ? (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 print:gap-1">
             <DocumentPreview fileId={report.id} mimeType={report.mime_type} filename={report.filename} />
             <a
               href={`/api/documents/file/${report.id}`}
@@ -159,7 +159,9 @@ function LinkedView({ content, report }: { content: LinkedContent; report: Docum
           <p className="text-sm text-slate-400">연동된 문서가 없습니다.</p>
         )}
       </div>
-      <Section title="해석/소견" text={content.interpretation} />
+      <div className="print:break-inside-avoid">
+        <Section title="해석/소견" text={content.interpretation} />
+      </div>
     </div>
   );
 }

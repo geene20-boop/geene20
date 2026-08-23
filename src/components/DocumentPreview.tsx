@@ -93,7 +93,7 @@ export default function DocumentPreview({
 
   return (
     <div
-      className={`border rounded-md bg-slate-50 overflow-y-auto print:overflow-visible print:border-0 print:bg-white print:flex print:items-center print:justify-center print:h-[170mm] print:max-h-none ${heightClassName}`}
+      className={`border rounded-md bg-slate-50 overflow-y-auto print:overflow-visible print:border-0 print:bg-white print:flex print:items-center print:justify-center print:h-[110mm] print:max-h-none print:break-inside-avoid ${heightClassName}`}
     >
       {error ? (
         <p className="text-sm text-slate-400 p-4">미리보기를 불러올 수 없습니다.</p>
