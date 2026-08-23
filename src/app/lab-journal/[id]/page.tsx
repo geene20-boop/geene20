@@ -150,9 +150,9 @@ function LinkedView({ content, report }: { content: LinkedContent; report: Docum
               href={`/api/documents/file/${report.id}`}
               target="_blank"
               rel="noreferrer"
-              className="text-blue-600 hover:underline text-sm"
+              className="text-blue-600 hover:underline text-sm print:hidden"
             >
-              📄 {report.item_name} ({report.ref_date ?? "날짜없음"}) - {report.filename} (새 탭에서 열기)
+              새 탭에서 열기
             </a>
           </div>
         ) : (
