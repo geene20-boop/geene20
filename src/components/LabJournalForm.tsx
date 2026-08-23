@@ -12,6 +12,7 @@ import {
   ItemizedContent,
   LinkedContent,
 } from "@/lib/labJournalContent";
+import DocumentPreview from "@/components/DocumentPreview";
 
 const FORM_TYPES: LabJournalFormType[] = ["항목형", "자유기술형", "외부시험연동형"];
 
@@ -259,6 +260,17 @@ export default function LabJournalForm({
                 목록에 없으면 먼저 &quot;문서관리 &gt; 외부기관 시험성적서&quot;에서 업로드해주세요.
               </span>
             </label>
+            {linkedReportId !== "" && (() => {
+              const selectedReport = reports.find((r) => r.id === linkedReportId);
+              return selectedReport ? (
+                <DocumentPreview
+                  fileId={selectedReport.id}
+                  mimeType={selectedReport.mime_type}
+                  filename={selectedReport.filename}
+                  heightClassName="h-96"
+                />
+              ) : null;
+            })()}
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-slate-600">해석/소견</span>
               <textarea
