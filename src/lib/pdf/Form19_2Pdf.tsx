@@ -15,15 +15,15 @@ export type Form19_2PdfRow = {
 };
 
 const COL = {
-  date: "10%",
+  date: "11%",
   fertType: "9%",
   material: "11%",
-  company: "10%",
-  address: "16%",
+  company: "9%",
+  address: "15%",
   phone: "8%",
   country: "7%",
   qty: "10%",
-  note: "19%",
+  note: "20%",
 };
 
 function n(v: number | null): string {
@@ -34,20 +34,21 @@ export function Form19_2Pdf({ targetMaterial, rows }: { targetMaterial: string; 
   registerFonts();
   return (
     <Document>
-      <Page size="A4" orientation="landscape" style={s.page}>
+      <Page size="A4" style={s.page}>
         <Text style={s.formCode}>■ 비료관리법 시행규칙 [별지 제19호의2서식] &lt;신설2013.4.23&gt;</Text>
         <Text style={s.title}>비료의 제조 원료 장부(비료생산업자용)</Text>
 
         <View style={s.table}>
-          <View style={s.tRow}>
-            <Text style={[s.th, { width: COL.date }]}>원료구입ㆍ수입 연월일</Text>
+          {/* fixed: 표가 2페이지 이상으로 넘어가도 이 헤더 행이 각 페이지 상단에 반복해서 나온다 */}
+          <View style={s.tRow} fixed>
+            <Text style={[s.th, { width: COL.date }]}>{"원료구입ㆍ수입\n연월일"}</Text>
             <Text style={[s.th, { width: COL.fertType }]}>비료의 종류</Text>
             <Text style={[s.th, { width: COL.material }]}>원료의 종류</Text>
             <Text style={[s.th, { width: COL.company }]}>업체명</Text>
             <Text style={[s.th, { width: COL.address }]}>주소</Text>
             <Text style={[s.th, { width: COL.phone }]}>전화번호</Text>
             <Text style={[s.th, { width: COL.country }]}>생산국가</Text>
-            <Text style={[s.th, { width: COL.qty }]}>원료의 수량(kg)</Text>
+            <Text style={[s.th, { width: COL.qty }]}>{"원료의\n수량(kg)"}</Text>
             <Text style={[s.th, { width: COL.note }]}>비고</Text>
           </View>
           {rows.map((r, i) => (
