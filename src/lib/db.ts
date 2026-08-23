@@ -92,8 +92,14 @@ function addThreeYearsMinusOneDay(dateStr: string): string {
 // 이미 공시정보가 입력되어 있으면(누군가 직접 채워뒀으면) 절대 덮어쓰지 않는다.
 function seedDisclosureRawMaterials(db: Database.Database): void {
   const existing = db
-    .prepare("SELECT key, name, disclosure_no FROM raw_material")
-    .all() as { key: string; name: string; disclosure_no: string | null }[];
+    .prepare("SELECT key, name, disclosure_no, disclosure_material_name, disclosure_ingredients_json FROM raw_material")
+    .all() as {
+    key: string;
+    name: string;
+    disclosure_no: string | null;
+    disclosure_material_name: string | null;
+    disclosure_ingredients_json: string | null;
+  }[];
   const byName = new Map(existing.map((r) => [r.name, r]));
 
   function nextKey(): string {
@@ -111,8 +117,9 @@ function seedDisclosureRawMaterials(db: Database.Database): void {
 
   const insert = db.prepare(
     `INSERT INTO raw_material
-     (key, name, form, unit, disclosure_no, disclosure_date, material_type, main_ingredients, disclosure_valid_from, disclosure_valid_to)
-     VALUES (?, ?, 'solid', ?, ?, ?, ?, ?, ?, ?)`
+     (key, name, form, unit, disclosure_no, disclosure_date, material_type, main_ingredients, disclosure_valid_from, disclosure_valid_to,
+      disclosure_material_name, disclosure_ingredients_json)
+     VALUES (?, ?, 'solid', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const backfill = db.prepare(
     `UPDATE raw_material SET
@@ -120,6 +127,21 @@ function seedDisclosureRawMaterials(db: Database.Database): void {
        disclosure_valid_from = ?, disclosure_valid_to = ?
      WHERE key = ?`
   );
+  // 공시 자재명/성분별 거래처는 disclosure_no 유무와 무관하게, 그 값 자체가 비어있을 때만 채운다
+  // (예: 이전 배포에서 disclosure_no 등은 이미 채워졌지만 이 두 필드는 아직 없던 경우를 보완)
+  const backfillMaterialName = db.prepare(
+    "UPDATE raw_material SET disclosure_material_name = ? WHERE key = ?"
+  );
+  const backfillIngredients = db.prepare(
+    "UPDATE raw_material SET disclosure_ingredients_json = ? WHERE key = ?"
+  );
+
+  type DisclosureIngredient = {
+    name: string;
+    supplierName: string;
+    supplierAddress: string;
+    supplierPhone: string;
+  };
 
   // 별지 제40호서식(유기농업자재 공시) 대표 자재 3종 — 공시정보 포함
   const disclosureMaterials: {
@@ -129,6 +151,8 @@ function seedDisclosureRawMaterials(db: Database.Database): void {
     materialType: string;
     mainIngredients: string;
     validFrom: string;
+    disclosureMaterialName: string;
+    ingredients?: DisclosureIngredient[];
   }[] = [
     {
       name: "생생나라 고토",
@@ -137,6 +161,21 @@ function seedDisclosureRawMaterials(db: Database.Database): void {
       materialType: "토양개량 및 작물생육용",
       mainIngredients: "백운석 95%, 당밀 5%",
       validFrom: "2024-08-08",
+      disclosureMaterialName: "석회고토",
+      ingredients: [
+        {
+          name: "백운석 95%",
+          supplierName: "(주)디앤피",
+          supplierAddress: "전북 전주시 완산구 중인3길28-12 2층 1호",
+          supplierPhone: "063)226-5977",
+        },
+        {
+          name: "당밀 5%",
+          supplierName: "그린아그로",
+          supplierAddress: "대전 유성구 유성대로1205번길 6-20",
+          supplierPhone: "042-256-6325",
+        },
+      ],
     },
     {
       name: "생생나라 규산",
@@ -145,6 +184,21 @@ function seedDisclosureRawMaterials(db: Database.Database): void {
       materialType: "토양개량 및 작물생육용",
       mainIngredients: "베이직슬래그 95%, 당밀 5%",
       validFrom: "2024-08-08",
+      disclosureMaterialName: "규산질",
+      ingredients: [
+        {
+          name: "베이직슬래그 95%",
+          supplierName: "(주)포스코",
+          supplierAddress: "포항시 남구 동해안로 6261",
+          supplierPhone: "054)220-0328",
+        },
+        {
+          name: "당밀 5%",
+          supplierName: "그린아그로",
+          supplierAddress: "유성구 유성대로1205번길 6-20",
+          supplierPhone: "042-256-6325",
+        },
+      ],
     },
     {
       name: "생생황마그유황칼슘",
@@ -153,18 +207,48 @@ function seedDisclosureRawMaterials(db: Database.Database): void {
       materialType: "토양개량 및 작물생육용",
       mainIngredients: "가용성고토 9.8%, 알카리분 45.3%, 황전량 16%",
       validFrom: "2025-02-20",
+      disclosureMaterialName: "석회고토+점토광물+황",
     },
   ];
   for (const m of disclosureMaterials) {
     const validTo = addThreeYearsMinusOneDay(m.validFrom);
+    const ingredientsJson = m.ingredients ? JSON.stringify(m.ingredients) : null;
     const found = byName.get(m.name);
     if (!found) {
       const key = nextKey();
-      insert.run(key, m.name, "kg", m.disclosureNo, m.disclosureDate, m.materialType, m.mainIngredients, m.validFrom, validTo);
-      byName.set(m.name, { key, name: m.name, disclosure_no: m.disclosureNo });
-    } else if (!found.disclosure_no) {
+      insert.run(
+        key,
+        m.name,
+        "kg",
+        m.disclosureNo,
+        m.disclosureDate,
+        m.materialType,
+        m.mainIngredients,
+        m.validFrom,
+        validTo,
+        m.disclosureMaterialName,
+        ingredientsJson
+      );
+      byName.set(m.name, {
+        key,
+        name: m.name,
+        disclosure_no: m.disclosureNo,
+        disclosure_material_name: m.disclosureMaterialName,
+        disclosure_ingredients_json: ingredientsJson,
+      });
+      continue;
+    }
+    if (!found.disclosure_no) {
       backfill.run(m.disclosureNo, m.disclosureDate, m.materialType, m.mainIngredients, m.validFrom, validTo, found.key);
       found.disclosure_no = m.disclosureNo;
+    }
+    if (!found.disclosure_material_name) {
+      backfillMaterialName.run(m.disclosureMaterialName, found.key);
+      found.disclosure_material_name = m.disclosureMaterialName;
+    }
+    if (!found.disclosure_ingredients_json && ingredientsJson) {
+      backfillIngredients.run(ingredientsJson, found.key);
+      found.disclosure_ingredients_json = ingredientsJson;
     }
   }
 
@@ -172,8 +256,14 @@ function seedDisclosureRawMaterials(db: Database.Database): void {
   for (const name of ["분백운석", "수재슬래그"]) {
     if (byName.has(name)) continue;
     const key = nextKey();
-    insert.run(key, name, "kg", null, null, null, null, null, null);
-    byName.set(name, { key, name, disclosure_no: null });
+    insert.run(key, name, "kg", null, null, null, null, null, null, null, null);
+    byName.set(name, {
+      key,
+      name,
+      disclosure_no: null,
+      disclosure_material_name: null,
+      disclosure_ingredients_json: null,
+    });
   }
 }
 
@@ -894,6 +984,8 @@ export function getDb(): Database.Database {
     ["main_ingredients", "TEXT"],
     ["disclosure_valid_from", "TEXT"],
     ["disclosure_valid_to", "TEXT"],
+    ["disclosure_material_name", "TEXT"], // 공시서에 기재된 공식 자재명 (예: "규산질")
+    ["disclosure_ingredients_json", "TEXT"], // 성분별 거래처 목록 JSON
   ]);
 
   migrateBoardAttachmentBlobsToFiles(db);

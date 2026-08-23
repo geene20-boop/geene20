@@ -379,6 +379,15 @@ export interface RawMaterial {
   main_ingredients: string | null;
   disclosure_valid_from: string | null;
   disclosure_valid_to: string | null;
+  disclosure_material_name: string | null; // 공시서에 기재된 공식 자재명 (예: "규산질") — 내부 품목명("생생나라 규산")과 다름
+  disclosure_ingredients_json: string | null; // 성분별 거래처 목록 JSON: {name, supplierName, supplierAddress, supplierPhone}[]
+}
+
+export interface RawMaterialDisclosureIngredient {
+  name: string;
+  supplierName: string;
+  supplierAddress: string;
+  supplierPhone: string;
 }
 
 export interface RawMaterialSupplier {
