@@ -428,13 +428,11 @@ export interface RawMaterialPriceHistory {
   created_at: string;
 }
 
-export type RawMaterialDocType = "form19_2" | "form40" | "inbound_certificate" | "product_certificate";
+export type RawMaterialDocType = "form19_2" | "form40";
 
 export const RAW_MATERIAL_DOC_LABELS: Record<RawMaterialDocType, string> = {
   form19_2: "별지 제19호의2서식 (비료관리법 시행규칙 · 원료 장부)",
   form40: "별지 제40호서식 (유기농업자재 공시 원료·재료 수급대장)",
-  inbound_certificate: "원재료 입고 성적서",
-  product_certificate: "제품성적서",
 };
 
 export interface RawMaterialDocument {

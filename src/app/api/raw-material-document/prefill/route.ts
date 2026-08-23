@@ -3,11 +3,46 @@ import { getDb, getSetting } from "@/lib/db";
 import { RawMaterial, RawMaterialInbound, RawMaterialSupplier } from "@/lib/types";
 
 // 양식출력 2단계 "데이터 미리보기"에서 쓰는 자동 프리필 조회.
-// - form19_2 / inbound_certificate: 기간·원재료(단일, 선택 안 하면 전체)로 입고대장 여러 건을 가져온다.
+// - form19_2: 기간·원재료(단일, 선택 안 하면 전체)로 입고대장 여러 건을 가져온다.
 // - form40: 기간 + 원재료(자재) 1개 이상(materialKeys)으로 입고대장을 모아 가져온다. 여러 원료가
 //   하나의 공시 자재(예: 백운석+당밀 → 석회고토)에 함께 쓰이는 경우를 지원하기 위함이며, 공시정보
 //   (공시번호·자재구분 등)는 선택한 원료 중 첫 번째(대표 원료) 것을 사용한다.
-// - product_certificate: 입고 건 하나(inboundId)의 상세를 가져온다.
+// 두 서식 모두, 조회기간 안에서 실제 입고 기록이 하나도 없는 분기는 "YYYY년 N분기" + 비고 "실적없음"
+// 자동 생성 행을 끼워 넣는다(실제 입고가 있는 분기는 건별 날짜를 그대로 보여준다).
+
+function toKg(qty: number, unit: string | null): number {
+  const u = (unit ?? "").trim();
+  if (u.includes("톤") || u.toLowerCase() === "t") return qty * 1000;
+  return qty;
+}
+
+function quarterLabel(dateStr: string): string {
+  const year = Number(dateStr.slice(0, 4));
+  const month = Number(dateStr.slice(5, 7));
+  const q = Math.floor((month - 1) / 3) + 1;
+  return `${year}년 ${q}분기`;
+}
+
+// [from, to] 기간과 겹치는 모든 분기의 라벨을 순서대로 나열 ("2026년 1분기" 형태)
+function quartersInRange(from: string, to: string): string[] {
+  const startYear = Number(from.slice(0, 4));
+  const startQ = Math.floor((Number(from.slice(5, 7)) - 1) / 3) + 1;
+  const endYear = Number(to.slice(0, 4));
+  const endQ = Math.floor((Number(to.slice(5, 7)) - 1) / 3) + 1;
+  const labels: string[] = [];
+  let y = startYear;
+  let q = startQ;
+  while (y < endYear || (y === endYear && q <= endQ)) {
+    labels.push(`${y}년 ${q}분기`);
+    q += 1;
+    if (q > 4) {
+      q = 1;
+      y += 1;
+    }
+  }
+  return labels;
+}
+
 export async function GET(req: NextRequest) {
   const db = getDb();
   const { searchParams } = new URL(req.url);
@@ -17,7 +52,6 @@ export async function GET(req: NextRequest) {
   const materialKeys = materialKeysParam ? materialKeysParam.split(",").filter(Boolean) : [];
   const from = searchParams.get("from") ?? "0000-01-01";
   const to = searchParams.get("to") ?? "9999-12-31";
-  const inboundId = searchParams.get("inboundId");
 
   const materials = db.prepare("SELECT * FROM raw_material").all() as RawMaterial[];
   const materialByKey = new Map(materials.map((m) => [m.key, m]));
@@ -37,42 +71,6 @@ export async function GET(req: NextRequest) {
     };
   }
 
-  if (docType === "product_certificate") {
-    if (!inboundId) {
-      return NextResponse.json({ error: "입고 건을 선택해주세요." }, { status: 400 });
-    }
-    const row = db.prepare("SELECT * FROM raw_material_inbound WHERE id = ?").get(inboundId) as
-      | RawMaterialInbound
-      | undefined;
-    if (!row) {
-      return NextResponse.json({ error: "해당 입고 건을 찾을 수 없습니다." }, { status: 404 });
-    }
-    const material = materialByKey.get(row.material_key);
-    const supplier = supplierInfo(row);
-    return NextResponse.json({
-      rows: [
-        {
-          date: row.date,
-          materialKey: row.material_key,
-          materialName: material ? `[${material.key}] ${material.name}` : row.material_key,
-          supplierName: supplier.name,
-          supplierAddress: supplier.address,
-          supplierPhone: supplier.phone,
-          qty: row.qty,
-          unit: row.unit ?? "",
-          unitPrice: row.unit_price ?? "",
-          amount: row.amount ?? "",
-          vehicleNo: row.vehicle_no ?? "",
-          judgment: row.judgment,
-          problem: row.problem ?? "",
-          reason: row.reason ?? "",
-          actionTaken: row.action_taken ?? "",
-          judgedBy: row.judged_by ?? "",
-        },
-      ],
-    });
-  }
-
   if (docType === "form40" && materialKeys.length === 0) {
     return NextResponse.json({ error: "별지 제40호서식은 원재료(자재)를 1개 이상 선택해야 합니다." }, { status: 400 });
   }
@@ -89,23 +87,66 @@ export async function GET(req: NextRequest) {
   sql += " ORDER BY date, created_at";
   const inboundRows = db.prepare(sql).all(...args) as RawMaterialInbound[];
 
-  const rows = inboundRows.map((row) => {
+  type PrefillRowOut = {
+    date: string;
+    materialKey: string | undefined;
+    materialName: string;
+    category: string;
+    supplierName: string;
+    supplierAddress: string;
+    supplierPhone: string;
+    supplierCountry: string;
+    qty: number | null;
+    note: string;
+    isPlaceholder: boolean;
+    included: boolean;
+  };
+
+  const rows: PrefillRowOut[] = inboundRows.map((row) => {
     const material = materialByKey.get(row.material_key);
     const supplier = supplierInfo(row);
     return {
       date: row.date,
       materialKey: row.material_key,
-      materialName: material ? `[${material.key}] ${material.name}` : row.material_key,
+      materialName: material ? material.name : row.material_key,
       category: material?.category ?? "",
       supplierName: supplier.name,
       supplierAddress: supplier.address,
       supplierPhone: supplier.phone,
       supplierCountry: supplier.country,
-      qty: row.qty,
-      unit: row.unit ?? "",
+      qty: toKg(row.qty, row.unit),
       note: "",
+      isPlaceholder: false,
+      included: true,
     };
   });
+
+  // 유기농업자재 공시(별지40호)에서 실제 입고 기록이 하나도 없는 분기는 "실적없음" 자동 생성 행으로 채운다.
+  // (원본 서식에 실제로 있던 패턴. 별지19호의2는 건별 실제 날짜만 그대로 보여준다.)
+  const primaryMaterial =
+    docType === "form40" && materialKeys.length > 0 ? materialByKey.get(materialKeys[0]) : undefined;
+  if (from !== "0000-01-01" && to !== "9999-12-31" && primaryMaterial) {
+    const quartersWithData = new Set(rows.map((r) => quarterLabel(r.date)));
+    const placeholderMaterialName = primaryMaterial.main_ingredients ?? primaryMaterial.name ?? "";
+    for (const label of quartersInRange(from, to)) {
+      if (quartersWithData.has(label)) continue;
+      rows.push({
+        date: label,
+        materialKey: primaryMaterial?.key,
+        materialName: placeholderMaterialName,
+        category: primaryMaterial?.category ?? "",
+        supplierName: "",
+        supplierAddress: "",
+        supplierPhone: "",
+        supplierCountry: "",
+        qty: null,
+        note: "실적없음",
+        isPlaceholder: true,
+        included: true,
+      });
+    }
+    rows.sort((a, b) => a.date.localeCompare(b.date));
+  }
 
   let meta: Record<string, string> | null = null;
   if (docType === "form40" && materialKeys.length > 0) {

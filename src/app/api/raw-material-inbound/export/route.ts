@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
       날짜: r.date,
       성상: material ? RAW_MATERIAL_FORM_LABELS[material.form] : "",
       공급처: r.supplier_name ?? "",
-      품목: material ? `[${material.key}] ${material.name}` : r.material_key,
+      품목: material ? material.name : r.material_key,
       차량번호: r.vehicle_no ?? "",
       수량: r.qty,
       단위: r.unit ?? "",

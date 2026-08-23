@@ -2,7 +2,7 @@
 import { RawMaterial } from "@/lib/types";
 
 export function materialLabel(item: Pick<RawMaterial, "key" | "name">): string {
-  return `[${item.key}] ${item.name}`;
+  return item.name;
 }
 
 export function todayStr(): string {

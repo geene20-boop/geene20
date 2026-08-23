@@ -78,6 +78,83 @@ function migrateBoardAttachmentBlobsToFiles(db: Database.Database): void {
   db.exec("CREATE INDEX IF NOT EXISTS idx_board_attachment_post ON board_attachment(post_id)");
 }
 
+// 유기농업자재 공시 3종 + 비료관리법 원료장부 2종(양식출력)에 쓰이는 원재료 마스터데이터를 채워 넣는다.
+// 이름으로 이미 등록되어 있으면 건드리지 않는다(운영 중인 실제 데이터를 덮어쓰지 않기 위함).
+function seedDisclosureRawMaterials(db: Database.Database): void {
+  const existingNames = new Set(
+    (db.prepare("SELECT name FROM raw_material").all() as { name: string }[]).map((r) => r.name)
+  );
+  function nextKey(): string {
+    const existing = new Set(
+      (db.prepare("SELECT key FROM raw_material").all() as { key: string }[]).map((r) => r.key)
+    );
+    let n = existing.size + 1;
+    let key = `RM${String(n).padStart(3, "0")}`;
+    while (existing.has(key)) {
+      n += 1;
+      key = `RM${String(n).padStart(3, "0")}`;
+    }
+    return key;
+  }
+
+  const insert = db.prepare(
+    `INSERT INTO raw_material
+     (key, name, form, unit, disclosure_no, disclosure_date, material_type, main_ingredients, disclosure_valid_from, disclosure_valid_to)
+     VALUES (?, ?, 'solid', ?, ?, ?, ?, ?, ?, ?)`
+  );
+
+  // 별지 제40호서식(유기농업자재 공시) 대표 자재 3종 — 공시정보 포함
+  const disclosureMaterials: {
+    name: string;
+    disclosureNo: string;
+    disclosureDate: string;
+    materialType: string;
+    mainIngredients: string;
+    validFrom: string;
+    validTo: string;
+  }[] = [
+    {
+      name: "생생나라 고토",
+      disclosureNo: "제 공시-2-3-454호",
+      disclosureDate: "2018-08-08",
+      materialType: "토양개량 및 작물생육용",
+      mainIngredients: "백운석 95%, 당밀 5%",
+      validFrom: "2024-08-08",
+      validTo: "2027-08-07",
+    },
+    {
+      name: "생생나라 규산",
+      disclosureNo: "제 공시-2-3-453호",
+      disclosureDate: "2018-08-08",
+      materialType: "토양개량 및 작물생육용",
+      mainIngredients: "베이직슬래그 95%, 당밀 5%",
+      validFrom: "2024-08-08",
+      validTo: "2027-08-07",
+    },
+    {
+      name: "생생황마그유황칼슘",
+      disclosureNo: "제 공시-3-3-729호",
+      disclosureDate: "2025-02-20",
+      materialType: "토양개량 및 작물생육용",
+      mainIngredients: "가용성고토 9.8%, 알카리분 45.3%, 황전량 16%",
+      validFrom: "2025-02-20",
+      validTo: "2028-02-19",
+    },
+  ];
+  for (const m of disclosureMaterials) {
+    if (existingNames.has(m.name)) continue;
+    insert.run(nextKey(), m.name, "kg", m.disclosureNo, m.disclosureDate, m.materialType, m.mainIngredients, m.validFrom, m.validTo);
+    existingNames.add(m.name);
+  }
+
+  // 별지 제19호의2서식(비료관리법 원료장부)에 쓰이는 원료 2종 — 공시정보 없이 이름만
+  for (const name of ["분백운석", "수재슬래그"]) {
+    if (existingNames.has(name)) continue;
+    insert.run(nextKey(), name, "kg", null, null, null, null, null, null);
+    existingNames.add(name);
+  }
+}
+
 function migrateDocumentFileBlobsToFiles(db: Database.Database): void {
   const cols = new Set(
     (db.prepare("PRAGMA table_info(document_file)").all() as { name: string }[]).map((c) => c.name)
@@ -859,6 +936,8 @@ export function getDb(): Database.Database {
       crypto.randomBytes(32).toString("hex")
     );
   }
+
+  seedDisclosureRawMaterials(db);
 
   global.__db = db;
   return db;
