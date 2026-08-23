@@ -22,7 +22,7 @@ export default function ScrollToTopButton() {
     <button
       type="button"
       onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-      className="fixed bottom-6 right-6 z-40 bg-slate-900 text-white rounded-full w-12 h-12 shadow-lg text-sm font-medium hover:bg-slate-800"
+      className="fixed bottom-6 right-6 z-40 bg-slate-900 text-white rounded-full w-12 h-12 shadow-lg text-sm font-medium hover:bg-slate-800 print:hidden"
       aria-label="맨 위로"
     >
       ↑

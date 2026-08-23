@@ -175,7 +175,7 @@ export default function NavBar() {
     <>
       {/* 데스크톱: 좌측 접이식 메뉴 */}
       <aside
-        className={`hidden md:flex md:flex-col shrink-0 sticky top-0 h-screen bg-gradient-to-b from-[#0e1626] to-[#0b1220] border-r border-white/10 transition-[width] duration-150 ${
+        className={`hidden md:flex md:flex-col shrink-0 sticky top-0 h-screen bg-gradient-to-b from-[#0e1626] to-[#0b1220] border-r border-white/10 transition-[width] duration-150 print:hidden ${
           collapsed ? "w-14" : "w-60"
         }`}
       >
@@ -337,7 +337,7 @@ export default function NavBar() {
       </aside>
 
       {/* 모바일: 상단 바 + 좌측 드로어 */}
-      <header className="md:hidden sticky top-0 z-10 bg-gradient-to-b from-[#0e1626] to-[#0b1220] border-b border-white/10">
+      <header className="md:hidden sticky top-0 z-10 bg-gradient-to-b from-[#0e1626] to-[#0b1220] border-b border-white/10 print:hidden">
         <div className="px-4 flex items-center gap-3 h-14">
           <Link href="/" className="flex items-center gap-2 font-semibold text-white whitespace-nowrap hover:opacity-80">
             <HanilLogo className="h-7 w-auto shrink-0" />
@@ -355,7 +355,7 @@ export default function NavBar() {
       </header>
 
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 bg-black/30 z-30" onClick={() => setMobileOpen(false)}>
+        <div className="md:hidden print:hidden fixed inset-0 bg-black/30 z-30" onClick={() => setMobileOpen(false)}>
           <div
             onClick={(e) => e.stopPropagation()}
             className="bg-[#0b1220] h-full w-72 max-w-[85vw] p-4 flex flex-col gap-1 overflow-y-auto"
