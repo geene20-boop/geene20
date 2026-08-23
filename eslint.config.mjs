@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // 정적으로 서빙되는 벤더 자산(예: pdf.js 워커 번들) - 우리가 작성한 코드가 아니다.
+    "public/**",
   ]),
 ]);
 
