@@ -69,6 +69,10 @@ export default function DocumentPreview({
   const isImage = (mimeType ?? "").startsWith("image/");
   const [pdfImageUrl, setPdfImageUrl] = useState<string | null>(null);
   const [error, setError] = useState(false);
+  const [zoom, setZoom] = useState(100);
+  const ZOOM_MIN = 50;
+  const ZOOM_MAX = 300;
+  const ZOOM_STEP = 25;
 
   useEffect(() => {
     if (isImage) return;
@@ -90,23 +94,59 @@ export default function DocumentPreview({
   }, [src, isImage]);
 
   const imageSrc = isImage ? src : pdfImageUrl;
+  const canZoom = !error && !!imageSrc;
 
   return (
-    <div
-      className={`border rounded-md bg-slate-50 overflow-y-auto print:overflow-visible print:border-0 print:bg-white print:flex print:items-center print:justify-center print:h-[170mm] print:max-h-none ${heightClassName}`}
-    >
-      {error ? (
-        <p className="text-sm text-slate-400 p-4">미리보기를 불러올 수 없습니다.</p>
-      ) : imageSrc ? (
-        // eslint-disable-next-line @next/next/no-img-element -- 원본 파일을 그대로 스트리밍해서 보여주므로 next/image 최적화 대상이 아님
-        <img
-          src={imageSrc}
-          alt={filename}
-          className="w-full h-auto object-contain block mx-auto print:w-auto print:h-full"
-        />
-      ) : (
-        <p className="text-sm text-slate-400 p-4">불러오는 중...</p>
+    <div className="flex flex-col gap-1.5">
+      {canZoom && (
+        <div className="flex items-center gap-1.5 print:hidden">
+          <button
+            type="button"
+            onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z - ZOOM_STEP))}
+            disabled={zoom <= ZOOM_MIN}
+            className="w-7 h-7 flex items-center justify-center border rounded-md text-sm hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
+            aria-label="축소"
+          >
+            −
+          </button>
+          <span className="text-xs text-slate-500 w-12 text-center tabular-nums">{zoom}%</span>
+          <button
+            type="button"
+            onClick={() => setZoom((z) => Math.min(ZOOM_MAX, z + ZOOM_STEP))}
+            disabled={zoom >= ZOOM_MAX}
+            className="w-7 h-7 flex items-center justify-center border rounded-md text-sm hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent"
+            aria-label="확대"
+          >
+            ＋
+          </button>
+          {zoom !== 100 && (
+            <button
+              type="button"
+              onClick={() => setZoom(100)}
+              className="text-xs text-blue-600 hover:underline ml-1"
+            >
+              초기화
+            </button>
+          )}
+        </div>
       )}
+      <div
+        className={`border rounded-md bg-slate-50 overflow-auto print:overflow-visible print:border-0 print:bg-white print:flex print:items-center print:justify-center print:h-[110mm] print:max-h-none print:break-inside-avoid ${heightClassName}`}
+      >
+        {error ? (
+          <p className="text-sm text-slate-400 p-4">미리보기를 불러올 수 없습니다.</p>
+        ) : imageSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element -- 원본 파일을 그대로 스트리밍해서 보여주므로 next/image 최적화 대상이 아님
+          <img
+            src={imageSrc}
+            alt={filename}
+            style={{ width: `${zoom}%` }}
+            className="h-auto max-w-none object-contain block mx-auto print:!w-auto print:h-full"
+          />
+        ) : (
+          <p className="text-sm text-slate-400 p-4">불러오는 중...</p>
+        )}
+      </div>
     </div>
   );
 }
