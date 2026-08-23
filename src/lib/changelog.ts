@@ -7,6 +7,13 @@ export interface ChangelogEntry {
 // 새 기능을 배포할 때 배열 맨 앞에 새 항목을 추가한다 (버전 문자열은 날짜 기반 권장).
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2026.08.23",
+    date: "2026-08-23",
+    items: [
+      { title: "연구실험일지 저장 오류 추가 수정", desc: "일부 상황에서 연구실험일지 저장 시 \"요청이 실패했습니다\" 오류가 나던 문제를 고쳤습니다." },
+    ],
+  },
+  {
     version: "2026.08.21",
     date: "2026-08-21",
     items: [

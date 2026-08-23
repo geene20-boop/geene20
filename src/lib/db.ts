@@ -16,6 +16,24 @@ declare global {
 // 예전 버전에서 만들어진 DB는 첨부 원본을 data BLOB 컬럼에 그대로 들고 있다.
 // 그 컬럼이 아직 남아있으면(=파일 분리 이전 DB) 한 번만 파일로 옮기고 테이블을 다시 만든다.
 // (SQLite는 컬럼 삭제를 ALTER TABLE로 직접 지원하지 않아 테이블을 재생성한다.)
+// 이전 배포에서 마이그레이션이 중간에 끊겨(예: 파일 쓰기 실패, 프로세스 재시작) _old_blob
+// 테이블이 남아있는 상태를 복구한다. 새 테이블까지 이미 있으면 데이터 복사는 끝난 것이므로
+// 남은 옛 테이블만 정리하고, 새 테이블이 없으면 이름을 되돌려 처음부터 다시 시도할 수 있게 한다.
+// 반드시 아래의 `CREATE TABLE IF NOT EXISTS board_attachment/document_file` 스키마 생성보다
+// 먼저 호출해야 한다 - 그 스키마 블록이 먼저 실행되면 새 테이블이 빈 채로 만들어져 버려서,
+// 이 함수가 "이미 마이그레이션 끝남"으로 오판하고 원본 데이터가 든 _old_blob을 그냥 지워버린다.
+function recoverInterruptedBlobMigration(db: Database.Database, tableName: string): void {
+  const oldName = `${tableName}_old_blob`;
+  const tableExists = (name: string) =>
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(name) !== undefined;
+  if (!tableExists(oldName)) return;
+  if (tableExists(tableName)) {
+    db.exec(`DROP TABLE ${oldName}`);
+  } else {
+    db.exec(`ALTER TABLE ${oldName} RENAME TO ${tableName}`);
+  }
+}
+
 function migrateBoardAttachmentBlobsToFiles(db: Database.Database): void {
   const cols = new Set(
     (db.prepare("PRAGMA table_info(board_attachment)").all() as { name: string }[]).map((c) => c.name)
@@ -132,6 +150,33 @@ function migrateDocumentFileBlobsToFiles(db: Database.Database): void {
   db.exec("CREATE INDEX IF NOT EXISTS idx_document_file_type ON document_file(doc_type, item_name)");
 }
 
+// SQLite의 ALTER TABLE RENAME은 기본적으로 다른 테이블의 외래키 참조 문구도 함께 새 이름으로
+// 바꿔준다. 예전 배포에서 document_file을 document_file_old_blob으로 리네임하는 순간
+// lab_journal의 linked_report_id 참조가 "document_file_old_blob"을 가리키도록 바뀌었고,
+// 바로 뒤에 document_file을 새로 만들어도 이미 끊어진 그 참조는 저절로 되돌아오지 않았다.
+// 그 결과 그 이후로는 연구실험일지 저장(INSERT)이 항상 "no such table:
+// main.document_file_old_blob" 오류로 실패한다. 이미 이렇게 망가진 채 배포된 DB를 여기서
+// lab_journal 테이블을 올바른 참조로 재생성해 복구한다. (앞으로의 리네임은 getDb() 시작 시
+// legacy_alter_table을 켜서 애초에 참조를 건드리지 않도록 막는다.)
+function repairLabJournalForeignKeyReference(db: Database.Database): void {
+  const row = db
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'lab_journal'")
+    .get() as { sql: string } | undefined;
+  if (!row || !row.sql.includes("document_file_old_blob")) return;
+
+  const fixedSql = row.sql
+    .replace(/document_file_old_blob/g, "document_file")
+    .replace(/CREATE TABLE lab_journal/, "CREATE TABLE lab_journal_fixed");
+
+  db.transaction(() => {
+    db.exec(fixedSql);
+    db.exec("INSERT INTO lab_journal_fixed SELECT * FROM lab_journal");
+    db.exec("DROP TABLE lab_journal");
+    db.exec("ALTER TABLE lab_journal_fixed RENAME TO lab_journal");
+  })();
+  db.exec("CREATE INDEX IF NOT EXISTS idx_lab_journal_date ON lab_journal(date)");
+}
+
 export function getDb(): Database.Database {
   if (global.__db) return global.__db;
 
@@ -139,6 +184,20 @@ export function getDb(): Database.Database {
   // WAL은 mmap/파일 잠금을 정교하게 지원하는 로컬 디스크가 필요하다.
   // Railway 등 네트워크 볼륨에서는 WAL이 네이티브 모듈을 크래시시킬 수 있어 DELETE 저널을 사용한다.
   db.pragma("journal_mode = DELETE");
+  // ALTER TABLE RENAME이 다른 테이블의 외래키 참조 문구까지 자동으로 바꿔버리는 SQLite 기본
+  // 동작을 끈다 (아래 마이그레이션들이 document_file/board_attachment를 리네임했다가 같은
+  // 이름으로 재생성하는데, 이 동작이 켜져 있으면 그 사이 다른 테이블의 참조가 옛 이름으로
+  // 영구히 바뀌어 버린다 - repairLabJournalForeignKeyReference가 복구하는 문제가 바로 이것).
+  db.pragma("legacy_alter_table = ON");
+
+  // 아래 스키마 생성 블록의 `CREATE TABLE IF NOT EXISTS board_attachment/document_file`가
+  // 먼저 실행되면, 마이그레이션이 중간에 끊겨 새 테이블이 아직 없던 상태에서도 여기서 빈
+  // 새 스키마 테이블이 만들어져 버린다. 그러면 recoverInterruptedBlobMigration이 "새 테이블이
+  // 이미 있으니 복사는 끝났다"고 오판해 원본 데이터가 든 _old_blob 테이블을 그냥 지워버려
+  // 데이터가 유실된다. 그 스키마 블록보다 먼저 복구를 실행해, 필요하면 원래 이름으로
+  // 되돌려 놓은 뒤 CREATE TABLE IF NOT EXISTS가 기존(구 스키마) 테이블을 건드리지 않게 한다.
+  recoverInterruptedBlobMigration(db, "board_attachment");
+  recoverInterruptedBlobMigration(db, "document_file");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS production_log (
@@ -740,6 +799,7 @@ export function getDb(): Database.Database {
 
   migrateBoardAttachmentBlobsToFiles(db);
   migrateDocumentFileBlobsToFiles(db);
+  repairLabJournalForeignKeyReference(db);
 
   const specCount = db.prepare("SELECT COUNT(*) as c FROM spec_limit").get() as { c: number };
   if (specCount.c === 0) {
