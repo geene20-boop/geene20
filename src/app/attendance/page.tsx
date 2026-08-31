@@ -917,7 +917,7 @@ function DailyRosterTab() {
         </thead>
         <tbody>
           {filteredRows.map((r) => (
-            <DailyRosterRow key={r.worker_id} row={r} onChanged={refresh} />
+            <DailyRosterRow key={`${r.worker_id}_${r.date}`} row={r} onChanged={refresh} />
           ))}
           {!loading && filteredRows.length === 0 && (
             <tr>
