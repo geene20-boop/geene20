@@ -74,6 +74,27 @@ function pltWoodQty(qty: string): string {
   return Number.isNaN(num) ? "" : String(Math.round(num / PLT_WOOD_DIVISOR));
 }
 
+// 제품별 탑시트/랩(스트레치필름) 자동 지정 규칙
+// - 석회고토/입상규산의 무상분·유상분: 탑시트(흑) + 스트레치필름(흑)
+// - 석회고토/입상규산의 생생나라(유기농): 탑시트(백) + 스트레치필름(흑)
+// - 칼슘유황 유상(백색): 탑시트(흑) + 스트레치필름(투)
+type AutoPackaging = { topsheet: "흑" | "백"; wrap: "흑" | "투" };
+function autoPackagingFor(item: PackingItem | undefined): AutoPackaging | null {
+  if (!item) return null;
+  const category = stripCode(item.category);
+  const sub = stripCode(item.sub);
+  if ((category === "석회고토" || category === "입상규산") && (sub === "무상분" || sub === "유상분")) {
+    return { topsheet: "흑", wrap: "흑" };
+  }
+  if ((category === "석회고토" || category === "입상규산") && sub === "생생나라(유기농)") {
+    return { topsheet: "백", wrap: "흑" };
+  }
+  if (category === "칼슘유황" && sub === "유상(백색)") {
+    return { topsheet: "흑", wrap: "투" };
+  }
+  return null;
+}
+
 export default function PackingEntryPage() {
   const [items, setItems] = useState<PackingItem[]>([]);
   const [entries, setEntries] = useState<PackingEntry[]>([]);
@@ -149,6 +170,20 @@ export default function PackingEntryPage() {
     () => auxItems.find((i) => stripCode(i.sub) === "목재PLT"),
     [auxItems]
   );
+  const topsheetItems = useMemo(
+    () => bagmatItems.concat(auxItems).filter((i) => stripCode(i.sub).includes("탑시트")),
+    [bagmatItems, auxItems]
+  );
+  const wrapItems = useMemo(
+    () => auxItems.filter((i) => stripCode(i.sub).includes("스트레치")),
+    [auxItems]
+  );
+  function findTopsheet(color: "흑" | "백") {
+    return topsheetItems.find((i) => stripCode(i.sub).includes(color));
+  }
+  function findWrap(color: "흑" | "투") {
+    return wrapItems.find((i) => stripCode(i.sub).includes(color));
+  }
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -157,12 +192,17 @@ export default function PackingEntryPage() {
   function selectProduct(key: string) {
     const item = itemByKey.get(key);
     const nowPltPacked = isPltProduct(item);
+    const auto = autoPackagingFor(item);
+    const autoTopsheet = auto ? findTopsheet(auto.topsheet) : undefined;
+    const autoWrap = auto ? findWrap(auto.wrap) : undefined;
     setForm((f) => {
       const next: FormState = {
         ...f,
         productKey: key,
         bagMatQty: item?.bag_mat_key ? f.qty : "",
         tonbagLinerKey: "",
+        topsheetKey: autoTopsheet?.key ?? "",
+        wrapKey: autoWrap?.key ?? "",
       };
       if (nowPltPacked && pltWoodItem) {
         next.auxUseKey = pltWoodItem.key;
