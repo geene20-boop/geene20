@@ -50,7 +50,24 @@ async function fetchDailyUsageKwh(custNo: string, date: string): Promise<number 
   }
   const data = await res.json();
   const entries = data?.dayLpDataInfoList;
-  if (!Array.isArray(entries) || entries.length === 0) return null;
+  if (!Array.isArray(entries) || entries.length === 0) {
+    // 한전 API는 서비스키 만료/차단, 조회건수 초과 등의 오류도 HTTP 200과 함께 내려주는
+    // 경우가 있다. dayLpDataInfoList가 없다고 해서 무조건 "그 날짜에 데이터가 없다"고
+    // 단정하면 이런 오류를 조용히 "조회된 값 없음"으로 삼켜버리게 되므로, 응답에 담긴
+    // 오류로 보이는 필드가 있으면 실제 오류로 취급해 화면에 드러낸다.
+    const errorField = Object.entries((data ?? {}) as Record<string, unknown>).find(
+      ([key, value]) =>
+        typeof value === "string" &&
+        value.trim().length > 0 &&
+        /error|err_?msg|result_?(code|msg)|return_?(auth|reason)|fault|message|code/i.test(key)
+    );
+    if (errorField) {
+      const [key, value] = errorField;
+      throw new Error(`Open P-Meter API 오류 응답 (${key}: ${value})`);
+    }
+    console.error("한전 Open P-Meter: dayLpDataInfoList 없는 응답", JSON.stringify(data).slice(0, 500));
+    return null;
+  }
 
   let total = 0;
   let found = false;
@@ -119,6 +136,23 @@ export async function syncPlantUsage(plant: Plant, date: string): Promise<Pmeter
     `${usageKwh}kWh (자동)`
   );
   return { plant, date, usage_kwh: usageKwh, status: "saved" };
+}
+
+function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** fromDate~toDate(둘 다 포함, YYYY-MM-DD) 구간을 1공장·2공장 각각 동기화한다. 자동 동기화가 며칠 밀렸을 때 수동으로 보충하는 용도. */
+export async function runPmeterSyncForRange(fromDate: string, toDate: string): Promise<PmeterSyncResult[]> {
+  const results: PmeterSyncResult[] = [];
+  for (let date = fromDate; date <= toDate; date = addDays(date, 1)) {
+    for (const plant of PLANT_OPTIONS) {
+      results.push(await syncPlantUsage(plant, date));
+    }
+  }
+  return results;
 }
 
 /** 전일(어제, KST 기준) 사용량을 1공장·2공장 각각 동기화한다. */
