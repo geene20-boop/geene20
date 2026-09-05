@@ -20,6 +20,8 @@ const COLUMNS = [
   "granulation_input",
   "fine_powder",
   "hopper",
+  "hopper_a",
+  "hopper_b",
   "moisture",
   "moisture_note",
   "worker",

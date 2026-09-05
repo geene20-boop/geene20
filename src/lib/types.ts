@@ -35,13 +35,15 @@ export interface ProductionLog {
   locked: number;
   entered_by: string | null;
   updated_by: string | null;
+  time: string | null;
+  sample_no: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface QcTest {
   id: number;
-  sample_no: number | null;
+  sample_no: string | null;
   fertilizer_type: string | null;
   date: string;
   shift: Shift;
@@ -57,6 +59,8 @@ export interface QcTest {
   granulation_input: number | null;
   fine_powder: number | null;
   hopper: number | null;
+  hopper_a: number | null;
+  hopper_b: number | null;
   moisture: number | null;
   moisture_note: string | null;
   worker: string | null;
@@ -121,6 +125,10 @@ export interface MonthlyUtility {
   elec2_won: number | null;
   lng_m3: number | null;
   lng_won: number | null;
+  lng_dryer_m3: number | null;
+  lng_dryer_won: number | null;
+  lng_rto_m3: number | null;
+  lng_rto_won: number | null;
   diesel_liter: number | null;
   diesel_won: number | null;
   production_ton: number | null;
@@ -149,6 +157,8 @@ export interface UtilityMonthRow {
   lngM3: number | null;
   lngWon: number | null;
   lngUnitPrice: number | null;
+  lngDryerM3: number | null; // 건조로 LNG 사용량 (실청구금액 입력에서 반영, 없으면 null)
+  lngRtoM3: number | null; // RTO LNG 사용량 (실청구금액 입력에서 반영, 없으면 null)
   // 경유
   dieselLiter: number | null;
   dieselWon: number | null;
@@ -276,8 +286,9 @@ export interface Worker {
   name: string;
   active: number;
   hire_date: string | null;
-  shift_type: ShiftType | null;
+  birth_date: string | null;
   nationality: Nationality;
+  foreign_country: string | null; // 'cambodia' | 'nepal'
   created_at: string;
 }
 
@@ -296,7 +307,7 @@ export interface DailyAttendanceRow {
   note: string | null; // "본인 신청 → 관리자 승인됨" 등 참고 문구
 }
 
-export type LeaveType = "연차" | "반차(오전)" | "반차(오후)" | "외출" | "조퇴";
+export type LeaveType = "연차" | "반차(오전)" | "반차(오후)" | "외출" | "조퇴" | "무급휴무" | "유급휴무";
 export type LeaveStatus = "pending" | "approved" | "rejected";
 
 export interface LeaveRequest {
@@ -330,6 +341,122 @@ export interface LeaveBalance {
   updated_at: string;
 }
 
+// ---------- 원재료관리 ----------
+
+export type RawMaterialForm = "solid" | "liquid";
+export type RawMaterialJudgment = "OK" | "NG";
+
+export const RAW_MATERIAL_FORM_LABELS: Record<RawMaterialForm, string> = {
+  solid: "고상",
+  liquid: "액상",
+};
+
+export const RAW_MATERIAL_JUDGMENT_LABELS: Record<RawMaterialJudgment, string> = {
+  OK: "OK 적합",
+  NG: "NG 부적합",
+};
+
+export interface RawMaterial {
+  key: string;
+  name: string;
+  form: RawMaterialForm;
+  category: string | null;
+  unit: string | null;
+  submit_to: string | null;
+  last_price: number | null;
+  stock: number;
+  locked: number;
+  approved_by: string | null;
+  approved_at: string | null;
+  entered_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // 별지 제40호서식(유기농업자재 공시 원료·재료 수급대장) 발급용 — 자재(품목)마다 고정되는 공시 정보
+  disclosure_no: string | null;
+  disclosure_date: string | null;
+  material_type: string | null;
+  main_ingredients: string | null;
+  disclosure_valid_from: string | null;
+  disclosure_valid_to: string | null;
+  disclosure_material_name: string | null; // 공시서에 기재된 공식 자재명 (예: "규산질") — 내부 품목명("생생나라 규산")과 다름
+  disclosure_ingredients_json: string | null; // 성분별 거래처 목록 JSON: {name, supplierName, supplierAddress, supplierPhone}[]
+}
+
+export interface RawMaterialDisclosureIngredient {
+  name: string;
+  supplierName: string;
+  supplierAddress: string;
+  supplierPhone: string;
+}
+
+export interface RawMaterialSupplier {
+  id: number;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  country: string | null;
+  entered_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RawMaterialInbound {
+  id: string;
+  date: string;
+  material_key: string;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  qty: number;
+  unit: string | null;
+  unit_price: number | null;
+  amount: number | null;
+  vehicle_no: string | null;
+  judgment: RawMaterialJudgment;
+  problem: string | null;
+  reason: string | null;
+  action_taken: string | null;
+  judged_by: string | null;
+  locked: number;
+  approved_by: string | null;
+  approved_at: string | null;
+  entered_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RawMaterialPriceHistory {
+  id: number;
+  material_key: string;
+  effective_date: string;
+  old_price: number | null;
+  new_price: number;
+  changed_by: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export type RawMaterialDocType = "form19_2" | "form40";
+
+export const RAW_MATERIAL_DOC_LABELS: Record<RawMaterialDocType, string> = {
+  form19_2: "별지 제19호의2서식 (비료관리법 시행규칙 · 원료 장부)",
+  form40: "별지 제40호서식 (유기농업자재 공시 원료·재료 수급대장)",
+};
+
+export interface RawMaterialDocument {
+  id: string;
+  doc_type: RawMaterialDocType;
+  title: string | null;
+  target_material: string | null;
+  period_from: string | null;
+  period_to: string | null;
+  data_json: string;
+  memo: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
 export type BoardCategory = "생산계획" | "보수계획" | "휴무일" | "기타";
 
 export interface BoardAttachment {
@@ -350,4 +477,78 @@ export interface BoardPost {
   created_at: string;
   updated_at: string;
   attachments: BoardAttachment[];
+}
+
+// ---------- 문서관리: 외부기관 시험성적서 / MSDS ----------
+
+export type DocumentType = "test_report" | "msds";
+export type DocumentCategory = "원료" | "제품";
+export type DocumentLanguage = "국문" | "영문" | "기타";
+
+export interface DocumentFile {
+  id: number;
+  doc_type: DocumentType;
+  category: DocumentCategory;
+  item_name: string;
+  language: DocumentLanguage | null;
+  ref_date: string | null;
+  filename: string;
+  mime_type: string | null;
+  size: number;
+  entered_by: string;
+  created_at: string;
+}
+
+// ---------- 자체시험성적서(수출용) ----------
+
+export interface SelfTestItemSpec {
+  item_name: string;
+  specification: string | null;
+  remarks: string | null;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+export type CertificateLanguage = "국문" | "영문";
+
+export interface SelfTestCertificate {
+  id: number;
+  report_no: string | null;
+  item_name: string;
+  specification: string | null;
+  remarks: string | null;
+  result: string | null;
+  language: CertificateLanguage;
+  consignee: string | null;
+  issued_date: string;
+  issued_by: string;
+  created_at: string;
+}
+
+// ---------- 연구실험일지 ----------
+
+export type LabJournalFormType = "항목형" | "자유기술형" | "외부시험연동형";
+
+export interface LabJournal {
+  id: number;
+  form_type: LabJournalFormType;
+  date: string;
+  researcher: string | null;
+  item_name: string | null;
+  title: string;
+  content_json: string;
+  linked_report_id: number | null;
+  entered_by: string;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TabVisibility {
+  id: number;
+  module: string; // '생산관리' | '생산가동' | '생산/출하입력' | '품질관리' | '재고관리' 등
+  feature: string; // 'backup' | 'maintenance' 등 - 탭 이름
+  visible: number; // 1: 표시, 0: 숨김
+  created_at: string;
+  updated_at: string;
 }

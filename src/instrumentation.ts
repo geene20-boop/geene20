@@ -4,5 +4,7 @@ export async function register() {
     ensureBackupScheduler();
     const { ensureBackupEmailScheduler } = await import("@/lib/backupMailer");
     ensureBackupEmailScheduler();
+    const { ensurePmeterScheduler } = await import("@/lib/pmeter");
+    ensurePmeterScheduler();
   }
 }

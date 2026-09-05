@@ -8,6 +8,7 @@ import EnteredByField from "@/components/EnteredByField";
 import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
 import { itemLabel, stripCode } from "@/lib/packingClient";
 import { useSiteSession } from "@/lib/useSiteSession";
+import { getLabel, PACKING_LABELS } from "@/lib/i18n";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const daysAgo = (n: number) => {
@@ -56,6 +57,44 @@ function n(v: string): number | null {
   return Number.isNaN(num) ? null : num;
 }
 
+// 목재PLT 자동계산 대상: 석회고토/입상규산의 무상분·유상분·생생나라(유기농) 6개 품목
+const PLT_WOOD_DIVISOR = 90;
+function isPltProduct(item: PackingItem | undefined): boolean {
+  if (!item) return false;
+  const category = stripCode(item.category);
+  const sub = stripCode(item.sub);
+  return (
+    (category === "석회고토" || category === "입상규산") &&
+    (sub === "무상분" || sub === "유상분" || sub === "생생나라(유기농)")
+  );
+}
+function pltWoodQty(qty: string): string {
+  if (qty.trim() === "") return "";
+  const num = Number(qty);
+  return Number.isNaN(num) ? "" : String(Math.round(num / PLT_WOOD_DIVISOR));
+}
+
+// 제품별 탑시트/랩(스트레치필름) 자동 지정 규칙
+// - 석회고토/입상규산의 무상분·유상분: 탑시트(흑) + 스트레치필름(흑)
+// - 석회고토/입상규산의 생생나라(유기농): 탑시트(백) + 스트레치필름(흑)
+// - 칼슘유황 유상(백색): 탑시트(흑) + 스트레치필름(투)
+type AutoPackaging = { topsheet: "흑" | "백"; wrap: "흑" | "투" };
+function autoPackagingFor(item: PackingItem | undefined): AutoPackaging | null {
+  if (!item) return null;
+  const category = stripCode(item.category);
+  const sub = stripCode(item.sub);
+  if ((category === "석회고토" || category === "입상규산") && (sub === "무상분" || sub === "유상분")) {
+    return { topsheet: "흑", wrap: "흑" };
+  }
+  if ((category === "석회고토" || category === "입상규산") && sub === "생생나라(유기농)") {
+    return { topsheet: "백", wrap: "흑" };
+  }
+  if (category === "칼슘유황" && sub === "유상(백색)") {
+    return { topsheet: "흑", wrap: "투" };
+  }
+  return null;
+}
+
 export default function PackingEntryPage() {
   const [items, setItems] = useState<PackingItem[]>([]);
   const [entries, setEntries] = useState<PackingEntry[]>([]);
@@ -68,9 +107,24 @@ export default function PackingEntryPage() {
   const admin = useAdminSession();
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [bagMatQtyManual, setBagMatQtyManual] = useState(false);
+  const [auxQtyManual, setAuxQtyManual] = useState(false);
   const [rangeFrom, setRangeFrom] = useState(daysAgo(30));
   const [rangeTo, setRangeTo] = useState(today());
   const session = useSiteSession();
+
+  const labels = useMemo(() => {
+    const lang = session.language as "ko" | "cambodia" | "nepal" | undefined;
+    return {
+      date: getLabel(PACKING_LABELS, lang, "date"),
+      type: getLabel(PACKING_LABELS, lang, "type"),
+      product_key: getLabel(PACKING_LABELS, lang, "product_key"),
+      qty: getLabel(PACKING_LABELS, lang, "qty"),
+      unit: getLabel(PACKING_LABELS, lang, "unit"),
+      worker: getLabel(PACKING_LABELS, lang, "worker"),
+      note: getLabel(PACKING_LABELS, lang, "note"),
+    };
+  }, [session.language]);
 
   useEffect(() => {
     if (session.loggedIn && session.displayName) {
@@ -111,6 +165,25 @@ export default function PackingEntryPage() {
     () => auxItems.filter((i) => i.sub?.includes("10리터") || i.sub?.includes("IBC")),
     [auxItems]
   );
+  const isPltPacked = isPltProduct(selectedProduct);
+  const pltWoodItem = useMemo(
+    () => auxItems.find((i) => stripCode(i.sub) === "목재PLT"),
+    [auxItems]
+  );
+  const topsheetItems = useMemo(
+    () => bagmatItems.concat(auxItems).filter((i) => stripCode(i.sub).includes("탑시트")),
+    [bagmatItems, auxItems]
+  );
+  const wrapItems = useMemo(
+    () => auxItems.filter((i) => stripCode(i.sub).includes("스트레치")),
+    [auxItems]
+  );
+  function findTopsheet(color: "흑" | "백") {
+    return topsheetItems.find((i) => stripCode(i.sub).includes(color));
+  }
+  function findWrap(color: "흑" | "투") {
+    return wrapItems.find((i) => stripCode(i.sub).includes(color));
+  }
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -118,12 +191,43 @@ export default function PackingEntryPage() {
 
   function selectProduct(key: string) {
     const item = itemByKey.get(key);
-    setForm((f) => ({
-      ...f,
-      productKey: key,
-      bagMatQty: item?.bag_mat_key ? f.qty : "",
-      tonbagLinerKey: "",
-    }));
+    const nowPltPacked = isPltProduct(item);
+    const auto = autoPackagingFor(item);
+    const autoTopsheet = auto ? findTopsheet(auto.topsheet) : undefined;
+    const autoWrap = auto ? findWrap(auto.wrap) : undefined;
+    setForm((f) => {
+      const next: FormState = {
+        ...f,
+        productKey: key,
+        bagMatQty: item?.bag_mat_key ? f.qty : "",
+        tonbagLinerKey: "",
+        topsheetKey: autoTopsheet?.key ?? "",
+        wrapKey: autoWrap?.key ?? "",
+      };
+      if (nowPltPacked && pltWoodItem) {
+        next.auxUseKey = pltWoodItem.key;
+        next.auxUseQty = pltWoodQty(f.qty);
+      } else if (isPltProduct(itemByKey.get(f.productKey))) {
+        next.auxUseKey = "";
+        next.auxUseQty = "";
+      }
+      return next;
+    });
+    setBagMatQtyManual(false);
+    setAuxQtyManual(false);
+  }
+
+  function handleQtyChange(value: string) {
+    setForm((f) => {
+      const next: FormState = { ...f, qty: value };
+      if (selectedProduct?.bag_mat_key && !bagMatQtyManual) {
+        next.bagMatQty = value;
+      }
+      if (isPltPacked && pltWoodItem && !auxQtyManual) {
+        next.auxUseQty = pltWoodQty(value);
+      }
+      return next;
+    });
   }
 
   async function submit(e: React.FormEvent) {
@@ -163,6 +267,8 @@ export default function PackingEntryPage() {
       }
       setForm(emptyForm());
       setEditingId(null);
+      setBagMatQtyManual(false);
+      setAuxQtyManual(false);
       await Promise.all([loadItems(), loadEntries()]);
     } catch (err) {
       setMessage(`오류: ${(err as Error).message}`);
@@ -188,6 +294,9 @@ export default function PackingEntryPage() {
       auxUseQty: row.aux_use_qty != null ? String(row.aux_use_qty) : "",
       worker: row.worker ?? "",
     });
+    // 기존 저장값을 불러올 때는 자동계산으로 덮어쓰지 않음(수동 입력값으로 취급)
+    setBagMatQtyManual(true);
+    setAuxQtyManual(true);
   }
 
   async function removeEntry(id: string) {
@@ -248,7 +357,7 @@ export default function PackingEntryPage() {
             lockedValue={session.loggedIn ? session.displayName : null}
           />
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">날짜</span>
+            <span className="text-slate-600">{labels.date}</span>
             <input
               type="date"
               value={form.date}
@@ -257,7 +366,7 @@ export default function PackingEntryPage() {
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">구분</span>
+            <span className="text-slate-600">{labels.type}</span>
             <select
               value={form.type}
               onChange={(e) => set("type", e.target.value as PackingEntryType)}
@@ -268,7 +377,7 @@ export default function PackingEntryPage() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">작업자</span>
+            <span className="text-slate-600">{labels.worker}</span>
             <select
               value={form.worker}
               onChange={(e) => set("worker", e.target.value)}
@@ -289,7 +398,7 @@ export default function PackingEntryPage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">제품</span>
+            <span className="text-slate-600">{labels.product_key}</span>
             <select
               value={form.productKey}
               onChange={(e) => selectProduct(e.target.value)}
@@ -305,11 +414,11 @@ export default function PackingEntryPage() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">수량{selectedProduct?.unit ? ` (${selectedProduct.unit})` : ""}</span>
+            <span className="text-slate-600">{labels.qty}{selectedProduct?.unit ? ` (${selectedProduct.unit})` : ""}</span>
             <input
               type="number"
               value={form.qty}
-              onChange={(e) => set("qty", e.target.value)}
+              onChange={(e) => handleQtyChange(e.target.value)}
               className="border rounded-md px-2 py-1.5"
               required
             />
@@ -320,9 +429,15 @@ export default function PackingEntryPage() {
               <input
                 type="number"
                 value={form.bagMatQty}
-                onChange={(e) => set("bagMatQty", e.target.value)}
+                onChange={(e) => {
+                  setBagMatQtyManual(true);
+                  set("bagMatQty", e.target.value);
+                }}
                 className="border rounded-md px-2 py-1.5"
               />
+              <span className="text-[11px] text-slate-400">
+                생산수량과 동일하게 자동 반영됩니다 (직접 수정 가능).
+              </span>
             </label>
           )}
           {form.type === "pack" && isTonbag && (
@@ -349,13 +464,13 @@ export default function PackingEntryPage() {
 
         {form.type === "pack" && (
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 border-t pt-3">
-            <div className="flex gap-2">
-              <label className="flex flex-col gap-1 text-sm flex-1">
+            <div className="flex gap-2 min-w-0">
+              <label className="flex flex-col gap-1 text-sm flex-1 min-w-0">
                 <span className="text-slate-600">탑시트 품목</span>
                 <select
                   value={form.topsheetKey}
                   onChange={(e) => set("topsheetKey", e.target.value)}
-                  className="border rounded-md px-2 py-1.5"
+                  className="border rounded-md px-2 py-1.5 w-full min-w-0"
                 >
                   <option value="">선택안함</option>
                   {bagmatItems
@@ -368,23 +483,23 @@ export default function PackingEntryPage() {
                     ))}
                 </select>
               </label>
-              <label className="flex flex-col gap-1 text-sm w-24">
+              <label className="flex flex-col gap-1 text-sm w-20 shrink-0">
                 <span className="text-slate-600">수량</span>
                 <input
                   type="number"
                   value={form.topsheetQty}
                   onChange={(e) => set("topsheetQty", e.target.value)}
-                  className="border rounded-md px-2 py-1.5"
+                  className="border rounded-md px-2 py-1.5 w-full min-w-0"
                 />
               </label>
             </div>
-            <div className="flex gap-2">
-              <label className="flex flex-col gap-1 text-sm flex-1">
+            <div className="flex gap-2 min-w-0">
+              <label className="flex flex-col gap-1 text-sm flex-1 min-w-0">
                 <span className="text-slate-600">랩(스트레치필름)</span>
                 <select
                   value={form.wrapKey}
                   onChange={(e) => set("wrapKey", e.target.value)}
-                  className="border rounded-md px-2 py-1.5"
+                  className="border rounded-md px-2 py-1.5 w-full min-w-0"
                 >
                   <option value="">선택안함</option>
                   {auxItems
@@ -396,17 +511,38 @@ export default function PackingEntryPage() {
                     ))}
                 </select>
               </label>
-              <label className="flex flex-col gap-1 text-sm w-24">
+              <label className="flex flex-col gap-1 text-sm w-20 shrink-0">
                 <span className="text-slate-600">수량</span>
                 <input
                   type="number"
                   value={form.wrapQty}
                   onChange={(e) => set("wrapQty", e.target.value)}
-                  className="border rounded-md px-2 py-1.5"
+                  className="border rounded-md px-2 py-1.5 w-full min-w-0"
                 />
               </label>
             </div>
-            {isVita ? (
+            {isPltPacked && pltWoodItem ? (
+              <div className="flex flex-col gap-1 text-sm min-w-0">
+                <span className="text-slate-600">기타 부자재</span>
+                <div className="flex gap-2 min-w-0">
+                  <div className="border rounded-md px-2 py-1.5 flex-1 min-w-0 bg-slate-50 text-slate-600 truncate">
+                    {itemLabel(pltWoodItem)}
+                  </div>
+                  <input
+                    type="number"
+                    value={form.auxUseQty}
+                    onChange={(e) => {
+                      setAuxQtyManual(true);
+                      set("auxUseQty", e.target.value);
+                    }}
+                    className="border rounded-md px-2 py-1.5 w-20 shrink-0"
+                  />
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  목재PLT 수량은 생산수량 ÷ {PLT_WOOD_DIVISOR}으로 자동 계산됩니다 (직접 수정 가능).
+                </span>
+              </div>
+            ) : isVita ? (
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-slate-600">포장용기</span>
                 <select
@@ -426,13 +562,13 @@ export default function PackingEntryPage() {
                 </span>
               </label>
             ) : (
-              <div className="flex gap-2">
-                <label className="flex flex-col gap-1 text-sm flex-1">
+              <div className="flex gap-2 min-w-0">
+                <label className="flex flex-col gap-1 text-sm flex-1 min-w-0">
                   <span className="text-slate-600">기타 부자재</span>
                   <select
                     value={form.auxUseKey}
                     onChange={(e) => set("auxUseKey", e.target.value)}
-                    className="border rounded-md px-2 py-1.5"
+                    className="border rounded-md px-2 py-1.5 w-full min-w-0"
                   >
                     <option value="">선택안함</option>
                     {auxItems
@@ -444,13 +580,13 @@ export default function PackingEntryPage() {
                       ))}
                   </select>
                 </label>
-                <label className="flex flex-col gap-1 text-sm w-24">
+                <label className="flex flex-col gap-1 text-sm w-20 shrink-0">
                   <span className="text-slate-600">수량</span>
                   <input
                     type="number"
                     value={form.auxUseQty}
                     onChange={(e) => set("auxUseQty", e.target.value)}
-                    className="border rounded-md px-2 py-1.5"
+                    className="border rounded-md px-2 py-1.5 w-full min-w-0"
                   />
                 </label>
               </div>
@@ -466,6 +602,8 @@ export default function PackingEntryPage() {
               onClick={() => {
                 setEditingId(null);
                 setForm(emptyForm());
+                setBagMatQtyManual(false);
+                setAuxQtyManual(false);
               }}
               className="border rounded-md px-3 py-1.5 text-sm"
             >
@@ -478,13 +616,6 @@ export default function PackingEntryPage() {
             className="bg-slate-900 text-white rounded-md px-4 py-1.5 text-sm font-medium disabled:opacity-50"
           >
             {saving ? "저장 중..." : editingId ? "수정 저장" : "등록"}
-          </button>
-          <button
-            type="button"
-            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            className="border rounded-md px-4 py-1.5 text-sm font-medium"
-          >
-            ↑ 맨 위로
           </button>
         </div>
       </form>
@@ -523,11 +654,11 @@ export default function PackingEntryPage() {
         <table className="w-full text-sm mt-2">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
-              <th className="text-left px-3 py-2">날짜</th>
-              <th className="text-left px-3 py-2">구분</th>
-              <th className="text-left px-3 py-2">제품</th>
-              <th className="text-right px-3 py-2">수량</th>
-              <th className="text-left px-3 py-2">작업자</th>
+              <th className="text-left px-3 py-2">{labels.date}</th>
+              <th className="text-left px-3 py-2">{labels.type}</th>
+              <th className="text-left px-3 py-2">{labels.product_key}</th>
+              <th className="text-right px-3 py-2">{labels.qty}</th>
+              <th className="text-left px-3 py-2">{labels.worker}</th>
               <th className="text-left px-3 py-2">입력자</th>
               <th className="text-left px-3 py-2">상태</th>
               {canManage && <th className="text-left px-3 py-2">관리</th>}
