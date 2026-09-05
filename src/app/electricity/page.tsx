@@ -143,7 +143,7 @@ export default function ElectricityPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-bold">전력사용량 입력</h1>
+        <h1 className="text-xl font-bold">전력 모니터링</h1>
         <p className="text-sm text-slate-500 mt-1">
           1공장(저압)·2공장(고압) 일일 전력 사용량(kWh)을 입력합니다. 같은 날짜·공장으로 다시
           저장하면 기존 기록이 수정됩니다.
@@ -310,13 +310,6 @@ export default function ElectricityPage() {
             className="bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {saving ? "저장 중..." : editingKey ? "수정 저장" : "저장"}
-          </button>
-          <button
-            type="button"
-            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            className="border rounded-md px-4 py-2 text-sm font-medium"
-          >
-            ↑ 맨 위로
           </button>
           {message && <span className="text-sm text-slate-600">{message}</span>}
         </div>

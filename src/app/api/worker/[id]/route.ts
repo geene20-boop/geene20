@@ -24,17 +24,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     body.nationality !== undefined && NATIONALITIES.includes(body.nationality)
       ? body.nationality
       : existing.nationality;
+  const foreignCountry = body.foreignCountry !== undefined ? (body.foreignCountry || null) : existing.foreign_country;
 
   db.prepare(
-    "UPDATE worker SET hire_date = ?, birth_date = ?, nationality = ? WHERE id = ?"
-  ).run(hireDate, birthDate, nationality, id);
+    "UPDATE worker SET hire_date = ?, birth_date = ?, nationality = ?, foreign_country = ? WHERE id = ?"
+  ).run(hireDate, birthDate, nationality, foreignCountry, id);
 
   logAudit(
     "worker",
     existing.name,
     "update",
     "관리자",
-    `입사일 ${hireDate ?? "-"} / 생년월일 ${birthDate ?? "-"} / 국적 ${nationality}`
+    `입사일 ${hireDate ?? "-"} / 생년월일 ${birthDate ?? "-"} / 국적 ${nationality} / 외국인지역 ${foreignCountry ?? "-"}`
   );
 
   const updated = db.prepare("SELECT * FROM worker WHERE id = ?").get(id);

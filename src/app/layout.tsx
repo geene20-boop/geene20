@@ -4,6 +4,7 @@ import "./globals.css";
 import NavBar from "@/components/NavBar";
 import SiteGate from "@/components/SiteGate";
 import NoticeModal from "@/components/NoticeModal";
+import ScrollToTopButton from "@/components/ScrollToTopButton";
 import { hasAnyAccount, isSiteRequest } from "@/lib/auth";
 
 export const metadata: Metadata = {
@@ -36,14 +37,17 @@ export default async function RootLayout({
 
   return (
     <html lang="ko" className="h-full antialiased">
-      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900 font-sans">
+      <body className="min-h-full flex flex-col md:flex-row bg-slate-50 text-slate-900 font-sans">
         {needsGate ? (
           <SiteGate />
         ) : (
           <>
             <NavBar />
-            <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-6">{children}</main>
+            <div className="flex-1 flex flex-col min-w-0">
+              <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-6">{children}</main>
+            </div>
             <NoticeModal />
+            <ScrollToTopButton />
           </>
         )}
       </body>
