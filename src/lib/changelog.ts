@@ -7,6 +7,13 @@ export interface ChangelogEntry {
 // 새 기능을 배포할 때 배열 맨 앞에 새 항목을 추가한다 (버전 문자열은 날짜 기반 권장).
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2026.09.05",
+    date: "2026-09-05",
+    items: [
+      { title: "전력사용량 자동 연동 기간 재동기화 추가", desc: "관리자 화면에서 시작일·종료일을 지정하면 밀린 전력사용량을 한 번에 다시 불러올 수 있고, 자동 연동이 실패했을 때 그 이유도 함께 표시됩니다." },
+    ],
+  },
+  {
     version: "2026.09.03",
     date: "2026-09-03",
     items: [

@@ -594,6 +594,8 @@ function PmeterCard() {
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<PmeterResult[] | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [rangeFrom, setRangeFrom] = useState("");
+  const [rangeTo, setRangeTo] = useState("");
 
   async function refresh() {
     const res = await fetch("/api/admin/pmeter");
@@ -607,11 +609,15 @@ function PmeterCard() {
     refresh();
   }, []);
 
-  async function runNow() {
+  async function runSync(body?: { from: string; to: string }) {
     setRunning(true);
     setMessage(null);
     try {
-      const res = await fetch("/api/admin/pmeter", { method: "POST" });
+      const res = await fetch("/api/admin/pmeter", {
+        method: "POST",
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "실패했습니다.");
       setResults(data.results);
@@ -620,6 +626,18 @@ function PmeterCard() {
     } finally {
       setRunning(false);
     }
+  }
+
+  function runNow() {
+    return runSync();
+  }
+
+  function runRange() {
+    if (!rangeFrom || !rangeTo) {
+      setMessage("시작일과 종료일을 모두 입력해주세요.");
+      return;
+    }
+    return runSync({ from: rangeFrom, to: rangeTo });
   }
 
   return (
@@ -641,6 +659,36 @@ function PmeterCard() {
           >
             {running ? "동기화 중..." : "지금 동기화 실행 (전일치)"}
           </button>
+          <div className="flex flex-wrap items-end gap-2 mt-1">
+            <div>
+              <label className="block text-xs text-slate-500 mb-0.5">시작일</label>
+              <input
+                type="date"
+                value={rangeFrom}
+                onChange={(e) => setRangeFrom(e.target.value)}
+                className="border rounded-md px-2 py-1 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-0.5">종료일</label>
+              <input
+                type="date"
+                value={rangeTo}
+                onChange={(e) => setRangeTo(e.target.value)}
+                className="border rounded-md px-2 py-1 text-sm"
+              />
+            </div>
+            <button
+              onClick={runRange}
+              disabled={running}
+              className="border rounded-md px-3 py-1.5 text-sm disabled:opacity-50"
+            >
+              {running ? "동기화 중..." : "기간 재동기화"}
+            </button>
+          </div>
+          <p className="text-xs text-slate-400">
+            자동 동기화가 며칠 밀렸을 때, 기간을 지정해 빠진 날짜를 한번에 다시 채워 넣을 수 있습니다.
+          </p>
         </>
       ) : (
         <p className="text-xs text-amber-600">
