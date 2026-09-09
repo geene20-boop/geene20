@@ -10,7 +10,6 @@ import { KIND_LABELS, itemLabel } from "@/lib/packingClient";
 import { useSiteSession } from "@/lib/useSiteSession";
 
 type NewItemForm = {
-  key: string;
   kind: PackingKind;
   category: string;
   sub: string;
@@ -21,7 +20,7 @@ type NewItemForm = {
 };
 
 function emptyForm(): NewItemForm {
-  return { key: "", kind: "product", category: "", sub: "", unit: "", bagKg: "", bagMatKey: "", initialStock: "" };
+  return { kind: "product", category: "", sub: "", unit: "", bagKg: "", bagMatKey: "", initialStock: "" };
 }
 
 export default function PackingItemsPage() {
@@ -68,7 +67,6 @@ export default function PackingItemsPage() {
     try {
       await apiPost("/api/packing-item", {
         entered_by: enteredBy,
-        key: form.key,
         kind: form.kind,
         category: form.category || null,
         sub: form.sub || null,
@@ -186,16 +184,6 @@ export default function PackingItemsPage() {
             error={nameError}
             lockedValue={session.loggedIn ? session.displayName : null}
           />
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">품목 키 (영문/숫자, 고유값)</span>
-            <input
-              type="text"
-              value={form.key}
-              onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))}
-              className="border rounded-md px-2 py-1.5"
-              required
-            />
-          </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">구분</span>
             <select

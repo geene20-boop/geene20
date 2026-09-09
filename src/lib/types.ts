@@ -62,6 +62,8 @@ export interface QcTest {
   hopper_a: number | null;
   hopper_b: number | null;
   moisture: number | null;
+  ph: number | null;
+  disintegration: number | null;
   moisture_note: string | null;
   worker: string | null;
   entered_by: string | null;
@@ -292,7 +294,7 @@ export interface Worker {
   created_at: string;
 }
 
-export type DailyAttendanceStatus = "early_leave" | "comp_off" | "late" | "absent" | "other";
+export type DailyAttendanceStatus = "early_leave" | "comp_off" | "late" | "absent" | "training" | "business_trip" | "other";
 
 export interface DailyAttendanceRow {
   worker_id: number;

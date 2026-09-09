@@ -1,8 +1,8 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState, useRef } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
-import { PackingItem, ProductionLog, QcTest, Worker, inferShift } from "@/lib/types";
+import { PackingItem, QcTest, Worker, inferShift } from "@/lib/types";
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import { useSiteSession } from "@/lib/useSiteSession";
@@ -44,15 +44,19 @@ type FormState = {
   hopper_a: string;
   hopper_b: string;
   moisture: string;
+  ph: string;
+  disintegration: string;
   moisture_note: string;
   worker: string;
 };
 
+// 생산일자/생산시각/생산조건·작업자는 다른 기록에서 자동으로 불러오지 않고 항상 빈칸으로 시작해
+// 수동으로 입력한다.
 const emptyForm = (): FormState => ({
   sample_no: "",
   fertilizer_type: "",
-  date: today(),
-  time: nowHHMM(),
+  date: "",
+  time: "",
   measured_date: today(),
   measured_time: nowHHMM(),
   values: Array(20).fill(""),
@@ -63,14 +67,16 @@ const emptyForm = (): FormState => ({
   hopper_a: "",
   hopper_b: "",
   moisture: "",
+  ph: "",
+  disintegration: "",
   moisture_note: "",
   worker: "",
 });
 
 // 서버(SSR)와 브라우저의 시간대가 다르면 최초 렌더 시 날짜·시각이 서로 달라 하이드레이션이
 // 어긋날 수 있다. 최초 렌더에서는 비워두고, 브라우저에 붙은 뒤(useEffect)에만 실제 현재
-// 날짜·시각을 채운다.
-const initialForm = (): FormState => ({ ...emptyForm(), date: "", time: "", measured_date: "", measured_time: "" });
+// 측정일자·측정시각을 채운다.
+const initialForm = (): FormState => ({ ...emptyForm(), measured_date: "", measured_time: "" });
 
 const DRAFT_KEY = "qc_draft";
 
@@ -97,10 +103,11 @@ export default function QcPage() {
   const [rangeTo, setRangeTo] = useState(today());
   const session = useSiteSession();
 
-  // 브라우저에 붙은 뒤(클라이언트 전용) 실제 현재 날짜·시각으로 채운다 (initialForm 참고).
+  // 브라우저에 붙은 뒤(클라이언트 전용) 실제 현재 측정일자·측정시각으로 채운다 (initialForm 참고).
+  // 생산일자·생산시각은 자동으로 채우지 않고 빈칸으로 두어 수동 입력을 받는다.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setForm((f) => (f.date ? f : { ...f, date: today(), time: nowHHMM(), measured_date: today(), measured_time: nowHHMM() }));
+    setForm((f) => (f.measured_date ? f : { ...f, measured_date: today(), measured_time: nowHHMM() }));
   }, []);
 
   useEffect(() => {
@@ -156,63 +163,12 @@ export default function QcPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadTests();
-    // 페이지 로드 시 현재 시간 자동입력
-    setForm((f) => ({
-      ...f,
-      time: f.time || nowHHMM(),
-      measured_time: f.measured_time || nowHHMM(),
-    }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 새 기록 생성 시 date가 변경되면 현재 시간으로 time/measured_time 자동 업데이트
-  const lastDate = useRef(form.date);
-  useEffect(() => {
-    if (editingId != null) return;
-    if (lastDate.current !== form.date) {
-      lastDate.current = form.date;
-      setForm((f) => ({
-        ...f,
-        time: nowHHMM(),
-        measured_time: nowHHMM(),
-      }));
-    }
-  }, [form.date, editingId]);
-
-  // 생산일자+생산시각(→주/야 자동판별)으로 일치하는 생산일지의 설비셋팅을 생산조건에 자동 반영.
-  // 기존 기록을 수정 중일 때는 그 기록의 저장된 값을 그대로 두고 덮어쓰지 않는다.
-  useEffect(() => {
-    if (editingId != null || !form.date || !form.time) return;
-    let cancelled = false;
-    const shift = inferShift(form.time);
-    apiGet<ProductionLog[]>(`/api/production?from=${form.date}&to=${form.date}`)
-      .then((rows) => {
-        if (cancelled) return;
-        const match = rows.find((r) => r.shift === shift);
-        if (!match) return;
-        // A라인/B라인 중 실제로 가동한(값이 적힌) 라인의 건조로 셋팅온도만 버너에 반영 (동시 가동 없음)
-        const burnerTemp = match.dryer_temp_a ?? match.dryer_temp_b ?? null;
-        setForm((f) => ({
-          ...f,
-          burner_temp: burnerTemp != null ? String(burnerTemp) : f.burner_temp,
-          granulation_brix: match.brix != null ? String(match.brix) : f.granulation_brix,
-          granulation_input: match.feed_total != null ? String(match.feed_total) : f.granulation_input,
-          fine_powder: match.feed_fine_powder != null ? String(match.feed_fine_powder) : f.fine_powder,
-          hopper_a: match.feed_hopper_a != null ? String(match.feed_hopper_a) : f.hopper_a,
-          hopper_b: match.feed_hopper_b != null ? String(match.feed_hopper_b) : f.hopper_b,
-          worker: match.worker ?? f.worker,
-        }));
-      })
-      .catch(() => {
-        // 해당 날짜/조의 생산일지가 없으면 조용히 무시하고 수기 입력 그대로 둔다
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [form.date, form.time, editingId]);
-
   // 시료 No.는 해당 생산일자에 이미 등록된 최대 번호 다음 값으로 자동 생성한다 (YYYY.MM.DD-01 형식)
   const nextSampleNo = useMemo(() => {
+    if (!form.date) return "";
     const sameDate = tests.filter((t) => t.date === form.date);
     const noStrings = sameDate
       .map((t) => t.sample_no)
@@ -310,6 +266,8 @@ export default function QcPage() {
         hopper_a: n(form.hopper_a),
         hopper_b: n(form.hopper_b),
         moisture: n(form.moisture),
+        ph: n(form.ph),
+        disintegration: n(form.disintegration),
         moisture_note: form.moisture_note || null,
         worker: form.worker || null,
         entered_by: enteredBy.trim(),
@@ -355,6 +313,8 @@ export default function QcPage() {
       hopper_a: t.hopper_a != null ? String(t.hopper_a) : "",
       hopper_b: t.hopper_b != null ? String(t.hopper_b) : "",
       moisture: t.moisture != null ? String(t.moisture) : "",
+      ph: t.ph != null ? String(t.ph) : "",
+      disintegration: t.disintegration != null ? String(t.disintegration) : "",
       moisture_note: t.moisture_note ?? "",
       worker: t.worker ?? "",
     });
@@ -388,8 +348,8 @@ export default function QcPage() {
       <div>
         <h1 className="text-xl font-bold">측정데이터 (비료시료 강도테스트)</h1>
         <p className="text-sm text-slate-500 mt-1">
-          시료 20개 경도값을 입력하면 합계·평균이 자동 계산되고, 날짜·시간으로 조(주/야)가 자동
-          판별되어 생산일지와 연동됩니다.
+          시료 20개 경도값을 입력하면 합계·평균이 자동 계산되고, 생산시각으로 조(주/야)가 자동
+          판별됩니다. 생산일자·생산시각·생산조건/작업자는 빈칸에서 직접 입력합니다.
         </p>
       </div>
 
@@ -617,7 +577,7 @@ export default function QcPage() {
 
         <fieldset className="border rounded-lg p-4">
           <legend className="text-sm font-semibold text-slate-700 px-1">
-            수분 측정값 (120도, 8g 스탠다드 기준)
+            품질측정데이터 (120도, 8g 스탠다드 기준)
           </legend>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-2">
             <label className="flex flex-col gap-1 text-sm">
@@ -630,7 +590,27 @@ export default function QcPage() {
                 className="border rounded-md px-2 py-1.5"
               />
             </label>
-            <label className="flex flex-col gap-1 text-sm md:col-span-2">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-slate-600">pH</span>
+              <input
+                type="number"
+                step="any"
+                value={form.ph}
+                onChange={(e) => set("ph", e.target.value)}
+                className="border rounded-md px-2 py-1.5"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-slate-600">붕괴도(%)</span>
+              <input
+                type="number"
+                step="any"
+                value={form.disintegration}
+                onChange={(e) => set("disintegration", e.target.value)}
+                className="border rounded-md px-2 py-1.5"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
               <span className="text-slate-600">비고 (조건, 용도)</span>
               <input
                 type="text"
@@ -755,6 +735,8 @@ export default function QcPage() {
                           <span>미분말: {t.fine_powder ?? "-"}</span>
                           <span>호퍼 A: {t.hopper_a ?? "-"}</span>
                           <span>호퍼 B: {t.hopper_b ?? "-"}</span>
+                          <span>pH: {t.ph ?? "-"}</span>
+                          <span>붕괴도(%): {t.disintegration ?? "-"}</span>
                           <span>시료No.: {t.sample_no ?? "-"}</span>
                         </div>
                       </td>
