@@ -2,7 +2,13 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/apiClient";
-import { DailySheetRow } from "@/lib/analytics";
+import { DailySheetRow, ProductMonthlySummary } from "@/lib/analytics";
+
+const PRODUCT_ACCENT: Record<string, string> = {
+  석회고토: "border-l-amber-600",
+  입상규산: "border-l-sky-600",
+  칼슘유황: "border-l-lime-700",
+};
 
 function currentMonth() {
   return new Date().toISOString().slice(0, 7);
@@ -60,10 +66,45 @@ function StatCard({
   );
 }
 
+function ProductSummaryCard({ summary }: { summary: ProductMonthlySummary }) {
+  const accent = PRODUCT_ACCENT[summary.product] ?? "border-l-slate-800";
+  return (
+    <div className={`bg-white rounded-xl border p-4 border-l-4 ${accent}`}>
+      <div className="flex items-baseline justify-between mb-2.5">
+        <h3 className="text-sm font-bold text-slate-800">{summary.product}</h3>
+        <span className="text-xs text-slate-400">{summary.dayCount}일 작업</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="flex flex-col">
+          <span className="text-xs text-slate-400">비가동시간</span>
+          <span className="font-semibold text-slate-800">{fmt(summary.downtimeHours)}h</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-xs text-slate-400">실가동</span>
+          <span className="font-semibold text-slate-800">{fmt(summary.lineHoursTotal)}h</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-xs text-slate-400">조립제사용</span>
+          <span className="font-semibold text-slate-800">{fmt(summary.granulationUsageTotal)}</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-xs text-slate-400">가스사용</span>
+          <span className="font-semibold text-slate-800">{fmt(summary.gasUsageShift)}㎥</span>
+        </div>
+        <div className="flex flex-col col-span-2 pt-1.5 mt-1 border-t">
+          <span className="text-xs text-slate-400">포장량 (생산/출하 입력 기준)</span>
+          <span className="font-semibold text-slate-800">{fmt(summary.packAmount, 0)}ton</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MonthlyPage() {
   const [tab, setTab] = useState<"chart" | "daily">("chart");
   const [month, setMonth] = useState(currentMonth());
   const [rows, setRows] = useState<DailySheetRow[]>([]);
+  const [productSummary, setProductSummary] = useState<ProductMonthlySummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
 
@@ -81,10 +122,15 @@ export default function MonthlyPage() {
     async function load() {
       setLoading(true);
       try {
-        const data = await apiGet<{ month: string; rows: DailySheetRow[] }>(
-          `/api/monthly-sheet?month=${month}`
-        );
-        if (!cancelled) setRows(data.rows);
+        const data = await apiGet<{
+          month: string;
+          rows: DailySheetRow[];
+          productSummary: ProductMonthlySummary[];
+        }>(`/api/monthly-sheet?month=${month}`);
+        if (!cancelled) {
+          setRows(data.rows);
+          setProductSummary(data.productSummary);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -262,6 +308,12 @@ export default function MonthlyPage() {
       )}
 
       {tab === "daily" && (
+      <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {productSummary.map((s) => (
+          <ProductSummaryCard key={s.product} summary={s} />
+        ))}
+      </div>
       <div className="bg-white rounded-xl border overflow-auto max-h-[70vh]">
         <table className="w-full text-sm">
           <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10">
@@ -269,6 +321,7 @@ export default function MonthlyPage() {
               <th className="text-left px-3 py-2">날짜</th>
               <th className="text-left px-3 py-2">조</th>
               <th className="text-left px-3 py-2">작업자</th>
+              <th className="text-left px-3 py-2">품목</th>
               <th className="text-right px-3 py-2">비가동(h)</th>
               <th className="text-right px-3 py-2">실가동(h)</th>
               <th className="text-left px-3 py-2">조립제</th>
@@ -281,7 +334,7 @@ export default function MonthlyPage() {
             {monthAgg.dayCount > 0 && (
               <>
                 <tr className="bg-indigo-50 font-bold border-b-2 border-indigo-200">
-                  <td className="px-3 py-2" colSpan={3}>
+                  <td className="px-3 py-2" colSpan={4}>
                     월계 (데이터 있는 {monthAgg.dayCount}일 합계)
                   </td>
                   <td className="px-3 py-2 text-right">{fmt(monthAgg.total.downtimeHours)}</td>
@@ -292,7 +345,7 @@ export default function MonthlyPage() {
                   <td className="px-3 py-2 text-right">{fmt(monthAgg.total.packAmount, 0)}</td>
                 </tr>
                 <tr className="bg-indigo-50 font-bold border-b-2 border-indigo-200">
-                  <td className="px-3 py-2" colSpan={3}>
+                  <td className="px-3 py-2" colSpan={4}>
                     월평균 (일 {monthAgg.dayCount}일 기준)
                   </td>
                   <td className="px-3 py-2 text-right">{fmt(monthAgg.average?.downtimeHours)}</td>
@@ -311,7 +364,7 @@ export default function MonthlyPage() {
                   {day.shifts.length === 0 && (
                     <tr className="border-t">
                       <td className="px-3 py-1.5 text-slate-400">{day.date}</td>
-                      <td colSpan={8} className="px-3 py-1.5 text-slate-300">
+                      <td colSpan={9} className="px-3 py-1.5 text-slate-300">
                         기록 없음
                       </td>
                     </tr>
@@ -321,7 +374,7 @@ export default function MonthlyPage() {
                       className="border-t bg-slate-50 font-medium cursor-pointer hover:bg-slate-100"
                       onClick={() => toggleDate(day.date)}
                     >
-                      <td className="px-3 py-1.5" colSpan={3}>
+                      <td className="px-3 py-1.5" colSpan={4}>
                         <span className="inline-block w-4 text-slate-400">{expanded ? "▾" : "▸"}</span>
                         {day.date} 일계
                       </td>
@@ -339,6 +392,7 @@ export default function MonthlyPage() {
                         <td className="px-3 py-1.5"></td>
                         <td className="px-3 py-1.5">{s.shift}</td>
                         <td className="px-3 py-1.5">{s.worker ?? "-"}</td>
+                        <td className="px-3 py-1.5">{s.product ?? "-"}</td>
                         <td className="px-3 py-1.5 text-right">{fmt(s.downtimeHours)}</td>
                         <td className="px-3 py-1.5 text-right">{fmt(s.lineHoursTotal)}</td>
                         <td className="px-3 py-1.5">{s.granulationAgent ?? "-"}</td>
@@ -352,13 +406,14 @@ export default function MonthlyPage() {
             })}
             {!loading && rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={10} className="px-3 py-8 text-center text-slate-400">
                   데이터가 없습니다.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+      </div>
       </div>
       )}
     </div>

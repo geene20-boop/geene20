@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getMonthlyDailySheet } from "@/lib/analytics";
+import { getMonthlyDailySheet, getMonthlyProductSummary } from "@/lib/analytics";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -9,5 +9,6 @@ export async function GET(req: NextRequest) {
   }
 
   const rows = getMonthlyDailySheet(month);
-  return NextResponse.json({ month, rows });
+  const productSummary = getMonthlyProductSummary(month);
+  return NextResponse.json({ month, rows, productSummary });
 }
