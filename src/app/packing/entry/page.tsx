@@ -668,7 +668,7 @@ export default function PackingEntryPage() {
             {entries.map((row) => {
               const item = itemByKey.get(row.product_key);
               return (
-                <tr key={row.id} className="border-t">
+                <tr key={row.id} className={`border-t ${row.type === "ship" ? "bg-orange-100" : ""}`}>
                   <td className="px-3 py-2">{row.date}</td>
                   <td className="px-3 py-2">{row.type === "pack" ? "생산" : "출하"}</td>
                   <td className="px-3 py-2">{item ? itemLabel(item) : row.product_key}</td>

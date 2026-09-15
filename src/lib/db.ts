@@ -447,6 +447,8 @@ export function getDb(): Database.Database {
       hopper_a REAL,                    -- 생산조건 - 호퍼 A
       hopper_b REAL,                    -- 생산조건 - 호퍼 B
       moisture REAL,                    -- 수분
+      ph REAL,                          -- pH
+      disintegration REAL,              -- 붕괴도(%)
       worker TEXT,                      -- 작업자
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -924,6 +926,8 @@ export function getDb(): Database.Database {
     ["moisture_note", "TEXT"],
     ["hopper_a", "REAL"],
     ["hopper_b", "REAL"],
+    ["ph", "REAL"],
+    ["disintegration", "REAL"],
   ]);
   migrateColumns("electricity_usage", [
     ["entered_by", "TEXT"],

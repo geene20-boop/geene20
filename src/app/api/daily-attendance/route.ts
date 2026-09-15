@@ -4,12 +4,22 @@ import { getAttendanceActorName, isAttendanceAdminRequest } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { DailyAttendanceRow, DailyAttendanceStatus, Nationality, ShiftType } from "@/lib/types";
 
-const STATUS_OPTIONS: DailyAttendanceStatus[] = ["early_leave", "comp_off", "late", "absent", "other"];
+const STATUS_OPTIONS: DailyAttendanceStatus[] = [
+  "early_leave",
+  "comp_off",
+  "late",
+  "absent",
+  "training",
+  "business_trip",
+  "other",
+];
 export const STATUS_LABELS: Record<DailyAttendanceStatus, string> = {
   early_leave: "조퇴",
   comp_off: "대체휴무",
   late: "지각",
   absent: "결근",
+  training: "교육",
+  business_trip: "출장",
   other: "기타",
 };
 

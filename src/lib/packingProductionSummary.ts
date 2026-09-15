@@ -250,6 +250,26 @@ function byCategoryOf(catMap: Map<string, number> | undefined): CategoryTons[] {
   return DISPLAY_CATEGORIES.map((category) => ({ category, tons: catMap?.get(category) ?? 0 }));
 }
 
+// 조회기간(from~to) 내 날짜별 · 품목 대분류별 실제 포장량(톤)을 계산한다.
+// 생산일지에 수기로 입력하는 daily_pack_amount 대신, 제품포장(packing_entry)에 실제
+// 입력된 생산/출하 실적을 포장량의 근거로 쓰기 위한 것이다.
+export function getDailyPackingTonsByCategory(
+  db: Database.Database,
+  from: string,
+  to: string
+): Map<string, Map<string, number>> {
+  const entries = getRawEntriesWithSub(db).filter((e) => e.date >= from && e.date <= to);
+  const byDate = new Map<string, Map<string, number>>();
+  for (const e of entries) {
+    const category = classifyCategoryWithTonbag(e.category, e.sub);
+    if (!category) continue;
+    const catMap = byDate.get(e.date) ?? new Map<string, number>();
+    catMap.set(category, (catMap.get(category) ?? 0) + tonsOf(e));
+    byDate.set(e.date, catMap);
+  }
+  return byDate;
+}
+
 export function getMonthlyProductionByCategory(db: Database.Database): MonthlyProductionByCategoryRow[] {
   const entries = getRawEntriesWithSub(db);
   const byMonth = new Map<string, number>();

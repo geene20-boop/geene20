@@ -11,6 +11,8 @@ const STATUS_LABELS: Record<DailyAttendanceStatus, string> = {
   comp_off: "대체휴무",
   late: "지각",
   absent: "결근",
+  training: "교육",
+  business_trip: "출장",
   other: "기타",
 };
 

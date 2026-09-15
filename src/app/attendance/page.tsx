@@ -741,13 +741,24 @@ function AdminMonthlyDetailTable({
 
 const SHIFT_LABELS: Record<ShiftType, string> = { day: "주간", night: "야간" };
 type UiDailyStatus = DailyAttendanceStatus | "normal";
-const DAILY_STATUS_OPTIONS: UiDailyStatus[] = ["normal", "early_leave", "comp_off", "late", "absent", "other"];
+const DAILY_STATUS_OPTIONS: UiDailyStatus[] = [
+  "normal",
+  "early_leave",
+  "comp_off",
+  "late",
+  "absent",
+  "training",
+  "business_trip",
+  "other",
+];
 const DAILY_STATUS_LABELS: Record<UiDailyStatus, string> = {
   normal: "정상출근",
   early_leave: "조퇴",
   comp_off: "대체휴무",
   late: "지각",
   absent: "결근",
+  training: "교육",
+  business_trip: "출장",
   other: "기타",
 };
 
