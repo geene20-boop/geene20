@@ -137,6 +137,7 @@ describe("getDailyPackingSummary", () => {
         key TEXT PRIMARY KEY,
         kind TEXT NOT NULL,
         category TEXT,
+        sub TEXT,
         bag_kg REAL
       );
       CREATE TABLE packing_entry (
@@ -148,11 +149,11 @@ describe("getDailyPackingSummary", () => {
       );
     `);
     const insertItem = db.prepare(
-      "INSERT INTO packing_item (key, kind, category, bag_kg) VALUES (?, ?, ?, ?)"
+      "INSERT INTO packing_item (key, kind, category, sub, bag_kg) VALUES (?, ?, ?, ?, ?)"
     );
-    insertItem.run("gyusan_a", "product", "입상규산", 20);
-    insertItem.run("sekhoego_a", "product", "석회고토", 20);
-    insertItem.run("tonbag_a", "product", "톤백", 1000);
+    insertItem.run("gyusan_a", "product", "입상규산", null, 20);
+    insertItem.run("sekhoego_a", "product", "석회고토", null, 20);
+    insertItem.run("tonbag_a", "product", "톤백", "규산(1T)", 1000);
     return db;
   }
 
@@ -165,7 +166,7 @@ describe("getDailyPackingSummary", () => {
   it("sums tons across all packed products regardless of classification", () => {
     const db = makeCategoryDb();
     addEntry(db, "1", "2026-07-01", "gyusan_a", 100); // 2톤
-    addEntry(db, "2", "2026-07-01", "tonbag_a", 1); // 1톤 (분류 안 됨)
+    addEntry(db, "2", "2026-07-01", "tonbag_a", 1); // 1톤
     const summary = getDailyPackingSummary(db, "2026-07-01");
     expect(summary.totalTons).toBe(3);
   });
@@ -176,6 +177,13 @@ describe("getDailyPackingSummary", () => {
     addEntry(db, "2", "2026-07-01", "sekhoego_a", 250); // 5톤
     const summary = getDailyPackingSummary(db, "2026-07-01");
     expect(summary.suggestedProduct).toBe("석회고토");
+  });
+
+  it("classifies 톤백 packed products via sub so a tonbag-only day still suggests a product", () => {
+    const db = makeCategoryDb();
+    addEntry(db, "1", "2026-07-01", "tonbag_a", 3); // 3톤, sub="규산(1T)" -> 입상규산
+    const summary = getDailyPackingSummary(db, "2026-07-01");
+    expect(summary.suggestedProduct).toBe("입상규산");
   });
 
   it("returns zero/null when no packing entries exist for the date", () => {

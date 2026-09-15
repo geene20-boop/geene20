@@ -118,22 +118,24 @@ export interface DailyPackingSummary {
 
 // 생산일지 "일일포장량/생산품목" 자동 반영용: 제품포장(packing_entry)에 그날 입력된
 // 생산제품+수량을 톤으로 환산해 합계 내고, 분류별 톤수가 가장 큰 것을 생산품목으로 제안한다.
+// 톤백 포장(category="톤백")도 sub(세부명)로 대분류를 판별해 제안에 포함시킨다 —
+// 그렇지 않으면 그날 전량이 톤백으로 포장된 경우 생산품목이 제안되지 않는다.
 export function getDailyPackingSummary(db: Database.Database, date: string): DailyPackingSummary {
   const rows = db
     .prepare(
-      `SELECT pe.qty as qty, pi.bag_kg as bag_kg, pi.category as category
+      `SELECT pe.qty as qty, pi.bag_kg as bag_kg, pi.category as category, pi.sub as sub
        FROM packing_entry pe
        JOIN packing_item pi ON pe.product_key = pi.key
        WHERE pe.type = 'pack' AND pi.kind = 'product' AND pe.date = ?`
     )
-    .all(date) as { qty: number; bag_kg: number | null; category: string | null }[];
+    .all(date) as { qty: number; bag_kg: number | null; category: string | null; sub: string | null }[];
 
   let totalTons = 0;
   const tonsByCategory = new Map<string, number>();
   for (const row of rows) {
     const tons = (row.qty * (row.bag_kg ?? 0)) / 1000;
     totalTons += tons;
-    const category = row.category ? classifyProductCategory(row.category) : null;
+    const category = classifyCategoryWithTonbag(row.category, row.sub);
     if (category) tonsByCategory.set(category, (tonsByCategory.get(category) ?? 0) + tons);
   }
 

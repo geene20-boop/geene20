@@ -7,6 +7,7 @@ import {
   MonthlyUtility,
   UtilityMonthRow,
 } from "@/lib/types";
+import { sumPackAmount as sumPackAmountByDate } from "@/lib/packAmount";
 
 export interface MergedShiftRow {
   date: string;
@@ -156,9 +157,14 @@ function granulationUsageTotal(p: ProductionLog | null): number | null {
   return p.granulation_usage_per_min * p.line_hours_total * 60;
 }
 
+export function sumPackAmount(rows: { date: string; production: ProductionLog | null }[]): number {
+  return sumPackAmountByDate(rows.map((r) => ({ date: r.date, packAmount: r.production?.daily_pack_amount })));
+}
+
 export interface DailySheetShift {
   shift: "주" | "야";
   worker: string | null;
+  product: string | null;
   downtimeHours: number | null;
   lineHoursTotal: number | null;
   granulationAgent: string | null;
@@ -170,6 +176,7 @@ export interface DailySheetShift {
 export interface DailySheetRow {
   date: string;
   shifts: DailySheetShift[];
+  products: string[]; // 그날 주/야 조에 입력된 생산품목(중복 제거, 입력 순서 유지)
   dayTotal: {
     downtimeHours: number;
     lineHoursTotal: number;
@@ -213,7 +220,7 @@ export function getMonthlyDailySheet(month: string): DailySheetRow[] {
       lineHoursTotal: dayRows.reduce((s, r) => s + (r.production?.line_hours_total ?? 0), 0),
       granulationUsageTotal: dayRows.reduce((s, r) => s + (granulationUsageTotal(r.production) ?? 0), 0),
       gasUsageShift: dayRows.reduce((s, r) => s + (r.production?.gas_usage_shift ?? 0), 0),
-      packAmount: dayRows.reduce((s, r) => s + (r.production?.daily_pack_amount ?? 0), 0),
+      packAmount: sumPackAmount(dayRows),
     };
   };
 
@@ -223,6 +230,7 @@ export function getMonthlyDailySheet(month: string): DailySheetRow[] {
     const shifts: DailySheetShift[] = dayRows.map((r) => ({
       shift: r.shift,
       worker: r.production?.worker ?? null,
+      product: r.production?.product ?? null,
       downtimeHours: r.production?.downtime_hours ?? null,
       lineHoursTotal: r.production?.line_hours_total ?? null,
       granulationAgent: r.production?.granulation_agent ?? null,
@@ -230,6 +238,7 @@ export function getMonthlyDailySheet(month: string): DailySheetRow[] {
       gasUsageShift: r.production?.gas_usage_shift ?? null,
       packAmount: r.production?.daily_pack_amount ?? null,
     }));
+    const products = [...new Set(shifts.map((s) => s.product).filter((p): p is string => !!p))];
 
     const dayTotal = dayTotalFor(date);
     const prevTotal = dayTotalFor(addDays(date, -1));
@@ -238,6 +247,7 @@ export function getMonthlyDailySheet(month: string): DailySheetRow[] {
     result.push({
       date,
       shifts,
+      products,
       dayTotal,
       deltaFromPrevDay: {
         granulationUsageTotal: hasPrevData
@@ -268,7 +278,7 @@ export function getMonthlySummary(month: string): MonthlySummary {
   const to = `${month}-31`;
   const rows = getMergedRows(from, to);
 
-  const totalPackAmount = rows.reduce((s, r) => s + (r.production?.daily_pack_amount ?? 0), 0);
+  const totalPackAmount = sumPackAmount(rows);
   const totalGasUsage = rows.reduce((s, r) => s + (r.production?.gas_usage_shift ?? 0), 0);
   const totalLineHours = rows.reduce((s, r) => s + (r.production?.line_hours_total ?? 0), 0);
   const avgHardness = avg(rows.map((r) => r.hardness));
@@ -368,14 +378,7 @@ function aggregateMonthDaily(month: string): MonthRawAgg {
   let lngTotal = 0;
   let lngCount = 0;
   for (const p of prod) {
-    if (p.daily_pack_amount != null) {
-      productionTon += p.daily_pack_amount;
-      prodCount++;
-    }
     const prd = p.product ?? "미지정";
-    if (p.daily_pack_amount != null) {
-      productionByProduct[prd] = (productionByProduct[prd] ?? 0) + p.daily_pack_amount;
-    }
     if (p.product) {
       if (!productHoursByDate.has(p.date)) productHoursByDate.set(p.date, new Map());
       const hoursMap = productHoursByDate.get(p.date)!;
@@ -387,6 +390,21 @@ function aggregateMonthDaily(month: string): MonthRawAgg {
       lngCount++;
       lngByProduct[prd] = (lngByProduct[prd] ?? 0) + p.gas_usage_shift;
     }
+  }
+
+  // 생산량(daily_pack_amount)은 하루 단위 값이라 주/야 조 모두에 같은 값이 자동 반영되기 쉽다.
+  // 조별로 그대로 더하면 두 배로 집계되므로, 날짜별로 값이 가장 큰(=대표) 기록 하나만 집계한다.
+  const packRepByDate = new Map<string, ProductionLog>();
+  for (const p of prod) {
+    if (p.daily_pack_amount == null) continue;
+    const cur = packRepByDate.get(p.date);
+    if (!cur || (cur.daily_pack_amount ?? 0) < p.daily_pack_amount) packRepByDate.set(p.date, p);
+  }
+  for (const p of packRepByDate.values()) {
+    productionTon += p.daily_pack_amount as number;
+    prodCount++;
+    const prd = p.product ?? "미지정";
+    productionByProduct[prd] = (productionByProduct[prd] ?? 0) + (p.daily_pack_amount as number);
   }
 
   // 전력을 그날 생산한 비종에 배분: 가동시간 비례(하루 중 비종이 바뀐 경우 정확한 배분),

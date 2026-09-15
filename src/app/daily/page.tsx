@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/apiClient";
 import { MergedShiftRow } from "@/lib/analytics";
+import { sumPackAmount } from "@/lib/packAmount";
 import { ElectricityUsage } from "@/lib/types";
 import { shiftDate, today } from "@/lib/dateNav";
 import DateNav from "@/components/DateNav";
@@ -179,7 +180,9 @@ export default function DailyDashboardPage() {
   }, [electricity, date]);
 
   const periodAgg = useMemo(() => {
-    const packAmount = rows.reduce((s, r) => s + (r.production?.daily_pack_amount ?? 0), 0);
+    const packAmount = sumPackAmount(
+      rows.map((r) => ({ date: r.date, packAmount: r.production?.daily_pack_amount }))
+    );
     const lineHoursTotal = rows.reduce((s, r) => s + (r.production?.line_hours_total ?? 0), 0);
     const downtimeHours = rows.reduce((s, r) => s + (r.production?.downtime_hours ?? 0), 0);
     const gasUsageShift = rows.reduce((s, r) => s + (r.production?.gas_usage_shift ?? 0), 0);

@@ -30,6 +30,13 @@ function n(v: string): number | null {
 }
 
 const monthStart = () => today().slice(0, 8) + "01";
+const currentMonth = () => today().slice(0, 7);
+
+function monthRange(month: string): { from: string; to: string } {
+  const [y, m] = month.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return { from: `${month}-01`, to: `${month}-${String(lastDay).padStart(2, "0")}` };
+}
 
 type Totals = { plant1: number; plant2: number; total: number; plant1Days: number; plant2Days: number };
 
@@ -43,6 +50,7 @@ export default function ElectricityPage() {
   const [rangeFrom, setRangeFrom] = useState(monthStart());
   const [rangeTo, setRangeTo] = useState(today());
   const [totals, setTotals] = useState<Totals | null>(null);
+  const [historyMonth, setHistoryMonth] = useState(currentMonth());
   const { enteredBy, setEnteredBy } = useEnteredBy();
   const [nameError, setNameError] = useState(false);
   const session = useSiteSession();
@@ -56,8 +64,9 @@ export default function ElectricityPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.loggedIn, session.displayName]);
 
-  async function loadRows() {
-    const data = await apiGet<ElectricityUsage[]>("/api/electricity");
+  async function loadRows(month: string) {
+    const { from, to } = monthRange(month);
+    const data = await apiGet<ElectricityUsage[]>(`/api/electricity?from=${from}&to=${to}`);
     setRows(data);
   }
 
@@ -70,12 +79,16 @@ export default function ElectricityPage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadRows();
     loadSummary(monthStart(), today());
     apiGet<{ configured: boolean }>("/api/electricity/pmeter-status")
       .then((data) => setPmeterConfigured(data.configured))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadRows(historyMonth);
+  }, [historyMonth]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -101,7 +114,9 @@ export default function ElectricityPage() {
       setMessage("저장되었습니다.");
       setForm(emptyForm());
       setEditingKey(null);
-      loadRows();
+      const savedMonth = form.date.slice(0, 7);
+      if (savedMonth !== historyMonth) setHistoryMonth(savedMonth);
+      else loadRows(historyMonth);
       loadSummary(rangeFrom, rangeTo);
     } catch (err) {
       setMessage(`오류: ${(err as Error).message}`);
@@ -134,7 +149,7 @@ export default function ElectricityPage() {
     }
     if (!confirm("이 전력사용량 기록을 삭제할까요?")) return;
     await apiDelete(`/api/electricity/${id}`, { entered_by: enteredBy.trim() });
-    loadRows();
+    loadRows(historyMonth);
     loadSummary(rangeFrom, rangeTo);
   }
 
@@ -316,8 +331,19 @@ export default function ElectricityPage() {
       </form>
 
       <div className="bg-white rounded-xl border overflow-x-auto">
-        <div className="flex items-center justify-between px-3 pt-3">
-          <h2 className="text-sm font-semibold text-slate-700">최근 전력사용량 기록</h2>
+        <div className="flex items-center justify-between px-3 pt-3 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-slate-700">전력사용량 기록</h2>
+            <label className="flex items-center gap-1 text-xs text-slate-500">
+              <span>조회 월</span>
+              <input
+                type="month"
+                value={historyMonth}
+                onChange={(e) => setHistoryMonth(e.target.value)}
+                className="border rounded-md px-2 py-1"
+              />
+            </label>
+          </div>
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 파일 다운로드 링크(페이지 이동 아님) */}
           <a href="/api/electricity/export" className="text-xs border border-slate-300 rounded-md px-3 py-1.5">
             엑셀 다운로드 (전체)
@@ -337,7 +363,7 @@ export default function ElectricityPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, 60).map((r) => (
+            {rows.map((r) => (
               <tr key={r.id} className="border-t">
                 <td className="px-3 py-2">{r.date}</td>
                 <td className="px-3 py-2">{r.plant}</td>
@@ -364,7 +390,7 @@ export default function ElectricityPage() {
             {rows.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
-                  아직 입력된 전력사용량 기록이 없습니다.
+                  {historyMonth}에 입력된 전력사용량 기록이 없습니다.
                 </td>
               </tr>
             )}

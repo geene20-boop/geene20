@@ -16,6 +16,8 @@ function dday(date: string): string {
   return date.slice(8);
 }
 
+const PRODUCT_OPTIONS = ["입상규산", "석회고토", "칼슘유황"];
+
 // 일 합계형 지표(비가동시간·실제 가동시간)의 합계/평균/최고/최저를 계산한다.
 function levelStats(rows: { date: string; value: number }[]) {
   if (rows.length === 0) return null;
@@ -66,6 +68,8 @@ export default function MonthlyPage() {
   const [rows, setRows] = useState<DailySheetRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+  const [productFilter, setProductFilter] = useState<string>("전체");
+  const [sortBy, setSortBy] = useState<"date" | "product">("date");
 
   function toggleDate(date: string) {
     setExpandedDates((prev) => {
@@ -137,6 +141,18 @@ export default function MonthlyPage() {
       ),
     };
   }, [rows]);
+
+  const displayRows = useMemo(() => {
+    const filtered =
+      productFilter === "전체" ? rows : rows.filter((r) => r.products.includes(productFilter));
+    if (sortBy === "date") return filtered;
+    return [...filtered].sort((a, b) => {
+      const pa = a.products[0] ?? "";
+      const pb = b.products[0] ?? "";
+      if (pa !== pb) return pa.localeCompare(pb, "ko");
+      return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+    });
+  }, [rows, productFilter, sortBy]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -262,6 +278,52 @@ export default function MonthlyPage() {
       )}
 
       {tab === "daily" && (
+      <>
+      <div className="flex items-end gap-3 flex-wrap bg-white rounded-xl border p-3">
+        <label className="flex flex-col text-xs gap-1">
+          <span className="text-slate-500">품목 필터</span>
+          <select
+            value={productFilter}
+            onChange={(e) => setProductFilter(e.target.value)}
+            className="border rounded-md px-2 py-1.5 text-sm"
+          >
+            <option value="전체">전체</option>
+            {PRODUCT_OPTIONS.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex flex-col text-xs gap-1">
+          <span className="text-slate-500">정렬</span>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => setSortBy("date")}
+              className={`text-sm px-3 py-1.5 rounded-md border ${
+                sortBy === "date" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-300 text-slate-600"
+              }`}
+            >
+              날짜순
+            </button>
+            <button
+              type="button"
+              onClick={() => setSortBy("product")}
+              className={`text-sm px-3 py-1.5 rounded-md border ${
+                sortBy === "product" ? "bg-slate-900 text-white border-slate-900" : "bg-white border-slate-300 text-slate-600"
+              }`}
+            >
+              품목순
+            </button>
+          </div>
+        </div>
+        {productFilter !== "전체" && (
+          <span className="text-xs text-slate-400">
+            &quot;{productFilter}&quot;을(를) 생산한 날짜 {displayRows.length}일 표시 중
+          </span>
+        )}
+      </div>
       <div className="bg-white rounded-xl border overflow-auto max-h-[70vh]">
         <table className="w-full text-sm">
           <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10">
@@ -269,6 +331,7 @@ export default function MonthlyPage() {
               <th className="text-left px-3 py-2">날짜</th>
               <th className="text-left px-3 py-2">조</th>
               <th className="text-left px-3 py-2">작업자</th>
+              <th className="text-left px-3 py-2">생산품목</th>
               <th className="text-right px-3 py-2">비가동(h)</th>
               <th className="text-right px-3 py-2">실가동(h)</th>
               <th className="text-left px-3 py-2">조립제</th>
@@ -281,7 +344,7 @@ export default function MonthlyPage() {
             {monthAgg.dayCount > 0 && (
               <>
                 <tr className="bg-indigo-50 font-bold border-b-2 border-indigo-200">
-                  <td className="px-3 py-2" colSpan={3}>
+                  <td className="px-3 py-2" colSpan={4}>
                     월계 (데이터 있는 {monthAgg.dayCount}일 합계)
                   </td>
                   <td className="px-3 py-2 text-right">{fmt(monthAgg.total.downtimeHours)}</td>
@@ -292,7 +355,7 @@ export default function MonthlyPage() {
                   <td className="px-3 py-2 text-right">{fmt(monthAgg.total.packAmount, 0)}</td>
                 </tr>
                 <tr className="bg-indigo-50 font-bold border-b-2 border-indigo-200">
-                  <td className="px-3 py-2" colSpan={3}>
+                  <td className="px-3 py-2" colSpan={4}>
                     월평균 (일 {monthAgg.dayCount}일 기준)
                   </td>
                   <td className="px-3 py-2 text-right">{fmt(monthAgg.average?.downtimeHours)}</td>
@@ -304,14 +367,14 @@ export default function MonthlyPage() {
                 </tr>
               </>
             )}
-            {rows.map((day) => {
+            {displayRows.map((day) => {
               const expanded = expandedDates.has(day.date);
               return (
                 <Fragment key={day.date}>
                   {day.shifts.length === 0 && (
                     <tr className="border-t">
                       <td className="px-3 py-1.5 text-slate-400">{day.date}</td>
-                      <td colSpan={8} className="px-3 py-1.5 text-slate-300">
+                      <td colSpan={9} className="px-3 py-1.5 text-slate-300">
                         기록 없음
                       </td>
                     </tr>
@@ -325,6 +388,7 @@ export default function MonthlyPage() {
                         <span className="inline-block w-4 text-slate-400">{expanded ? "▾" : "▸"}</span>
                         {day.date} 일계
                       </td>
+                      <td className="px-3 py-1.5">{day.products.length > 0 ? day.products.join(", ") : "-"}</td>
                       <td className="px-3 py-1.5 text-right">{fmt(day.dayTotal.downtimeHours)}</td>
                       <td className="px-3 py-1.5 text-right">{fmt(day.dayTotal.lineHoursTotal)}</td>
                       <td className="px-3 py-1.5"></td>
@@ -339,6 +403,7 @@ export default function MonthlyPage() {
                         <td className="px-3 py-1.5"></td>
                         <td className="px-3 py-1.5">{s.shift}</td>
                         <td className="px-3 py-1.5">{s.worker ?? "-"}</td>
+                        <td className="px-3 py-1.5">{s.product ?? "-"}</td>
                         <td className="px-3 py-1.5 text-right">{fmt(s.downtimeHours)}</td>
                         <td className="px-3 py-1.5 text-right">{fmt(s.lineHoursTotal)}</td>
                         <td className="px-3 py-1.5">{s.granulationAgent ?? "-"}</td>
@@ -350,16 +415,17 @@ export default function MonthlyPage() {
                 </Fragment>
               );
             })}
-            {!loading && rows.length === 0 && (
+            {!loading && displayRows.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-slate-400">
-                  데이터가 없습니다.
+                <td colSpan={10} className="px-3 py-8 text-center text-slate-400">
+                  {productFilter === "전체" ? "데이터가 없습니다." : `"${productFilter}" 생산 기록이 없습니다.`}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+      </>
       )}
     </div>
   );
