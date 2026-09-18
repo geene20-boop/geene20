@@ -1,15 +1,18 @@
+import Database from "better-sqlite3";
 import { getDb } from "@/lib/db";
 import { AuditTable, AuditAction } from "@/lib/auditTypes";
 import { getAccountById, getAdminName, getUserSession, hasAnyAccount, isAdminRequest } from "@/lib/auth";
 
+// db를 넘기지 않으면 기본 앱 데이터베이스를 사용한다. 테스트처럼 별도의 db 인스턴스를 다루는
+// 코드(예: 게시판 자동삭제)에서는 그 db를 그대로 넘겨 같은 연결에 기록되도록 한다.
 export function logAudit(
   table: AuditTable,
   recordKey: string,
   action: AuditAction,
   actor: string,
-  summary?: string
+  summary?: string,
+  db: Database.Database = getDb()
 ): void {
-  const db = getDb();
   db.prepare(
     `INSERT INTO audit_log (table_name, record_key, action, actor, summary) VALUES (?, ?, ?, ?, ?)`
   ).run(table, recordKey, action, actor, summary ?? null);

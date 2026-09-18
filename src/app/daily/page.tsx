@@ -4,16 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/apiClient";
 import { MergedShiftRow } from "@/lib/analytics";
 import { ElectricityUsage } from "@/lib/types";
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function shiftDate(date: string, delta: number): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + delta);
-  return d.toISOString().slice(0, 10);
-}
+import { shiftDate, today } from "@/lib/dateNav";
+import DateNav from "@/components/DateNav";
 
 function daysAgo(n: number) {
   return shiftDate(today(), -n);
@@ -145,6 +137,7 @@ export default function DailyDashboardPage() {
   const [to, setTo] = useState(today());
   const [rows, setRows] = useState<MergedShiftRow[]>([]);
   const [electricity, setElectricity] = useState<ElectricityUsage[]>([]);
+  const [packAmountTotal, setPackAmountTotal] = useState(0);
   const [loading, setLoading] = useState(false);
 
   const rangeFrom = mode === "day" ? date : from;
@@ -156,11 +149,14 @@ export default function DailyDashboardPage() {
       setLoading(true);
       try {
         const [data, elec] = await Promise.all([
-          apiGet<{ rows: MergedShiftRow[] }>(`/api/dashboard?from=${rangeFrom}&to=${rangeTo}`),
+          apiGet<{ rows: MergedShiftRow[]; packAmountTotal: number }>(
+            `/api/dashboard?from=${rangeFrom}&to=${rangeTo}`
+          ),
           apiGet<ElectricityUsage[]>(`/api/electricity?from=${rangeFrom}&to=${rangeTo}`),
         ]);
         if (!cancelled) {
           setRows(data.rows);
+          setPackAmountTotal(data.packAmountTotal);
           setElectricity(elec);
         }
       } finally {
@@ -187,7 +183,7 @@ export default function DailyDashboardPage() {
   }, [electricity, date]);
 
   const periodAgg = useMemo(() => {
-    const packAmount = rows.reduce((s, r) => s + (r.production?.daily_pack_amount ?? 0), 0);
+    const packAmount = packAmountTotal;
     const lineHoursTotal = rows.reduce((s, r) => s + (r.production?.line_hours_total ?? 0), 0);
     const downtimeHours = rows.reduce((s, r) => s + (r.production?.downtime_hours ?? 0), 0);
     const gasUsageShift = rows.reduce((s, r) => s + (r.production?.gas_usage_shift ?? 0), 0);
@@ -210,13 +206,13 @@ export default function DailyDashboardPage() {
       avgMoisture: avg(rows.map((r) => r.moisture)),
       dayCount,
     };
-  }, [rows, electricity]);
+  }, [rows, electricity, packAmountTotal]);
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold">일자별 대시보드</h1>
+          <h1 className="text-xl font-bold">일자별 요약</h1>
           <p className="text-sm text-slate-500 mt-1">
             하루 단위로 생산·설비·품질 기록을 크게 확인하거나, 기간을 정해 합계·평균을 확인합니다.
           </p>
@@ -250,26 +246,7 @@ export default function DailyDashboardPage() {
 
       {mode === "day" ? (
         <>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setDate(shiftDate(date, -1))}
-              className="border rounded-md px-3 py-1.5 text-sm bg-white"
-            >
-              ◀ 전날
-            </button>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="border rounded-md px-3 py-1.5 text-sm font-medium"
-            />
-            <button
-              onClick={() => setDate(shiftDate(date, 1))}
-              className="border rounded-md px-3 py-1.5 text-sm bg-white"
-            >
-              다음날 ▶
-            </button>
-          </div>
+          <DateNav value={date} onChange={setDate} size="md" />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {dayRows.map((r) => (

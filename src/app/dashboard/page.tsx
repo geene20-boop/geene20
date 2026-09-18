@@ -140,7 +140,7 @@ export default function DashboardPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold">통합 대시보드</h1>
+          <h1 className="text-xl font-bold">품질 요약</h1>
           <p className="text-sm text-slate-500 mt-1">
             생산일지 + QC측정 데이터를 자동 연동하여 집계, 이상 알림, 월간 리포트를 제공합니다.
           </p>

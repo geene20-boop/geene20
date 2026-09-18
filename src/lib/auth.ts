@@ -1,6 +1,12 @@
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { getDb } from "@/lib/db";
+import {
+  ATTENDANCE_ADMIN_DISPLAY_NAMES,
+  FOREIGN_WORKER_RESTRICTED_GROUPS,
+  NAME_RESTRICTED_DISPLAY_NAMES,
+  NAME_RESTRICTED_GROUPS,
+} from "@/lib/navGroups";
 
 export const ADMIN_SESSION_COOKIE = "admin_session";
 export const SITE_SESSION_COOKIE = "site_session";
@@ -15,6 +21,7 @@ interface TokenPayload {
   accountId?: number;
   role?: AccountRole;
   name?: string; // 관리자(공용 비밀번호) 로그인 시 실제 입력한 사람 이름
+  language?: string; // 사용자 언어 설정 ('ko' | 'cambodia' | 'nepal')
 }
 
 interface AuthRow {
@@ -141,6 +148,12 @@ export function resetAccountPassword(id: number, newPassword: string): void {
   if (info.changes === 0) throw new Error("계정을 찾을 수 없습니다.");
 }
 
+export function deleteAccount(id: number): void {
+  const db = getDb();
+  const info = db.prepare("DELETE FROM user_account WHERE id = ?").run(id);
+  if (info.changes === 0) throw new Error("계정을 찾을 수 없습니다.");
+}
+
 export function verifyAccountLogin(
   username: string,
   password: string
@@ -187,9 +200,9 @@ export function createSessionToken(scope: "admin", name?: string): string {
   return signPayload({ scope, exp: Date.now() + SESSION_TTL_MS, name }, session_secret);
 }
 
-export function createUserSessionToken(accountId: number, role: AccountRole): string {
+export function createUserSessionToken(accountId: number, role: AccountRole, language?: string): string {
   const { session_secret } = getAdminAuthRow();
-  return signPayload({ scope: "site", accountId, role, exp: Date.now() + SESSION_TTL_MS }, session_secret);
+  return signPayload({ scope: "site", accountId, role, language, exp: Date.now() + SESSION_TTL_MS }, session_secret);
 }
 
 export function verifySessionToken(token: string | undefined | null, scope: Scope): boolean {
@@ -198,7 +211,7 @@ export function verifySessionToken(token: string | undefined | null, scope: Scop
 
 export function getUserSession(req: {
   cookies: { get(name: string): { value: string } | undefined };
-}): { accountId: number; role: AccountRole } | null {
+}): { accountId: number; role: AccountRole; language?: string } | null {
   const parsed = decodeToken(req.cookies.get(SITE_SESSION_COOKIE)?.value);
   if (!parsed || parsed.scope !== "site" || parsed.accountId == null || !parsed.role) return null;
   // 토큰 자체는 유효해도, 그 사이 관리자가 계정을 비활성화했다면 즉시 차단되도록
@@ -208,7 +221,7 @@ export function getUserSession(req: {
     | { active: number }
     | undefined;
   if (!row || !row.active) return null;
-  return { accountId: parsed.accountId, role: parsed.role };
+  return { accountId: parsed.accountId, role: parsed.role, language: parsed.language };
 }
 
 // 로그인한 개인계정이 근로자명부의 어느 근로자와 연결되어 있는지 (없으면 null).
@@ -228,6 +241,45 @@ export function isAdminRequest(req: {
   return verifySessionToken(req.cookies.get(ADMIN_SESSION_COOKIE)?.value, "admin");
 }
 
+// 로그인한 개인계정이 외국인 근로자와 연동되어 있는지 (근태관리 등 접근 차단 대상).
+export function isForeignWorkerRequest(req: {
+  cookies: { get(name: string): { value: string } | undefined };
+}): boolean {
+  const session = getUserSession(req);
+  if (!session) return false;
+  const account = getAccountById(session.accountId);
+  if (account?.worker_id == null) return false;
+  const db = getDb();
+  const worker = db.prepare("SELECT nationality FROM worker WHERE id = ?").get(account.worker_id) as
+    | { nationality: string }
+    | undefined;
+  return worker?.nationality === "foreign";
+}
+
+// 표시용 이름(개인 로그인 계정의 display_name/username). 관리자(공용 비밀번호)는 특정 개인이 아니므로 null.
+export function getSessionDisplayName(req: {
+  cookies: { get(name: string): { value: string } | undefined };
+}): string | null {
+  const session = getUserSession(req);
+  if (!session) return null;
+  const account = getAccountById(session.accountId);
+  return account?.display_name || account?.username || null;
+}
+
+// NAV_GROUPS의 메뉴 하나(예: "원재료관리")에 대한 접근 가능 여부. 메뉴에서 숨기는 것과
+// 동일한 기준(외국인 근로자 / 이름 지정 제한, navGroups.ts)을 API 쪽에서도 적용해, 주소를
+// 직접 알아도 조회·조작할 수 없도록 한다.
+export function canAccessNavGroup(
+  req: { cookies: { get(name: string): { value: string } | undefined } },
+  groupLabel: string
+): boolean {
+  if (isAdminRequest(req)) return true;
+  if (isForeignWorkerRequest(req) && FOREIGN_WORKER_RESTRICTED_GROUPS.has(groupLabel)) return false;
+  const name = getSessionDisplayName(req);
+  if (name && NAME_RESTRICTED_GROUPS.has(groupLabel) && NAME_RESTRICTED_DISPLAY_NAMES.has(name)) return false;
+  return true;
+}
+
 // 관리자(공용 비밀번호)로 로그인할 때 입력한 실제 이름. 옛 토큰 등 이름이 없으면 null.
 export function getAdminName(req: {
   cookies: { get(name: string): { value: string } | undefined };
@@ -236,6 +288,25 @@ export function getAdminName(req: {
   if (!parsed || parsed.scope !== "admin") return null;
   const name = parsed.name?.trim();
   return name ? name.slice(0, 40) : null;
+}
+
+// 근태관리 화면 한정: 관리자(공용 비밀번호) 세션이거나, 근태관리에서 관리자와 동일한 권한을 부여받은
+// 특정 개인(이름, navGroups.ts의 ATTENDANCE_ADMIN_DISPLAY_NAMES)이면 true. 다른 화면의 관리자 권한
+// 판단(isAdminRequest)에는 영향을 주지 않는다.
+export function isAttendanceAdminRequest(req: {
+  cookies: { get(name: string): { value: string } | undefined };
+}): boolean {
+  if (isAdminRequest(req)) return true;
+  const name = getSessionDisplayName(req);
+  return !!name && ATTENDANCE_ADMIN_DISPLAY_NAMES.has(name);
+}
+
+// 근태관리 기록(승인/반려, 일일 출근부, 연차현황 등)에 남길 처리자 이름. 공용 관리자 로그인이면
+// 로그인 시 입력한 이름을, 근태관리 한정 관리자 권한을 받은 개인 계정이면 그 계정의 표시 이름을 쓴다.
+export function getAttendanceActorName(req: {
+  cookies: { get(name: string): { value: string } | undefined };
+}): string | null {
+  return getAdminName(req) ?? getSessionDisplayName(req);
 }
 
 export function isSiteRequest(req: {
@@ -247,6 +318,10 @@ export function isSiteRequest(req: {
 export function isEditorRequest(req: {
   cookies: { get(name: string): { value: string } | undefined };
 }): boolean {
+  // 계정이 하나도 없는 개방 모드에서는 다른 입력 화면(원재료·포장 등)과 동일하게 누구나 입력할 수
+  // 있어야 한다. 이 함수만 그 기준을 빼먹어서, 계정을 만들기 전에는 문서관리(연구실험일지·자체시험
+  // 성적서 등) 저장이 항상 "수정 권한 이상만 가능합니다" 오류로 막혔었다.
+  if (!hasAnyAccount()) return true;
   if (isAdminRequest(req)) return true;
   const role = getUserSession(req)?.role;
   return role === "editor" || role === "modifier";
@@ -288,28 +363,48 @@ export function canDeleteRecord(
 }
 
 // ---------- 로그인 시도 제한 (무차별 대입 방지) ----------
+// DB(login_attempt)에 저장해서, 서버 메모리에만 있던 예전 방식과 달리 재배포해도 잠금이 유지된다.
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 5 * 60 * 1000; // 5분
-const attempts = new Map<string, { count: number; lockedUntil: number }>();
+const STALE_MS = 24 * 60 * 60 * 1000; // 하루 넘게 조용한 기록은 정리 대상
 
 export function isLoginLocked(key: string): number {
-  const rec = attempts.get(key);
+  const db = getDb();
+  const rec = db.prepare("SELECT locked_until FROM login_attempt WHERE key = ?").get(key) as
+    | { locked_until: number }
+    | undefined;
   if (!rec) return 0;
-  const remaining = rec.lockedUntil - Date.now();
+  const remaining = rec.locked_until - Date.now();
   return remaining > 0 ? remaining : 0;
 }
 
 export function recordLoginFailure(key: string): void {
-  const rec = attempts.get(key) ?? { count: 0, lockedUntil: 0 };
-  rec.count += 1;
-  if (rec.count >= MAX_ATTEMPTS) {
-    rec.lockedUntil = Date.now() + LOCKOUT_MS;
-    rec.count = 0;
+  const db = getDb();
+  const rec = db.prepare("SELECT count, locked_until FROM login_attempt WHERE key = ?").get(key) as
+    | { count: number; locked_until: number }
+    | undefined;
+  let count = (rec?.count ?? 0) + 1;
+  let lockedUntil = rec?.locked_until ?? 0;
+  if (count >= MAX_ATTEMPTS) {
+    lockedUntil = Date.now() + LOCKOUT_MS;
+    count = 0;
   }
-  attempts.set(key, rec);
+  db.prepare(
+    `INSERT INTO login_attempt (key, count, locked_until, updated_at) VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET count = excluded.count, locked_until = excluded.locked_until, updated_at = excluded.updated_at`
+  ).run(key, count, lockedUntil);
+  pruneStaleLoginAttempts();
 }
 
 export function recordLoginSuccess(key: string): void {
-  attempts.delete(key);
+  getDb().prepare("DELETE FROM login_attempt WHERE key = ?").run(key);
+}
+
+// 잠기지 않고 조용히 남아있는 오래된 기록을 정리해 테이블이 무한정 쌓이지 않게 한다.
+function pruneStaleLoginAttempts(): void {
+  const cutoff = new Date(Date.now() - STALE_MS).toISOString().slice(0, 19).replace("T", " ");
+  getDb()
+    .prepare("DELETE FROM login_attempt WHERE locked_until < ? AND updated_at < ?")
+    .run(Date.now(), cutoff);
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { getAdminName, getSessionWorkerId, isAdminRequest } from "@/lib/auth";
+import { getAttendanceActorName, getSessionWorkerId, isAttendanceAdminRequest } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { LeaveBalance } from "@/lib/types";
 
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
   // 관리자 계정이 본인 연차현황만 조회하고 싶을 때(예: "내 근태" 탭) mine=1로 요청한다.
   const mine = req.nextUrl.searchParams.get("mine") === "1";
 
-  if (!mine && isAdminRequest(req)) {
+  if (!mine && isAttendanceAdminRequest(req)) {
     const workers = db
       .prepare("SELECT id, name, hire_date FROM worker WHERE active = 1 ORDER BY name")
       .all() as { id: number; name: string; hire_date: string | null }[];
@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isAdminRequest(req)) {
+  if (!isAttendanceAdminRequest(req)) {
     return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 403 });
   }
   const db = getDb();
@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "연도를 확인해주세요." }, { status: 400 });
   }
 
-  const updatedBy = getAdminName(req) ?? "관리자";
+  const updatedBy = getAttendanceActorName(req) ?? "관리자";
   db.prepare(
     `INSERT INTO leave_balance (worker_id, year, hire_date, accrued_days, carried_over_days, updated_by)
      VALUES (?, ?, ?, ?, ?, ?)

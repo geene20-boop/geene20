@@ -346,15 +346,58 @@ function PackingStockImportCard() {
   );
 }
 
-export default function ImportPage() {
+function AdminOnlyPage() {
+  const admin = useAdminSession();
+  const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    admin.refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!admin.checked) {
+    return <p className="text-sm text-slate-400">확인 중...</p>;
+  }
+
+  if (!admin.loggedIn) {
+    return (
+      <div className="flex flex-col gap-4 items-start">
+        <div>
+          <h1 className="text-xl font-bold">데이터 가져오기</h1>
+          <p className="text-sm text-slate-500 mt-1">이 기능은 관리자만 사용할 수 있습니다.</p>
+        </div>
+        <button
+          onClick={() => setShowModal(true)}
+          className="bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium"
+        >
+          관리자 로그인
+        </button>
+        {showModal && (
+          <AdminLoginModal
+            onClose={() => setShowModal(false)}
+            onSuccess={() => {
+              admin.setLoggedIn(true);
+              setShowModal(false);
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-bold">데이터 가져오기</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          기존에 쓰던 엑셀 파일(설비가동정보 / 비료시료 강도테스트)을 그대로 업로드하면 형식을
-          자동으로 인식해 데이터베이스로 옮겨줍니다. 이후에는 위 입력화면으로 직접 입력하면 됩니다.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold">데이터 가져오기</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            기존에 쓰던 엑셀 파일(설비가동정보 / 비료시료 강도테스트)을 그대로 업로드하면 형식을
+            자동으로 인식해 데이터베이스로 옮겨줍니다. 이후에는 위 입력화면으로 직접 입력하면 됩니다.
+          </p>
+        </div>
+        <button onClick={() => admin.logout()} className="text-xs underline text-slate-500">
+          로그아웃
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -374,4 +417,8 @@ export default function ImportPage() {
       <PackingStockImportCard />
     </div>
   );
+}
+
+export default function ImportPage() {
+  return <AdminOnlyPage />;
 }

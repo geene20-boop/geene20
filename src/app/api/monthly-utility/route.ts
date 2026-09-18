@@ -9,8 +9,10 @@ const NUM_FIELDS = [
   "elec1_won",
   "elec2_kwh",
   "elec2_won",
-  "lng_m3",
-  "lng_won",
+  "lng_dryer_m3",
+  "lng_dryer_won",
+  "lng_rto_m3",
+  "lng_rto_won",
   "diesel_liter",
   "diesel_won",
   "production_ton",
@@ -67,15 +69,17 @@ export async function POST(req: NextRequest) {
 
   db.prepare(
     `INSERT INTO monthly_utility
-       (month, elec1_kwh, elec1_won, elec2_kwh, elec2_won, lng_m3, lng_won, diesel_liter, diesel_won, production_ton, note, entered_by, updated_by)
-     VALUES (@month, @elec1_kwh, @elec1_won, @elec2_kwh, @elec2_won, @lng_m3, @lng_won, @diesel_liter, @diesel_won, @production_ton, @note, @actor, @actor)
+       (month, elec1_kwh, elec1_won, elec2_kwh, elec2_won, lng_dryer_m3, lng_dryer_won, lng_rto_m3, lng_rto_won, diesel_liter, diesel_won, production_ton, note, entered_by, updated_by)
+     VALUES (@month, @elec1_kwh, @elec1_won, @elec2_kwh, @elec2_won, @lng_dryer_m3, @lng_dryer_won, @lng_rto_m3, @lng_rto_won, @diesel_liter, @diesel_won, @production_ton, @note, @actor, @actor)
      ON CONFLICT(month) DO UPDATE SET
        elec1_kwh = excluded.elec1_kwh,
        elec1_won = excluded.elec1_won,
        elec2_kwh = excluded.elec2_kwh,
        elec2_won = excluded.elec2_won,
-       lng_m3 = excluded.lng_m3,
-       lng_won = excluded.lng_won,
+       lng_dryer_m3 = excluded.lng_dryer_m3,
+       lng_dryer_won = excluded.lng_dryer_won,
+       lng_rto_m3 = excluded.lng_rto_m3,
+       lng_rto_won = excluded.lng_rto_won,
        diesel_liter = excluded.diesel_liter,
        diesel_won = excluded.diesel_won,
        production_ton = excluded.production_ton,

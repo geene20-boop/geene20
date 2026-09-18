@@ -30,6 +30,13 @@ function n(v: string): number | null {
 }
 
 const monthStart = () => today().slice(0, 8) + "01";
+const currentMonth = () => today().slice(0, 7);
+
+function monthRange(month: string): { from: string; to: string } {
+  const [y, m] = month.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return { from: `${month}-01`, to: `${month}-${String(lastDay).padStart(2, "0")}` };
+}
 
 type Totals = { plant1: number; plant2: number; total: number; plant1Days: number; plant2Days: number };
 
@@ -43,9 +50,11 @@ export default function ElectricityPage() {
   const [rangeFrom, setRangeFrom] = useState(monthStart());
   const [rangeTo, setRangeTo] = useState(today());
   const [totals, setTotals] = useState<Totals | null>(null);
+  const [historyMonth, setHistoryMonth] = useState(currentMonth());
   const { enteredBy, setEnteredBy } = useEnteredBy();
   const [nameError, setNameError] = useState(false);
   const session = useSiteSession();
+  const [pmeterConfigured, setPmeterConfigured] = useState(false);
 
   useEffect(() => {
     if (session.loggedIn && session.displayName) {
@@ -55,8 +64,9 @@ export default function ElectricityPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.loggedIn, session.displayName]);
 
-  async function loadRows() {
-    const data = await apiGet<ElectricityUsage[]>("/api/electricity");
+  async function loadRows(month: string) {
+    const { from, to } = monthRange(month);
+    const data = await apiGet<ElectricityUsage[]>(`/api/electricity?from=${from}&to=${to}`);
     setRows(data);
   }
 
@@ -69,9 +79,16 @@ export default function ElectricityPage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadRows();
     loadSummary(monthStart(), today());
+    apiGet<{ configured: boolean }>("/api/electricity/pmeter-status")
+      .then((data) => setPmeterConfigured(data.configured))
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadRows(historyMonth);
+  }, [historyMonth]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -97,7 +114,9 @@ export default function ElectricityPage() {
       setMessage("저장되었습니다.");
       setForm(emptyForm());
       setEditingKey(null);
-      loadRows();
+      const savedMonth = form.date.slice(0, 7);
+      if (savedMonth !== historyMonth) setHistoryMonth(savedMonth);
+      else loadRows(historyMonth);
       loadSummary(rangeFrom, rangeTo);
     } catch (err) {
       setMessage(`오류: ${(err as Error).message}`);
@@ -130,7 +149,7 @@ export default function ElectricityPage() {
     }
     if (!confirm("이 전력사용량 기록을 삭제할까요?")) return;
     await apiDelete(`/api/electricity/${id}`, { entered_by: enteredBy.trim() });
-    loadRows();
+    loadRows(historyMonth);
     loadSummary(rangeFrom, rangeTo);
   }
 
@@ -139,15 +158,22 @@ export default function ElectricityPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-bold">전력사용량 입력</h1>
+        <h1 className="text-xl font-bold">전력 모니터링</h1>
         <p className="text-sm text-slate-500 mt-1">
           1공장(저압)·2공장(고압) 일일 전력 사용량(kWh)을 입력합니다. 같은 날짜·공장으로 다시
           저장하면 기존 기록이 수정됩니다.
         </p>
-        <div className="mt-2 text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-md px-3 py-2">
-          현재는 수동 입력 방식입니다. 한전 Open P-Meter API 승인을 받으시면, API 키를 전달해
-          주시는 대로 매일 자동으로 값을 가져와 채워주는 기능을 추가로 연동해 드릴 수 있습니다.
-        </div>
+        {pmeterConfigured ? (
+          <div className="mt-2 text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-md px-3 py-2">
+            한전 Open P-Meter API와 연동되어 매일 오전 8시에 전일 전력사용량이 자동으로 채워집니다.
+            값이 다르면 아래에서 언제든 직접 수정할 수 있습니다.
+          </div>
+        ) : (
+          <div className="mt-2 text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-md px-3 py-2">
+            현재는 수동 입력 방식입니다. 한전 Open P-Meter API 승인을 받으시면, API 키를 전달해
+            주시는 대로 매일 자동으로 값을 가져와 채워주는 기능을 추가로 연동해 드릴 수 있습니다.
+          </div>
+        )}
       </div>
 
       {/* 기간별 조회 + 1공장/2공장/합계 (req1) */}
@@ -300,20 +326,24 @@ export default function ElectricityPage() {
           >
             {saving ? "저장 중..." : editingKey ? "수정 저장" : "저장"}
           </button>
-          <button
-            type="button"
-            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            className="border rounded-md px-4 py-2 text-sm font-medium"
-          >
-            ↑ 맨 위로
-          </button>
           {message && <span className="text-sm text-slate-600">{message}</span>}
         </div>
       </form>
 
       <div className="bg-white rounded-xl border overflow-x-auto">
-        <div className="flex items-center justify-between px-3 pt-3">
-          <h2 className="text-sm font-semibold text-slate-700">최근 전력사용량 기록</h2>
+        <div className="flex items-center justify-between px-3 pt-3 flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-slate-700">전력사용량 기록</h2>
+            <label className="flex items-center gap-1 text-xs text-slate-500">
+              <span>조회 월</span>
+              <input
+                type="month"
+                value={historyMonth}
+                onChange={(e) => setHistoryMonth(e.target.value)}
+                className="border rounded-md px-2 py-1"
+              />
+            </label>
+          </div>
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- 파일 다운로드 링크(페이지 이동 아님) */}
           <a href="/api/electricity/export" className="text-xs border border-slate-300 rounded-md px-3 py-1.5">
             엑셀 다운로드 (전체)
@@ -333,7 +363,7 @@ export default function ElectricityPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, 60).map((r) => (
+            {rows.map((r) => (
               <tr key={r.id} className="border-t">
                 <td className="px-3 py-2">{r.date}</td>
                 <td className="px-3 py-2">{r.plant}</td>
@@ -360,7 +390,7 @@ export default function ElectricityPage() {
             {rows.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
-                  아직 입력된 전력사용량 기록이 없습니다.
+                  {historyMonth}에 입력된 전력사용량 기록이 없습니다.
                 </td>
               </tr>
             )}

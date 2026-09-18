@@ -6,6 +6,7 @@ import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import { useSiteSession } from "@/lib/useSiteSession";
 import { KIND_LABELS } from "@/lib/packingClient";
+import DateNav from "@/components/DateNav";
 
 interface DailyLogRow {
   key: string;
@@ -31,12 +32,6 @@ interface DailyLogResult {
 
 function today() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function shiftDate(date: string, delta: number): string {
-  const d = new Date(date);
-  d.setDate(d.getDate() + delta);
-  return d.toISOString().slice(0, 10);
 }
 
 function fmt(v: number | null | undefined): string {
@@ -233,18 +228,7 @@ export default function PackingDailyLogPage() {
       )}
 
       <div className="bg-white rounded-xl border p-4 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setDate((d) => shiftDate(d, -1))} className="border rounded-md px-2 py-1 text-xs">
-            ◀ 전날
-          </button>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border rounded-md px-2 py-1 text-xs" />
-          <button type="button" onClick={() => setDate((d) => shiftDate(d, 1))} className="border rounded-md px-2 py-1 text-xs">
-            다음날 ▶
-          </button>
-          <button type="button" onClick={() => setDate(today())} className="border rounded-md px-2 py-1 text-xs">
-            오늘
-          </button>
-        </div>
+        <DateNav value={date} onChange={setDate} />
         <div className="w-56">
           <EnteredByField
             value={enteredBy}
@@ -340,15 +324,6 @@ export default function PackingDailyLogPage() {
         </table>
       </div>
 
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="border rounded-md px-4 py-1.5 text-sm font-medium bg-white"
-        >
-          ↑ 맨 위로
-        </button>
-      </div>
     </div>
   );
 }
