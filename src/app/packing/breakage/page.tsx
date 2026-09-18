@@ -33,10 +33,12 @@ export default function PackingBreakagePage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [editQty, setEditQty] = useState("");
   const session = useSiteSession();
+  const [rangeFrom, setRangeFrom] = useState(daysAgo(30));
+  const [rangeTo, setRangeTo] = useState(today());
 
   useEffect(() => {
     if (session.loggedIn && session.displayName) {
-       
+
       setEnteredBy(session.displayName);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -46,7 +48,7 @@ export default function PackingBreakagePage() {
     setItems(await apiGet<PackingItem[]>("/api/packing-item"));
   }
   async function loadRows() {
-    setRows(await apiGet<PackingBreakage[]>(`/api/packing-breakage?from=${daysAgo(30)}&to=${today()}`));
+    setRows(await apiGet<PackingBreakage[]>(`/api/packing-breakage?from=${rangeFrom}&to=${rangeTo}`));
   }
 
   useEffect(() => {
@@ -196,7 +198,37 @@ export default function PackingBreakagePage() {
       </form>
 
       <div className="bg-white rounded-xl border overflow-x-auto">
-        <h2 className="text-sm font-semibold text-slate-700 px-4 pt-4">최근 30일 파손내역</h2>
+        <div className="flex items-center gap-3 px-4 pt-4 flex-wrap">
+          <h2 className="text-sm font-semibold text-slate-700">일자별 조회</h2>
+          <div className="flex items-center gap-2">
+            <label className="flex flex-col text-xs gap-1">
+              <span className="text-slate-500">시작일</span>
+              <input
+                type="date"
+                value={rangeFrom}
+                onChange={(e) => setRangeFrom(e.target.value)}
+                className="border rounded-md px-2 py-1 text-xs"
+              />
+            </label>
+            <span className="text-xs text-slate-400 mt-4">~</span>
+            <label className="flex flex-col text-xs gap-1">
+              <span className="text-slate-500">종료일</span>
+              <input
+                type="date"
+                value={rangeTo}
+                onChange={(e) => setRangeTo(e.target.value)}
+                className="border rounded-md px-2 py-1 text-xs"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={loadRows}
+              className="border rounded-md px-3 py-1 text-xs bg-slate-900 text-white mt-4"
+            >
+              조회
+            </button>
+          </div>
+        </div>
         <table className="w-full text-sm mt-2">
           <thead className="bg-slate-100 text-slate-600">
             <tr>
@@ -285,7 +317,7 @@ export default function PackingBreakagePage() {
             {rows.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-3 py-8 text-center text-slate-400">
-                  최근 30일간 기록이 없습니다.
+                  해당 기간에 기록이 없습니다.
                 </td>
               </tr>
             )}

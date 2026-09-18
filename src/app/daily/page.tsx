@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/apiClient";
 import { MergedShiftRow } from "@/lib/analytics";
-import { sumPackAmount } from "@/lib/packAmount";
 import { ElectricityUsage } from "@/lib/types";
 import { shiftDate, today } from "@/lib/dateNav";
 import DateNav from "@/components/DateNav";
@@ -138,6 +137,7 @@ export default function DailyDashboardPage() {
   const [to, setTo] = useState(today());
   const [rows, setRows] = useState<MergedShiftRow[]>([]);
   const [electricity, setElectricity] = useState<ElectricityUsage[]>([]);
+  const [packAmountTotal, setPackAmountTotal] = useState(0);
   const [loading, setLoading] = useState(false);
 
   const rangeFrom = mode === "day" ? date : from;
@@ -149,11 +149,14 @@ export default function DailyDashboardPage() {
       setLoading(true);
       try {
         const [data, elec] = await Promise.all([
-          apiGet<{ rows: MergedShiftRow[] }>(`/api/dashboard?from=${rangeFrom}&to=${rangeTo}`),
+          apiGet<{ rows: MergedShiftRow[]; packAmountTotal: number }>(
+            `/api/dashboard?from=${rangeFrom}&to=${rangeTo}`
+          ),
           apiGet<ElectricityUsage[]>(`/api/electricity?from=${rangeFrom}&to=${rangeTo}`),
         ]);
         if (!cancelled) {
           setRows(data.rows);
+          setPackAmountTotal(data.packAmountTotal);
           setElectricity(elec);
         }
       } finally {
@@ -180,9 +183,7 @@ export default function DailyDashboardPage() {
   }, [electricity, date]);
 
   const periodAgg = useMemo(() => {
-    const packAmount = sumPackAmount(
-      rows.map((r) => ({ date: r.date, packAmount: r.production?.daily_pack_amount }))
-    );
+    const packAmount = packAmountTotal;
     const lineHoursTotal = rows.reduce((s, r) => s + (r.production?.line_hours_total ?? 0), 0);
     const downtimeHours = rows.reduce((s, r) => s + (r.production?.downtime_hours ?? 0), 0);
     const gasUsageShift = rows.reduce((s, r) => s + (r.production?.gas_usage_shift ?? 0), 0);
@@ -205,7 +206,7 @@ export default function DailyDashboardPage() {
       avgMoisture: avg(rows.map((r) => r.moisture)),
       dayCount,
     };
-  }, [rows, electricity]);
+  }, [rows, electricity, packAmountTotal]);
 
   return (
     <div className="flex flex-col gap-6">

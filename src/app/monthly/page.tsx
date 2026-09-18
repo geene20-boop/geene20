@@ -435,7 +435,7 @@ export default function MonthlyPage() {
                       className="border-t bg-slate-50 font-medium cursor-pointer hover:bg-slate-100"
                       onClick={() => toggleDate(day.date)}
                     >
-                      <td className="px-3 py-1.5" colSpan={4}>
+                      <td className="px-3 py-1.5" colSpan={3}>
                         <span className="inline-block w-4 text-slate-400">{expanded ? "▾" : "▸"}</span>
                         {day.date} 일계
                       </td>
