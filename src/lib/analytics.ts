@@ -478,19 +478,15 @@ function aggregateMonthDaily(month: string): MonthRawAgg {
     }
   }
 
-  // 생산량(daily_pack_amount)은 하루 단위 값이라 주/야 조 모두에 같은 값이 자동 반영되기 쉽다.
-  // 조별로 그대로 더하면 두 배로 집계되므로, 날짜별로 값이 가장 큰(=대표) 기록 하나만 집계한다.
-  const packRepByDate = new Map<string, ProductionLog>();
-  for (const p of prod) {
-    if (p.daily_pack_amount == null) continue;
-    const cur = packRepByDate.get(p.date);
-    if (!cur || (cur.daily_pack_amount ?? 0) < p.daily_pack_amount) packRepByDate.set(p.date, p);
-  }
-  for (const p of packRepByDate.values()) {
-    productionTon += p.daily_pack_amount as number;
-    prodCount++;
-    const prd = p.product ?? "미지정";
-    productionByProduct[prd] = (productionByProduct[prd] ?? 0) + (p.daily_pack_amount as number);
+  // 생산량은 생산일지 수기 입력(daily_pack_amount)이 아니라 제품포장(생산/출하 입력)에
+  // 실제 기록된 생산 실적을 근거로 삼는다 (월별요약·일자별요약과 동일한 기준).
+  const packTonsByDate = getDailyPackingTonsByCategory(db, from, to);
+  for (const catMap of packTonsByDate.values()) {
+    for (const [category, tons] of catMap) {
+      productionTon += tons;
+      prodCount++;
+      productionByProduct[category] = (productionByProduct[category] ?? 0) + tons;
+    }
   }
 
   // 전력을 그날 생산한 비종에 배분: 가동시간 비례(하루 중 비종이 바뀐 경우 정확한 배분),
