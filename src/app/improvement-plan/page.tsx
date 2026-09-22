@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiPut, apiDelete } from "@/lib/apiClient";
 import {
   ImprovementPlan,
@@ -153,6 +153,8 @@ export default function ImprovementPlanPage() {
   const [photoBefore, setPhotoBefore] = useState<File | null>(null);
   const [photoBeforePreview, setPhotoBeforePreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const [filterText, setFilterText] = useState("");
   const [filterCat, setFilterCat] = useState<"" | ImprovementPlanCategory>("");
@@ -192,6 +194,38 @@ export default function ImprovementPlanPage() {
       if (photoBeforePreview) URL.revokeObjectURL(photoBeforePreview);
     };
   }, [photoBeforePreview]);
+
+  useEffect(() => {
+    if (editingId !== null) formRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [editingId]);
+
+  function openNewForm() {
+    if (showForm && editingId === null) {
+      setShowForm(false);
+      return;
+    }
+    setEditingId(null);
+    setForm(emptyPlanForm());
+    handlePhotoBeforeChange(null);
+    setShowForm(true);
+  }
+
+  function startEdit(p: ImprovementPlan) {
+    setEditingId(p.id);
+    setForm({
+      category: p.category,
+      equipmentName: p.equipment_name,
+      taskName: p.task_name,
+      startDate: p.start_date ?? "",
+      endDate: p.end_date ?? "",
+      budget: String(p.budget),
+      orgType: p.org_type,
+      vendorName: p.vendor_name ?? "",
+    });
+    handlePhotoBeforeChange(null);
+    setDetail(null);
+    setShowForm(true);
+  }
 
   function matches(p: ImprovementPlan): boolean {
     if (filterText && !`${p.equipment_name} ${p.task_name}`.includes(filterText)) return false;
@@ -254,10 +288,16 @@ export default function ImprovementPlanPage() {
       if (form.orgType === "외주" && form.vendorName.trim()) fd.set("vendor_name", form.vendorName.trim());
       if (photoBefore) fd.set("photo_before", photoBefore);
 
-      await postForm("/api/improvement-plan", "POST", fd);
-      setMessage("개선계획이 등록되었습니다. (우선순위 맨 아래에 추가되었으니 필요하면 순서를 옮겨주세요)");
+      if (editingId !== null) {
+        await postForm(`/api/improvement-plan/${editingId}`, "PUT", fd);
+        setMessage("개선계획 내용이 수정되었습니다.");
+      } else {
+        await postForm("/api/improvement-plan", "POST", fd);
+        setMessage("개선계획이 등록되었습니다. (우선순위 맨 아래에 추가되었으니 필요하면 순서를 옮겨주세요)");
+      }
       setForm(emptyPlanForm());
       handlePhotoBeforeChange(null);
+      setEditingId(null);
       setShowForm(false);
       await loadPlans();
     } catch (err) {
@@ -360,7 +400,8 @@ export default function ImprovementPlanPage() {
     }
   }
 
-  const canManageDetail = detail && (detail.status === "in_progress" || detail.status === "pending_approval");
+  const canManageDetail =
+    detail && (detail.status === "in_progress" || detail.status === "pending_approval" || detail.status === "review");
   // 관리자(공용 비밀번호)이거나, [개선계획] 완료 승인 권한을 받은 특정 개인(navGroups.ts)이면
   // 이 화면에서는 관리자와 동일하게 완료 승인/반려를 할 수 있다 (다른 화면 권한에는 영향 없음).
   const canApprove =
@@ -388,7 +429,7 @@ export default function ImprovementPlanPage() {
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => setShowForm((s) => !s)}
+          onClick={openNewForm}
           disabled={!session.canWrite}
           className="bg-slate-900 text-white rounded-md px-4 py-1.5 text-sm font-medium disabled:opacity-40"
         >
@@ -397,8 +438,10 @@ export default function ImprovementPlanPage() {
       </div>
 
       {showForm && (
-        <form onSubmit={submitPlan} className="flex flex-col gap-4 bg-white rounded-xl border p-5">
-          <h2 className="text-sm font-semibold text-slate-700">신규 개선계획 등록</h2>
+        <form ref={formRef} onSubmit={submitPlan} className="flex flex-col gap-4 bg-white rounded-xl border p-5">
+          <h2 className="text-sm font-semibold text-slate-700">
+            {editingId !== null ? "개선계획 수정" : "신규 개선계획 등록"}
+          </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <EnteredByField
               value={enteredBy}
@@ -496,10 +539,21 @@ export default function ImprovementPlanPage() {
               />
               <span className="text-xs text-slate-400">
                 업로드 시 자동으로 가로 1280px 이하로 축소·압축되어 저장 용량을 절약합니다.
+                {editingId !== null && " 새 사진을 선택하지 않으면 기존 사진이 그대로 유지됩니다."}
               </span>
-              {photoBeforePreview && (
+              {photoBeforePreview ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={photoBeforePreview} alt="미리보기" className="w-24 h-24 object-cover rounded-md border mt-1" />
+              ) : (
+                editingId !== null &&
+                plans.find((p) => p.id === editingId)?.photo_before_path && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`/api/improvement-plan/${editingId}/photo?which=before`}
+                    alt="기존 사진"
+                    className="w-24 h-24 object-cover rounded-md border mt-1"
+                  />
+                )
               )}
             </label>
           </div>
@@ -509,11 +563,14 @@ export default function ImprovementPlanPage() {
               disabled={saving}
               className="bg-slate-900 text-white rounded-md px-4 py-1.5 text-sm font-medium disabled:opacity-40"
             >
-              {saving ? "등록 중..." : "등록"}
+              {saving ? "저장 중..." : editingId !== null ? "저장" : "등록"}
             </button>
             <button
               type="button"
-              onClick={() => setShowForm(false)}
+              onClick={() => {
+                setShowForm(false);
+                setEditingId(null);
+              }}
               className="border rounded-md px-4 py-1.5 text-sm bg-white"
             >
               취소
@@ -699,6 +756,14 @@ export default function ImprovementPlanPage() {
                                 >
                                   재검토 지정
                                 </button>
+                                <button
+                                  type="button"
+                                  disabled={!session.canWrite || busyId === p.id}
+                                  onClick={() => startEdit(p)}
+                                  className="text-xs font-semibold border rounded-md px-2 py-1 text-sky-700 border-sky-200 bg-white hover:bg-sky-50 disabled:opacity-40"
+                                >
+                                  수정
+                                </button>
                               </div>
                             )}
                           </div>
@@ -805,6 +870,17 @@ export default function ImprovementPlanPage() {
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">재검토</span>
                     <span>지정: {p.reviewed_by}</span>
                     <span className="tabular-nums">{won(p.budget)}</span>
+                    <button
+                      type="button"
+                      disabled={!session.canWrite || busyId === p.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        requestCompletion(p.id, null);
+                      }}
+                      className="text-xs font-semibold border rounded-md px-2 py-1 text-emerald-700 border-emerald-200 bg-white hover:bg-emerald-50 disabled:opacity-40"
+                    >
+                      재작업 완료 요청
+                    </button>
                   </div>
                 </div>
               ))
@@ -965,6 +1041,35 @@ export default function ImprovementPlanPage() {
                       className="text-xs font-semibold border rounded-md px-3 py-1.5 text-amber-700 border-amber-200 bg-white hover:bg-amber-50"
                     >
                       재검토 지정
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === detail.id}
+                      onClick={() => startEdit(detail)}
+                      className="text-xs font-semibold border rounded-md px-3 py-1.5 text-sky-700 border-sky-200 bg-white hover:bg-sky-50"
+                    >
+                      수정
+                    </button>
+                  </div>
+                )}
+                {detail.status === "review" && session.canWrite && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0] ?? null;
+                        setDetailAfterFile(f ? await compressPhoto(f) : null);
+                      }}
+                      className="text-xs"
+                    />
+                    <button
+                      type="button"
+                      disabled={busyId === detail.id}
+                      onClick={() => requestCompletion(detail.id, detailAfterFile)}
+                      className="text-xs font-semibold border rounded-md px-3 py-1.5 text-emerald-700 border-emerald-200 bg-white hover:bg-emerald-50"
+                    >
+                      재작업 완료 요청
                     </button>
                   </div>
                 )}

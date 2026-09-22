@@ -3,12 +3,8 @@ import { getDb } from "@/lib/db";
 import { isEditorRequest } from "@/lib/auth";
 import { requireActor, logAudit } from "@/lib/audit";
 import { saveAttachmentFile } from "@/lib/fileStorage";
-import { ImprovementPlan, ImprovementPlanCategory, ImprovementPlanOrgType } from "@/lib/types";
-
-const CATEGORIES: ImprovementPlanCategory[] = ["신규", "보수"];
-const ORG_TYPES: ImprovementPlanOrgType[] = ["MIP", "외주"];
-const MAX_PHOTO_SIZE = 8 * 1024 * 1024; // 8MB (업로드 전 브라우저에서 압축하므로 넉넉히 잡은 상한)
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+import { ImprovementPlan } from "@/lib/types";
+import { IMPROVEMENT_PLAN_MAX_PHOTO_SIZE, parsePlanForm } from "@/lib/improvementPlan";
 
 export async function GET() {
   const db = getDb();
@@ -28,47 +24,15 @@ export async function POST(req: NextRequest) {
   }
 
   const form = await req.formData();
-  const category = String(form.get("category") ?? "");
-  const equipmentName = String(form.get("equipment_name") ?? "").trim();
-  const taskName = String(form.get("task_name") ?? "").trim();
-  const startDate = form.get("start_date") ? String(form.get("start_date")) : null;
-  const endDate = form.get("end_date") ? String(form.get("end_date")) : null;
-  const orgType = String(form.get("org_type") ?? "");
-  const vendorNameRaw = form.get("vendor_name") ? String(form.get("vendor_name")).trim() : "";
-  const budgetRaw = form.get("budget");
+  const parsed = parsePlanForm(form);
+  if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const { category, equipmentName, taskName, startDate, endDate, budget, orgType, vendorName } = parsed;
+
   const photo = form.get("photo_before");
-
-  if (!CATEGORIES.includes(category as ImprovementPlanCategory)) {
-    return NextResponse.json({ error: "구분(신규/보수)이 올바르지 않습니다." }, { status: 400 });
-  }
-  if (!equipmentName) {
-    return NextResponse.json({ error: "설비명을 입력해주세요." }, { status: 400 });
-  }
-  if (!taskName) {
-    return NextResponse.json({ error: "작업명을 입력해주세요." }, { status: 400 });
-  }
-  if (startDate && !DATE_RE.test(startDate)) {
-    return NextResponse.json({ error: "예상 시작일이 올바르지 않습니다." }, { status: 400 });
-  }
-  if (endDate && !DATE_RE.test(endDate)) {
-    return NextResponse.json({ error: "예상 종료일이 올바르지 않습니다." }, { status: 400 });
-  }
-  if (startDate && endDate && endDate < startDate) {
-    return NextResponse.json({ error: "종료일이 시작일보다 빠릅니다." }, { status: 400 });
-  }
-  if (!ORG_TYPES.includes(orgType as ImprovementPlanOrgType)) {
-    return NextResponse.json({ error: "시행처(MIP/외주)가 올바르지 않습니다." }, { status: 400 });
-  }
-  const vendorName = orgType === "외주" && vendorNameRaw ? vendorNameRaw.slice(0, 100) : null;
-  const budget = Number(budgetRaw ?? 0);
-  if (!Number.isFinite(budget) || budget < 0) {
-    return NextResponse.json({ error: "예산이 올바르지 않습니다." }, { status: 400 });
-  }
-
   let photoPath: string | null = null;
   let photoMime: string | null = null;
   if (photo instanceof File && photo.size > 0) {
-    if (photo.size > MAX_PHOTO_SIZE) {
+    if (photo.size > IMPROVEMENT_PLAN_MAX_PHOTO_SIZE) {
       return NextResponse.json({ error: "사진 용량이 너무 큽니다. (최대 8MB)" }, { status: 400 });
     }
     if (!photo.type.startsWith("image/")) {
