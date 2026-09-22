@@ -34,5 +34,6 @@ export async function GET(req: NextRequest) {
     role: isAdmin ? "admin" : account?.role ?? null,
     workerId: isAdmin ? null : account?.worker_id ?? null,
     nationality,
+    language: session?.language,
   });
 }

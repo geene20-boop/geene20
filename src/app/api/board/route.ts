@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdminRequest, isModifierRequest } from "@/lib/auth";
 import { requireActor, logAudit } from "@/lib/audit";
+import { saveAttachmentFile } from "@/lib/fileStorage";
+import { cleanupExpiredBoardPosts } from "@/lib/boardCleanup";
 import { BoardAttachment, BoardCategory, BoardPost } from "@/lib/types";
 
 const CATEGORIES: BoardCategory[] = ["생산계획", "보수계획", "휴무일", "기타"];
@@ -13,6 +15,7 @@ function canWriteBoard(req: NextRequest): boolean {
 
 export async function GET(req: NextRequest) {
   const db = getDb();
+  cleanupExpiredBoardPosts(db);
   const category = req.nextUrl.searchParams.get("category");
   const posts = (
     category
@@ -65,11 +68,12 @@ export async function POST(req: NextRequest) {
   const postId = info.lastInsertRowid as number;
 
   const insertAttachment = db.prepare(
-    "INSERT INTO board_attachment (post_id, filename, mime_type, size, data) VALUES (?, ?, ?, ?, ?)"
+    "INSERT INTO board_attachment (post_id, filename, mime_type, size, file_path) VALUES (?, ?, ?, ?, ?)"
   );
   for (const f of files) {
     const buf = Buffer.from(await f.arrayBuffer());
-    insertAttachment.run(postId, f.name, f.type || null, f.size, buf);
+    const filePath = saveAttachmentFile("board", f.name, buf);
+    insertAttachment.run(postId, f.name, f.type || null, f.size, filePath);
   }
 
   logAudit("board_post", title, "create", author, `[${category}] 첨부 ${files.length}건`);

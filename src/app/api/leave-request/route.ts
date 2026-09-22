@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { getSessionWorkerId, isAdminRequest, isModifierRequest } from "@/lib/auth";
+import { getSessionWorkerId, isAttendanceAdminRequest, isModifierRequest } from "@/lib/auth";
 import { requireActor, logAudit } from "@/lib/audit";
 import { LeaveRequest, LeaveType } from "@/lib/types";
 
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
   // 관리자/수정권한 계정이 본인 근태만 조회하고 싶을 때(예: "내 근태" 탭) mine=1로 요청한다.
   const mine = req.nextUrl.searchParams.get("mine") === "1";
 
-  if (!mine && (isAdminRequest(req) || isModifierRequest(req))) {
+  if (!mine && (isAttendanceAdminRequest(req) || isModifierRequest(req))) {
     const rows = status
       ? (db
           .prepare("SELECT * FROM leave_request WHERE status = ? ORDER BY created_at DESC")

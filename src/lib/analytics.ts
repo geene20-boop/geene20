@@ -7,6 +7,10 @@ import {
   MonthlyUtility,
   UtilityMonthRow,
 } from "@/lib/types";
+import { sumPackAmount as sumPackAmountByDate } from "@/lib/packAmount";
+import { classifyProductCategory, getDailyPackingTonsByCategory } from "@/lib/packingProductionSummary";
+
+const PRODUCT_SUMMARY_CATEGORIES = ["석회고토", "입상규산", "칼슘유황"];
 
 export interface MergedShiftRow {
   date: string;
@@ -156,9 +160,14 @@ function granulationUsageTotal(p: ProductionLog | null): number | null {
   return p.granulation_usage_per_min * p.line_hours_total * 60;
 }
 
+export function sumPackAmount(rows: { date: string; production: ProductionLog | null }[]): number {
+  return sumPackAmountByDate(rows.map((r) => ({ date: r.date, packAmount: r.production?.daily_pack_amount })));
+}
+
 export interface DailySheetShift {
   shift: "주" | "야";
   worker: string | null;
+  product: string | null;
   downtimeHours: number | null;
   lineHoursTotal: number | null;
   granulationAgent: string | null;
@@ -170,6 +179,7 @@ export interface DailySheetShift {
 export interface DailySheetRow {
   date: string;
   shifts: DailySheetShift[];
+  products: string[]; // 그날 주/야 조에 입력된 생산품목(중복 제거, 입력 순서 유지)
   dayTotal: {
     downtimeHours: number;
     lineHoursTotal: number;
@@ -206,6 +216,18 @@ export function getMonthlyDailySheet(month: string): DailySheetRow[] {
     byDate.get(r.date)!.push(r);
   }
 
+  // 포장량은 생산일지 수기 입력(daily_pack_amount)이 아니라 제품포장(생산/출하 입력)에
+  // 실제 기록된 생산 실적을 근거로 삼는다.
+  const db = getDb();
+  const packTonsByDate = getDailyPackingTonsByCategory(db, from, to);
+  const dayPackAmount = (date: string) => {
+    const catMap = packTonsByDate.get(date);
+    if (!catMap) return 0;
+    let total = 0;
+    for (const tons of catMap.values()) total += tons;
+    return total;
+  };
+
   const dayTotalFor = (date: string) => {
     const dayRows = byDate.get(date) ?? [];
     return {
@@ -213,23 +235,38 @@ export function getMonthlyDailySheet(month: string): DailySheetRow[] {
       lineHoursTotal: dayRows.reduce((s, r) => s + (r.production?.line_hours_total ?? 0), 0),
       granulationUsageTotal: dayRows.reduce((s, r) => s + (granulationUsageTotal(r.production) ?? 0), 0),
       gasUsageShift: dayRows.reduce((s, r) => s + (r.production?.gas_usage_shift ?? 0), 0),
-      packAmount: dayRows.reduce((s, r) => s + (r.production?.daily_pack_amount ?? 0), 0),
+      packAmount: dayPackAmount(date),
     };
   };
 
   const result: DailySheetRow[] = [];
   for (const date of daysInMonth(month)) {
     const dayRows = (byDate.get(date) ?? []).sort((a) => (a.shift === "주" ? -1 : 1));
-    const shifts: DailySheetShift[] = dayRows.map((r) => ({
-      shift: r.shift,
-      worker: r.production?.worker ?? null,
-      downtimeHours: r.production?.downtime_hours ?? null,
-      lineHoursTotal: r.production?.line_hours_total ?? null,
-      granulationAgent: r.production?.granulation_agent ?? null,
-      granulationUsageTotal: granulationUsageTotal(r.production),
-      gasUsageShift: r.production?.gas_usage_shift ?? null,
-      packAmount: r.production?.daily_pack_amount ?? null,
-    }));
+    const catTonsForDate = packTonsByDate.get(date);
+    // 같은 날 같은 품목으로 여러 조(주/야)가 작업했으면 그 품목의 그날 실제 포장량을 조 수만큼 나눠 보여준다.
+    const shiftCountByCategory = new Map<string, number>();
+    for (const r of dayRows) {
+      const category = r.production?.product ? classifyProductCategory(r.production.product) : null;
+      if (category) shiftCountByCategory.set(category, (shiftCountByCategory.get(category) ?? 0) + 1);
+    }
+    const shifts: DailySheetShift[] = dayRows.map((r) => {
+      const product = r.production?.product ?? null;
+      const category = product ? classifyProductCategory(product) : null;
+      const shiftCount = category ? shiftCountByCategory.get(category) ?? 1 : 1;
+      const categoryTons = category ? catTonsForDate?.get(category) ?? 0 : null;
+      return {
+        shift: r.shift,
+        worker: r.production?.worker ?? null,
+        product,
+        downtimeHours: r.production?.downtime_hours ?? null,
+        lineHoursTotal: r.production?.line_hours_total ?? null,
+        granulationAgent: r.production?.granulation_agent ?? null,
+        granulationUsageTotal: granulationUsageTotal(r.production),
+        gasUsageShift: r.production?.gas_usage_shift ?? null,
+        packAmount: categoryTons != null ? categoryTons / shiftCount : null,
+      };
+    });
+    const products = [...new Set(shifts.map((s) => s.product).filter((p): p is string => !!p))];
 
     const dayTotal = dayTotalFor(date);
     const prevTotal = dayTotalFor(addDays(date, -1));
@@ -238,6 +275,7 @@ export function getMonthlyDailySheet(month: string): DailySheetRow[] {
     result.push({
       date,
       shifts,
+      products,
       dayTotal,
       deltaFromPrevDay: {
         granulationUsageTotal: hasPrevData
@@ -249,6 +287,64 @@ export function getMonthlyDailySheet(month: string): DailySheetRow[] {
   }
 
   return result;
+}
+
+export interface ProductMonthlySummary {
+  product: string; // "석회고토" | "입상규산" | "칼슘유황"
+  dayCount: number;
+  downtimeHours: number;
+  lineHoursTotal: number;
+  granulationUsageTotal: number;
+  gasUsageShift: number;
+  packAmount: number;
+}
+
+// 일자별 조회 상단에 품목(석회고토/입상규산/칼슘유황)별로 그 달의 실적을 합계 내어 보여주기 위한 것.
+// 포장량은 생산일지가 아니라 제품포장(생산/출하 입력) 실적을 근거로 삼는다.
+export function getMonthlyProductSummary(month: string): ProductMonthlySummary[] {
+  const from = `${month}-01`;
+  const to = daysInMonth(month).slice(-1)[0] ?? `${month}-28`;
+  const rows = getMergedRows(from, to);
+  const db = getDb();
+  const packTonsByDate = getDailyPackingTonsByCategory(db, from, to);
+
+  const byCategory = new Map<
+    string,
+    { dates: Set<string>; downtimeHours: number; lineHoursTotal: number; granulationUsageTotal: number; gasUsageShift: number }
+  >();
+  for (const r of rows) {
+    const category = r.production?.product ? classifyProductCategory(r.production.product) : null;
+    if (!category) continue;
+    const acc =
+      byCategory.get(category) ??
+      { dates: new Set<string>(), downtimeHours: 0, lineHoursTotal: 0, granulationUsageTotal: 0, gasUsageShift: 0 };
+    acc.dates.add(r.date);
+    acc.downtimeHours += r.production?.downtime_hours ?? 0;
+    acc.lineHoursTotal += r.production?.line_hours_total ?? 0;
+    acc.granulationUsageTotal += granulationUsageTotal(r.production) ?? 0;
+    acc.gasUsageShift += r.production?.gas_usage_shift ?? 0;
+    byCategory.set(category, acc);
+  }
+
+  const packTonsByCategory = new Map<string, number>();
+  for (const catMap of packTonsByDate.values()) {
+    for (const [category, tons] of catMap) {
+      packTonsByCategory.set(category, (packTonsByCategory.get(category) ?? 0) + tons);
+    }
+  }
+
+  return PRODUCT_SUMMARY_CATEGORIES.map((product) => {
+    const acc = byCategory.get(product);
+    return {
+      product,
+      dayCount: acc?.dates.size ?? 0,
+      downtimeHours: acc?.downtimeHours ?? 0,
+      lineHoursTotal: acc?.lineHoursTotal ?? 0,
+      granulationUsageTotal: acc?.granulationUsageTotal ?? 0,
+      gasUsageShift: acc?.gasUsageShift ?? 0,
+      packAmount: packTonsByCategory.get(product) ?? 0,
+    };
+  });
 }
 
 export interface MonthlySummary {
@@ -268,7 +364,7 @@ export function getMonthlySummary(month: string): MonthlySummary {
   const to = `${month}-31`;
   const rows = getMergedRows(from, to);
 
-  const totalPackAmount = rows.reduce((s, r) => s + (r.production?.daily_pack_amount ?? 0), 0);
+  const totalPackAmount = sumPackAmount(rows);
   const totalGasUsage = rows.reduce((s, r) => s + (r.production?.gas_usage_shift ?? 0), 0);
   const totalLineHours = rows.reduce((s, r) => s + (r.production?.line_hours_total ?? 0), 0);
   const avgHardness = avg(rows.map((r) => r.hardness));
@@ -368,14 +464,7 @@ function aggregateMonthDaily(month: string): MonthRawAgg {
   let lngTotal = 0;
   let lngCount = 0;
   for (const p of prod) {
-    if (p.daily_pack_amount != null) {
-      productionTon += p.daily_pack_amount;
-      prodCount++;
-    }
     const prd = p.product ?? "미지정";
-    if (p.daily_pack_amount != null) {
-      productionByProduct[prd] = (productionByProduct[prd] ?? 0) + p.daily_pack_amount;
-    }
     if (p.product) {
       if (!productHoursByDate.has(p.date)) productHoursByDate.set(p.date, new Map());
       const hoursMap = productHoursByDate.get(p.date)!;
@@ -386,6 +475,17 @@ function aggregateMonthDaily(month: string): MonthRawAgg {
       lngTotal += p.gas_usage_shift;
       lngCount++;
       lngByProduct[prd] = (lngByProduct[prd] ?? 0) + p.gas_usage_shift;
+    }
+  }
+
+  // 생산량은 생산일지 수기 입력(daily_pack_amount)이 아니라 제품포장(생산/출하 입력)에
+  // 실제 기록된 생산 실적을 근거로 삼는다 (월별요약·일자별요약과 동일한 기준).
+  const packTonsByDate = getDailyPackingTonsByCategory(db, from, to);
+  for (const catMap of packTonsByDate.values()) {
+    for (const [category, tons] of catMap) {
+      productionTon += tons;
+      prodCount++;
+      productionByProduct[category] = (productionByProduct[category] ?? 0) + tons;
     }
   }
 
@@ -447,8 +547,12 @@ export function getUtilityMonthlySheet(months: string[]): UtilityMonthRow[] {
     const elec2Won = u?.elec2_won ?? null;
     const elecTotalWon = sumOrNull(elec1Won, elec2Won);
 
-    const lngM3 = u?.lng_m3 ?? agg.lngM3;
-    const lngWon = u?.lng_won ?? null;
+    // LNG: 실청구금액 입력(건조로/RTO)에서 반영된 값을 우선 쓰고, 없으면 예전 방식(lng_m3/lng_won)
+    // 또는 일별 생산일지 가스 사용량 합산으로 대체한다.
+    const lngDryerM3 = u?.lng_dryer_m3 ?? null;
+    const lngRtoM3 = u?.lng_rto_m3 ?? null;
+    const lngM3 = sumOrNull(lngDryerM3, lngRtoM3) ?? u?.lng_m3 ?? agg.lngM3;
+    const lngWon = sumOrNull(u?.lng_dryer_won ?? null, u?.lng_rto_won ?? null) ?? u?.lng_won ?? null;
 
     const dieselLiter = u?.diesel_liter ?? null;
     const dieselWon = u?.diesel_won ?? null;
@@ -469,6 +573,8 @@ export function getUtilityMonthlySheet(months: string[]): UtilityMonthRow[] {
       lngM3,
       lngWon,
       lngUnitPrice: ratio(lngWon, lngM3),
+      lngDryerM3,
+      lngRtoM3,
       dieselLiter,
       dieselWon,
       dieselUnitPrice: ratio(dieselWon, dieselLiter),

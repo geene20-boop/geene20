@@ -42,7 +42,9 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get("from") ?? "0000-01-01";
   const to = searchParams.get("to") ?? "9999-12-31";
   const rows = db
-    .prepare("SELECT * FROM production_log WHERE date BETWEEN ? AND ? ORDER BY date DESC, shift ASC")
+    .prepare(
+      "SELECT * FROM production_log WHERE date BETWEEN ? AND ? ORDER BY date DESC, CASE shift WHEN '주' THEN 0 ELSE 1 END"
+    )
     .all(from, to) as ProductionLog[];
   return NextResponse.json(rows);
 }
