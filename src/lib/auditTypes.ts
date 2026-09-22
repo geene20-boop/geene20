@@ -24,7 +24,8 @@ export type AuditTable =
   | "raw_material"
   | "raw_material_supplier"
   | "raw_material_inbound"
-  | "raw_material_document";
+  | "raw_material_document"
+  | "improvement_plan";
 export type AuditAction = "create" | "update" | "delete";
 
 export interface AuditLogRow {
@@ -62,6 +63,7 @@ export const TABLE_LABELS: Record<AuditTable, string> = {
   raw_material_supplier: "원재료 거래처",
   raw_material_inbound: "원재료 입고",
   raw_material_document: "원재료 양식출력 문서함",
+  improvement_plan: "설비 개선계획",
 };
 
 export const ACTION_LABELS: Record<AuditAction, string> = {

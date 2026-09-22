@@ -554,3 +554,35 @@ export interface TabVisibility {
   created_at: string;
   updated_at: string;
 }
+
+export type ImprovementPlanCategory = "신규" | "보수";
+export type ImprovementPlanOrgType = "MIP" | "외주";
+// in_progress: 진행중 | pending_approval: 완료요청(승인대기) | completed: 완료 | review: 재검토
+export type ImprovementPlanStatus = "in_progress" | "pending_approval" | "completed" | "review";
+
+export interface ImprovementPlan {
+  id: number;
+  category: ImprovementPlanCategory;
+  equipment_name: string;
+  task_name: string;
+  start_date: string | null;
+  end_date: string | null;
+  budget: number;
+  org_type: ImprovementPlanOrgType;
+  vendor_name: string | null;
+  photo_before_path: string | null;
+  photo_before_mime: string | null;
+  photo_after_path: string | null;
+  photo_after_mime: string | null;
+  status: ImprovementPlanStatus;
+  priority: number;
+  review_reason: string | null;
+  reviewed_by: string | null;
+  completion_requested_by: string | null;
+  completion_requested_at: string | null;
+  approved_by: string | null;
+  completed_at: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}

@@ -91,6 +91,10 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: "설비관리",
+    items: [{ href: "/improvement-plan", label: "[개선계획]" }],
+  },
+  {
     label: "근태",
     items: [{ href: "/attendance", label: "근태 신청·연차현황" }],
   },

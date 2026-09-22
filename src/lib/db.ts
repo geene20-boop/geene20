@@ -890,6 +890,35 @@ export function getDb(): Database.Database {
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(module, feature)
     );
+
+    -- 설비 개선계획: 진행중(우선순위 정렬) / 완료(관리자 승인) / 재검토
+    CREATE TABLE IF NOT EXISTS improvement_plan (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category TEXT NOT NULL DEFAULT '보수',        -- '신규' | '보수'
+      equipment_name TEXT NOT NULL,
+      task_name TEXT NOT NULL,
+      start_date TEXT,
+      end_date TEXT,
+      budget REAL NOT NULL DEFAULT 0,
+      org_type TEXT NOT NULL DEFAULT 'MIP',         -- 'MIP' | '외주'
+      vendor_name TEXT,                             -- org_type이 '외주'일 때 업체명
+      photo_before_path TEXT,
+      photo_before_mime TEXT,
+      photo_after_path TEXT,
+      photo_after_mime TEXT,
+      status TEXT NOT NULL DEFAULT 'in_progress',   -- 'in_progress' | 'pending_approval' | 'completed' | 'review'
+      priority INTEGER NOT NULL DEFAULT 0,          -- 진행중 목록 내 우선순위 (작을수록 우선)
+      review_reason TEXT,
+      reviewed_by TEXT,
+      completion_requested_by TEXT,
+      completion_requested_at TEXT,
+      approved_by TEXT,
+      completed_at TEXT,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_improvement_plan_status ON improvement_plan(status, priority);
   `);
 
   // 기존에 만들어진 DB에도 새 컬럼이 안전하게 추가되도록 마이그레이션
