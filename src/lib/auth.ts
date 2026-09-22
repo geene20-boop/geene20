@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import {
   ATTENDANCE_ADMIN_DISPLAY_NAMES,
   FOREIGN_WORKER_RESTRICTED_GROUPS,
+  IMPROVEMENT_PLAN_ADMIN_DISPLAY_NAMES,
   NAME_RESTRICTED_DISPLAY_NAMES,
   NAME_RESTRICTED_GROUPS,
 } from "@/lib/navGroups";
@@ -304,6 +305,25 @@ export function isAttendanceAdminRequest(req: {
 // 근태관리 기록(승인/반려, 일일 출근부, 연차현황 등)에 남길 처리자 이름. 공용 관리자 로그인이면
 // 로그인 시 입력한 이름을, 근태관리 한정 관리자 권한을 받은 개인 계정이면 그 계정의 표시 이름을 쓴다.
 export function getAttendanceActorName(req: {
+  cookies: { get(name: string): { value: string } | undefined };
+}): string | null {
+  return getAdminName(req) ?? getSessionDisplayName(req);
+}
+
+// [개선계획] 화면 한정: 관리자(공용 비밀번호) 세션이거나, 완료 승인/반려 권한을 부여받은 특정 개인
+// (이름, navGroups.ts의 IMPROVEMENT_PLAN_ADMIN_DISPLAY_NAMES)이면 true. 다른 화면의 관리자 권한
+// 판단(isAdminRequest)에는 영향을 주지 않는다.
+export function isImprovementPlanAdminRequest(req: {
+  cookies: { get(name: string): { value: string } | undefined };
+}): boolean {
+  if (isAdminRequest(req)) return true;
+  const name = getSessionDisplayName(req);
+  return !!name && IMPROVEMENT_PLAN_ADMIN_DISPLAY_NAMES.has(name);
+}
+
+// [개선계획] 완료 승인/반려·삭제 기록에 남길 처리자 이름. 공용 관리자 로그인이면 로그인 시 입력한
+// 이름을, 승인 권한을 받은 개인 계정이면 그 계정의 표시 이름을 쓴다.
+export function getImprovementPlanActorName(req: {
   cookies: { get(name: string): { value: string } | undefined };
 }): string | null {
   return getAdminName(req) ?? getSessionDisplayName(req);

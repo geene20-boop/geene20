@@ -29,6 +29,10 @@ export const NAME_RESTRICTED_DISPLAY_NAMES = new Set(["김상순", "김춘수", 
 // 부여할 특정 개인(이름). 근로자 단위의 세부 권한 체계가 아직 없어 이름을 그대로 매칭한다.
 export const ATTENDANCE_ADMIN_DISPLAY_NAMES = new Set(["박미정"]);
 
+// [개선계획] 화면에서 관리자(공용 비밀번호)와 동일하게 완료 승인/반려를 할 수 있는 특정 개인(이름).
+// 근로자 단위의 세부 권한 체계가 아직 없어 이름을 그대로 매칭한다.
+export const IMPROVEMENT_PLAN_ADMIN_DISPLAY_NAMES = new Set(["박성준"]);
+
 // 관리자(공용 비밀번호) 세션은 어떤 메뉴도 제한하지 않는다 — 관리자로 로그인하며 입력한
 // 이름이 우연히 제한 대상 이름과 같아도 차단되지 않도록 isAdmin을 최우선으로 확인한다.
 export function isGroupBlockedForSession(

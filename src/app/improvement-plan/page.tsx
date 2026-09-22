@@ -10,6 +10,7 @@ import {
 import { useEnteredBy } from "@/lib/useEnteredBy";
 import EnteredByField from "@/components/EnteredByField";
 import { useSiteSession } from "@/lib/useSiteSession";
+import { IMPROVEMENT_PLAN_ADMIN_DISPLAY_NAMES } from "@/lib/navGroups";
 
 type NewPlanForm = {
   category: ImprovementPlanCategory;
@@ -360,6 +361,10 @@ export default function ImprovementPlanPage() {
   }
 
   const canManageDetail = detail && (detail.status === "in_progress" || detail.status === "pending_approval");
+  // 관리자(공용 비밀번호)이거나, [개선계획] 완료 승인 권한을 받은 특정 개인(navGroups.ts)이면
+  // 이 화면에서는 관리자와 동일하게 완료 승인/반려를 할 수 있다 (다른 화면 권한에는 영향 없음).
+  const canApprove =
+    session.isAdmin || (!!session.displayName && IMPROVEMENT_PLAN_ADMIN_DISPLAY_NAMES.has(session.displayName));
 
   return (
     <div className="flex flex-col gap-6">
@@ -654,7 +659,7 @@ export default function ImprovementPlanPage() {
                               </button>
                             </div>
                             {pending ? (
-                              session.isAdmin ? (
+                              canApprove ? (
                                 <div className="flex flex-col gap-1">
                                   <button
                                     type="button"
@@ -963,7 +968,7 @@ export default function ImprovementPlanPage() {
                     </button>
                   </div>
                 )}
-                {detail.status === "pending_approval" && session.isAdmin && (
+                {detail.status === "pending_approval" && canApprove && (
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -983,7 +988,7 @@ export default function ImprovementPlanPage() {
                     </button>
                   </div>
                 )}
-                {detail.status === "pending_approval" && !session.isAdmin && (
+                {detail.status === "pending_approval" && !canApprove && (
                   <span className="text-xs italic text-slate-400">⏳ 관리자 승인 대기 중입니다.</span>
                 )}
               </div>

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
-import { isAdminRequest, getAdminName } from "@/lib/auth";
+import { isImprovementPlanAdminRequest, getImprovementPlanActorName } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { ImprovementPlan } from "@/lib/types";
 
-// 완료 요청(승인대기)에 대한 최종 결정 - 관리자만 할 수 있다.
+// 완료 요청(승인대기)에 대한 최종 결정 - 관리자 또는 승인 권한을 받은 특정 개인만 할 수 있다.
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!isAdminRequest(req)) {
-    return NextResponse.json({ error: "완료 승인/반려는 관리자만 할 수 있습니다." }, { status: 403 });
+  if (!isImprovementPlanAdminRequest(req)) {
+    return NextResponse.json({ error: "완료 승인/반려 권한이 없습니다." }, { status: 403 });
   }
   const { id } = await params;
   const db = getDb();
@@ -24,7 +24,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (decision !== "approve" && decision !== "reject") {
     return NextResponse.json({ error: "decision은 approve 또는 reject여야 합니다." }, { status: 400 });
   }
-  const admin = getAdminName(req) ?? "관리자";
+  const admin = getImprovementPlanActorName(req) ?? "관리자";
 
   if (decision === "approve") {
     db.prepare(
