@@ -919,6 +919,31 @@ export function getDb(): Database.Database {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_improvement_plan_status ON improvement_plan(status, priority);
+
+    -- 개선계획 사진: 개선 전/후 각각 여러 장(최대 3장)을 둘 수 있도록 별도 테이블로 관리한다.
+    -- (예전 improvement_plan.photo_before_path/photo_after_path 한 장씩은 아래에서 이 테이블로 옮긴다)
+    CREATE TABLE IF NOT EXISTS improvement_plan_photo (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_id INTEGER NOT NULL,
+      which TEXT NOT NULL,                          -- 'before' | 'after'
+      file_path TEXT NOT NULL,
+      mime_type TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_improvement_plan_photo_plan ON improvement_plan_photo(plan_id, which, id);
+
+    -- 개선계획 의견(담당자·관리자 대화)과 진행 기록(상태 변경 자동 기록)
+    CREATE TABLE IF NOT EXISTS improvement_plan_comment (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_id INTEGER NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'comment',         -- 'comment' | 'history'
+      author TEXT NOT NULL,
+      role TEXT,                                    -- '관리자' | '담당자' | NULL
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_improvement_plan_comment_plan ON improvement_plan_comment(plan_id, id);
   `);
 
   // 기존에 만들어진 DB에도 새 컬럼이 안전하게 추가되도록 마이그레이션
@@ -1001,6 +1026,27 @@ export function getDb(): Database.Database {
     ["approved_at", "TEXT"],
   ]);
   migrateColumns("user_account", [["worker_id", "INTEGER"]]);
+  migrateColumns("improvement_plan", [
+    ["assignee", "TEXT"],
+    ["actual_cost", "REAL"],
+    ["rework_count", "INTEGER NOT NULL DEFAULT 0"],
+    ["reopened_from_completed", "INTEGER NOT NULL DEFAULT 0"],
+  ]);
+  // 예전 방식(계획당 개선 전/후 사진 한 장씩, improvement_plan 컬럼에 저장)을 사진 테이블로 옮긴다.
+  // 옮긴 뒤 원래 컬럼을 비워 두므로 서버가 다시 시작돼도 중복으로 옮겨지지 않는다.
+  db.transaction(() => {
+    for (const which of ["before", "after"] as const) {
+      db.prepare(
+        `INSERT INTO improvement_plan_photo (plan_id, which, file_path, mime_type, created_by, created_at)
+         SELECT id, '${which}', photo_${which}_path, photo_${which}_mime, created_by, updated_at
+         FROM improvement_plan WHERE photo_${which}_path IS NOT NULL`
+      ).run();
+      db.prepare(
+        `UPDATE improvement_plan SET photo_${which}_path = NULL, photo_${which}_mime = NULL
+         WHERE photo_${which}_path IS NOT NULL`
+      ).run();
+    }
+  })();
   migrateColumns("board_post", [["pinned", "INTEGER NOT NULL DEFAULT 0"]]);
   migrateColumns("worker", [
     ["hire_date", "TEXT"],

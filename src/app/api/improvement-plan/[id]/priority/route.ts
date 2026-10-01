@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isEditorRequest } from "@/lib/auth";
 import { ImprovementPlan } from "@/lib/types";
+import { loadPlanViews } from "@/lib/improvementPlanStore";
 
 const ACTIVE_STATUSES = "('in_progress','pending_approval')";
 
@@ -51,12 +52,5 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   });
   swap();
 
-  const rows = db
-    .prepare(
-      `SELECT * FROM improvement_plan
-       ORDER BY CASE status WHEN 'in_progress' THEN 0 WHEN 'pending_approval' THEN 0 ELSE 1 END,
-                priority ASC, updated_at DESC`
-    )
-    .all();
-  return NextResponse.json(rows);
+  return NextResponse.json(loadPlanViews(db));
 }

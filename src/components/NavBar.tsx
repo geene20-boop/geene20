@@ -85,6 +85,37 @@ function usePendingApprovalCount(canApprove: boolean, pathname: string): number 
   return count;
 }
 
+// [개선계획]에서 내가 처리할 건수(승인 권한자: 승인대기 / 그 외: 내 담당 재검토·기한 초과).
+// 화면을 열지 않아도 알 수 있도록 설비관리 메뉴 옆에 숫자로 보여준다.
+function useImprovementPlanTodoCount(enabled: boolean, pathname: string): number {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCount(0);
+      return;
+    }
+    let cancelled = false;
+    async function load() {
+      try {
+        const r = await apiGet<{ count: number }>("/api/improvement-plan/todo");
+        if (!cancelled) setCount(r.count);
+      } catch {
+        if (!cancelled) setCount(0);
+      }
+    }
+    load();
+    const interval = setInterval(load, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [enabled, pathname]);
+
+  return count;
+}
+
 function ApprovalBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
@@ -121,6 +152,9 @@ export default function NavBar() {
 
   const canApprove = session.isAdmin || session.isModifier;
   const pendingCount = usePendingApprovalCount(canApprove, pathname);
+  const planTodoCount = useImprovementPlanTodoCount(session.loggedIn || session.isAdmin, pathname);
+  // 메뉴 묶음별 알림 숫자: 근태 → 근태 승인대기, 설비관리 → 개선계획 처리할 건
+  const badgeFor = (label: string) => (label === "근태" ? pendingCount : label === "설비관리" ? planTodoCount : 0);
   // 외국인 근로자와 연동된 계정은 생산·품질/제품포장만 이용하므로 나머지는 메뉴에서 숨기고,
   // 지정된 개인 계정은 원재료·문서를 숨긴다. 관리자만 이력관리를 볼 수 있다.
   const visibleGroups = NAV_GROUPS.map((group) => {
@@ -236,7 +270,7 @@ export default function NavBar() {
           {visibleGroups.map((group) => {
             const active = isGroupActive(group, pathname);
             const open = !collapsed && openGroup === group.label;
-            const showBadge = group.label === "근태";
+            const badgeCount = badgeFor(group.label);
             const icon = GROUP_ICON[group.label] ?? "•";
 
             if (collapsed) {
@@ -251,7 +285,7 @@ export default function NavBar() {
                   }`}
                 >
                   {icon}
-                  {showBadge && pendingCount > 0 && (
+                  {badgeCount > 0 && (
                     <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-red-500" />
                   )}
                 </button>
@@ -269,7 +303,7 @@ export default function NavBar() {
                 >
                   <span className="text-base leading-none">{icon}</span>
                   <span className="flex-1 text-left truncate">{group.label}</span>
-                  {showBadge && <ApprovalBadge count={pendingCount} />}
+                  <ApprovalBadge count={badgeCount} />
                   <span className={`text-[10px] transition-transform ${open ? "rotate-90" : ""}`}>▸</span>
                 </button>
                 {open && (
@@ -300,6 +334,7 @@ export default function NavBar() {
                           >
                             {isQuickAccess && <span className="text-amber-300">★</span>}
                             {item.label}
+                            {item.href === "/improvement-plan" && <ApprovalBadge count={planTodoCount} />}
                           </Link>
                         </div>
                       );
@@ -350,7 +385,7 @@ export default function NavBar() {
             className="md:hidden ml-auto border border-white/20 rounded-md px-3 py-1.5 text-sm text-white/80 flex items-center gap-1.5"
           >
             메뉴 ☰
-            {canApprove && <ApprovalBadge count={pendingCount} />}
+            <ApprovalBadge count={(canApprove ? pendingCount : 0) + planTodoCount} />
           </button>
         </div>
       </header>
@@ -394,7 +429,7 @@ export default function NavBar() {
             {visibleGroups.map((group) => {
               const active = isGroupActive(group, pathname);
               const expanded = mobileExpanded === group.label || active;
-              const showBadge = group.label === "근태";
+              const badgeCount = badgeFor(group.label);
               return (
                 <div key={group.label} className="border-b border-white/10 last:border-b-0">
                   <button
@@ -406,7 +441,7 @@ export default function NavBar() {
                   >
                     <span className="flex items-center gap-1.5">
                       {GROUP_ICON[group.label] ?? ""} {group.label}
-                      {showBadge && <ApprovalBadge count={pendingCount} />}
+                      <ApprovalBadge count={badgeCount} />
                     </span>
                     <span className="text-xs">{expanded ? "▲" : "▼"}</span>
                   </button>
@@ -436,6 +471,7 @@ export default function NavBar() {
                             >
                               {isQuickAccess && <span className="text-amber-300">★</span>}
                               {item.label}
+                              {item.href === "/improvement-plan" && <ApprovalBadge count={planTodoCount} />}
                             </Link>
                           </div>
                         );

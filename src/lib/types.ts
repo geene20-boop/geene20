@@ -576,6 +576,10 @@ export interface ImprovementPlan {
   photo_after_mime: string | null;
   status: ImprovementPlanStatus;
   priority: number;
+  assignee: string | null; // 책임 담당자 (의견란의 '담당자' 표시·알림·내 담당 필터 기준)
+  actual_cost: number | null; // 실제 집행비 (완료 요청 시 입력)
+  rework_count: number; // 재검토로 보내진 횟수
+  reopened_from_completed: number; // 1이면 완료 승인 후 다시 재검토로 보내진 건
   review_reason: string | null;
   reviewed_by: string | null;
   completion_requested_by: string | null;
@@ -585,4 +589,27 @@ export interface ImprovementPlan {
   created_by: string;
   created_at: string;
   updated_at: string;
+}
+
+// 목록·상세 API가 돌려주는 형태: 계획 + 사진 목록 + 의견 요약
+export interface ImprovementPlanPhoto {
+  id: number;
+  which: "before" | "after";
+}
+
+export interface ImprovementPlanView extends ImprovementPlan {
+  photos: ImprovementPlanPhoto[];
+  comment_count: number;
+  last_comment_at: string | null;
+  last_comment_by: string | null;
+}
+
+export interface ImprovementPlanComment {
+  id: number;
+  plan_id: number;
+  kind: "comment" | "history";
+  author: string;
+  role: string | null;
+  body: string;
+  created_at: string;
 }
