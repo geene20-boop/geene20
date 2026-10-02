@@ -1,16 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { apiGet } from "@/lib/apiClient";
 import { DailyShipmentRow, MonthlyShipmentRow, SeasonShipmentRow } from "@/lib/packingShipmentSummary";
 
@@ -38,11 +28,6 @@ function deltaClass(n: number | null): string {
   if (n > 0) return "text-emerald-600";
   if (n < 0) return "text-red-600";
   return "text-slate-500";
-}
-
-function deltaFill(n: number | null): string {
-  if (n == null) return "#cbd5e1";
-  return n >= 0 ? "#10b981" : "#f43f5e";
 }
 
 const SUB_TABS = [
@@ -83,12 +68,6 @@ export default function ShipmentSummaryTab() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const dailyChartData = daily.map((r) => ({ label: r.date.slice(5), 출하량: Number(r.tons.toFixed(1)) }));
-  const monthlyChartData = monthly.map((r) => ({ label: r.month.slice(2), 출하량: Number(r.tons.toFixed(1)) }));
-  const monthlyYoyChartData = monthly.map((r) => ({ label: r.month.slice(2), 전년동월대비: r.yoyTons != null ? Number(r.yoyTons.toFixed(1)) : 0 }));
-  const seasonalChartData = seasonal.map((r) => ({ label: r.season, 출하량: Number(r.tons.toFixed(1)) }));
-  const seasonalYoyChartData = seasonal.map((r) => ({ label: r.season, 전년대비: r.yoyTons != null ? Number(r.yoyTons.toFixed(1)) : 0 }));
 
   const dailyRangeTotal = daily.reduce((sum, r) => sum + r.tons, 0);
 
@@ -142,17 +121,6 @@ export default function ShipmentSummaryTab() {
               </button>
             </div>
           </div>
-          <div className="h-64 mb-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dailyChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="label" fontSize={11} />
-                <YAxis fontSize={11} />
-                <Tooltip />
-                <Bar dataKey="출하량" fill="#0ea5e9" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
           <div className="overflow-x-auto">
             <table className="text-sm w-full tabular-nums">
               <thead className="bg-slate-100 text-slate-600">
@@ -197,36 +165,6 @@ export default function ShipmentSummaryTab() {
 
       {!loading && subTab === "monthly" && (
         <div className="bg-white rounded-xl border p-4">
-          <h2 className="text-sm font-semibold text-slate-700 mb-3">월별 출하량 추이 (톤)</h2>
-          <div className="h-56 mb-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="label" fontSize={11} />
-                <YAxis fontSize={11} />
-                <Tooltip />
-                <Bar dataKey="출하량" fill="#6366f1" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <h2 className="text-sm font-semibold text-slate-700 mb-3">월별 전년동월대비 증감 (톤)</h2>
-          <div className="h-56 mb-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyYoyChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="label" fontSize={11} />
-                <YAxis fontSize={11} />
-                <Tooltip />
-                <Bar dataKey="전년동월대비">
-                  {monthly.map((r, i) => (
-                    <Cell key={i} fill={deltaFill(r.yoyTons)} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
           <div className="flex flex-col divide-y">
             {[...monthly].reverse().map((r) => (
               <div key={r.month} className="py-3">
@@ -271,41 +209,7 @@ export default function ShipmentSummaryTab() {
 
       {!loading && subTab === "seasonal" && (
         <div className="bg-white rounded-xl border p-4">
-          <h2 className="text-sm font-semibold text-slate-700 mb-3">
-            연도별(시즌) 출하량 추이 (톤){" "}
-            <span className="text-xs font-normal text-slate-400">
-              - 매년 7월 1일부터 다음해 6월 30일까지를 한 시즌(1년)으로 계산
-            </span>
-          </h2>
-          <div className="h-56 mb-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={seasonalChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="label" fontSize={11} />
-                <YAxis fontSize={11} />
-                <Tooltip />
-                <Bar dataKey="출하량" fill="#0891b2" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <h2 className="text-sm font-semibold text-slate-700 mb-3">시즌별 전년대비 증감 (톤)</h2>
-          <div className="h-56 mb-4">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={seasonalYoyChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="label" fontSize={11} />
-                <YAxis fontSize={11} />
-                <Tooltip />
-                <Bar dataKey="전년대비">
-                  {seasonal.map((r, i) => (
-                    <Cell key={i} fill={deltaFill(r.yoyTons)} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
+          <p className="text-xs text-slate-400 mb-3">매년 7월 1일부터 다음해 6월 30일까지를 한 시즌(1년)으로 계산합니다.</p>
           <div className="flex flex-col divide-y">
             {[...seasonal].reverse().map((r) => (
               <div key={r.season} className="py-3">

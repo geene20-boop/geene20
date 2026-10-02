@@ -10,7 +10,10 @@ import {
   recordLoginSuccess,
   verifyAccountLogin,
   verifyAdminPassword,
+  getAccountById,
 } from "@/lib/auth";
+import { getDb } from "@/lib/db";
+import type { Worker } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
   if (!hasAnyAccount()) {
@@ -53,7 +56,22 @@ export async function POST(req: NextRequest) {
   }
   recordLoginSuccess(lockKey);
 
-  const token = createUserSessionToken(account.id, account.role);
+  // 근로자의 foreign_country를 확인해서 language 결정
+  let language: string | undefined;
+  const fullAccount = getAccountById(account.id);
+  if (fullAccount?.worker_id) {
+    const db = getDb();
+    const worker = db.prepare("SELECT foreign_country FROM worker WHERE id = ?").get(fullAccount.worker_id) as
+      | { foreign_country: string | null }
+      | undefined;
+    if (worker?.foreign_country === "cambodia") {
+      language = "cambodia";
+    } else if (worker?.foreign_country === "nepal") {
+      language = "nepal";
+    }
+  }
+
+  const token = createUserSessionToken(account.id, account.role, language);
   const res = NextResponse.json({ ok: true, role: account.role });
   res.cookies.set(SITE_SESSION_COOKIE, token, {
     httpOnly: true,

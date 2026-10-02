@@ -1,27 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
-  ComposedChart,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  ReferenceLine,
-} from "recharts";
-import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/apiClient";
-import { UtilityMonthRow, MonthlyUtility, ElectricityUsage } from "@/lib/types";
+import { apiGet } from "@/lib/apiClient";
+import { UtilityMonthRow, ElectricityUsage } from "@/lib/types";
 import type { MergedShiftRow, YearlyUtilityRow } from "@/lib/analytics";
-import AdminLoginModal, { useAdminSession } from "@/components/AdminUnlock";
-import { useEnteredBy } from "@/lib/useEnteredBy";
-import EnteredByField from "@/components/EnteredByField";
-import { useSiteSession } from "@/lib/useSiteSession";
 
 interface YoYRow {
   month: string;
@@ -62,20 +44,6 @@ const fmt = (v: number | null | undefined, digits = 0): string =>
   v == null ? "-" : v.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: 0 });
 const fmtPct = (v: number | null): string => (v == null ? "-" : `${(v * 100).toFixed(1)}%`);
 
-// 큰 금액 입력 시 오타 방지용 힌트: "31,922,900원 (약 3,192만원)"
-function AmountHint({ value }: { value: string }) {
-  const num = Number(value);
-  if (!value.trim() || Number.isNaN(num) || num === 0) return null;
-  let summary = "";
-  if (Math.abs(num) >= 100_000_000) summary = ` (약 ${(num / 100_000_000).toFixed(1)}억원)`;
-  else if (Math.abs(num) >= 10_000) summary = ` (약 ${Math.round(num / 10_000).toLocaleString()}만원)`;
-  return (
-    <span className="text-[11px] text-emerald-600">
-      {num.toLocaleString()}원{summary}
-    </span>
-  );
-}
-
 function Delta({ value, digits = 0 }: { value: number | null; digits?: number }) {
   if (value == null) return <span className="text-slate-300">-</span>;
   const up = value > 0;
@@ -88,33 +56,6 @@ function Delta({ value, digits = 0 }: { value: number | null; digits?: number })
   );
 }
 
-type MonthlyForm = {
-  month: string;
-  elec1_kwh: string;
-  elec1_won: string;
-  elec2_kwh: string;
-  elec2_won: string;
-  lng_m3: string;
-  lng_won: string;
-  diesel_liter: string;
-  diesel_won: string;
-  production_ton: string;
-  note: string;
-};
-const emptyMonthlyForm = (): MonthlyForm => ({
-  month: thisMonth(),
-  elec1_kwh: "",
-  elec1_won: "",
-  elec2_kwh: "",
-  elec2_won: "",
-  lng_m3: "",
-  lng_won: "",
-  diesel_liter: "",
-  diesel_won: "",
-  production_ton: "",
-  note: "",
-});
-
 export default function UtilityPage() {
   const [monthlyTab, setMonthlyTab] = useState<
     "summary" | "production" | "byProduct" | "daily" | "monthlyYoy" | "yearlyYoy"
@@ -123,25 +64,6 @@ export default function UtilityPage() {
   const [toMonth, setToMonth] = useState(thisMonth());
   const [data, setData] = useState<SheetResponse | null>(null);
   const [loading, setLoading] = useState(false);
-
-  // 월별 입력 (금액·경유는 재무 데이터라 관리자만 편집 가능)
-  const admin = useAdminSession();
-  const [showAdminModal, setShowAdminModal] = useState(false);
-  const [mForm, setMForm] = useState<MonthlyForm>(emptyMonthlyForm());
-  const [savingMonth, setSavingMonth] = useState(false);
-  const [monthMsg, setMonthMsg] = useState<string | null>(null);
-  const { enteredBy, setEnteredBy } = useEnteredBy();
-  const [nameError, setNameError] = useState(false);
-  const session = useSiteSession();
-  const canManageMonthly = admin.loggedIn || session.isModifier;
-
-  useEffect(() => {
-    if (session.loggedIn && session.displayName) {
-       
-      setEnteredBy(session.displayName);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.loggedIn, session.displayName]);
 
   // 일자별 증감 차트용 선택 월
   const [dailyMonth, setDailyMonth] = useState(thisMonth());
@@ -193,7 +115,6 @@ export default function UtilityPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadSheet(fromMonth, toMonth);
     loadDaily(dailyMonth);
-    admin.refresh();
     // 최초 1회만 실행 (기간 변경은 조회 버튼으로)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -238,75 +159,6 @@ export default function UtilityPage() {
     [dailyRows]
   );
 
-  async function saveMonth(e: React.FormEvent) {
-    e.preventDefault();
-    if (!enteredBy.trim()) {
-      setNameError(true);
-      return;
-    }
-    setNameError(false);
-    setSavingMonth(true);
-    setMonthMsg(null);
-    try {
-      await apiPost("/api/monthly-utility", { ...mForm, entered_by: enteredBy.trim() });
-      setMonthMsg("저장되었습니다.");
-      loadSheet(fromMonth, toMonth);
-    } catch (err) {
-      setMonthMsg(`오류: ${(err as Error).message}`);
-    } finally {
-      setSavingMonth(false);
-    }
-  }
-
-  function editMonth(m: MonthlyUtility) {
-    setMForm({
-      month: m.month,
-      elec1_kwh: m.elec1_kwh?.toString() ?? "",
-      elec1_won: m.elec1_won?.toString() ?? "",
-      elec2_kwh: m.elec2_kwh?.toString() ?? "",
-      elec2_won: m.elec2_won?.toString() ?? "",
-      lng_m3: m.lng_m3?.toString() ?? "",
-      lng_won: m.lng_won?.toString() ?? "",
-      diesel_liter: m.diesel_liter?.toString() ?? "",
-      diesel_won: m.diesel_won?.toString() ?? "",
-      production_ton: m.production_ton?.toString() ?? "",
-      note: m.note ?? "",
-    });
-  }
-
-  const [importMsg, setImportMsg] = useState<string | null>(null);
-  async function onImport(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!enteredBy.trim()) {
-      setNameError(true);
-      e.target.value = "";
-      return;
-    }
-    setImportMsg("업로드 중...");
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("entered_by", enteredBy.trim());
-    try {
-      const res = await fetch("/api/monthly-utility/import", { method: "POST", body: fd });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "업로드 실패");
-      if (json.structureError) {
-        setImportMsg(`형식 오류: ${json.structureError}`);
-      } else {
-        setImportMsg(`반영 완료: ${json.inserted}건 처리, ${json.skipped}건 건너뜀`);
-        loadSheet(fromMonth, toMonth);
-      }
-    } catch (err) {
-      setImportMsg(`오류: ${(err as Error).message}`);
-    } finally {
-      e.target.value = "";
-    }
-  }
-
-  const setMF = <K extends keyof MonthlyForm>(k: K, v: MonthlyForm[K]) =>
-    setMForm((f) => ({ ...f, [k]: v }));
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -314,8 +166,9 @@ export default function UtilityPage() {
           <h1 className="text-xl font-bold">월별 유틸리티 통합 시트</h1>
           <p className="text-sm text-slate-500 mt-1">
             전력·LNG·경유 사용량/금액/단가와 톤당 지표, 비종별·전년동월 대비를 한 화면에서
-            봅니다. 전력·생산량은 일별 입력에서 자동 합산되고, 금액·경유는 아래에서 월별로
-            입력하거나 엑셀로 업로드합니다.
+            봅니다. 전력·생산량은 일별 입력에서 자동 합산되고, LNG(건조로/RTO)·금액·경유는{" "}
+            <a href="/utility/billing" className="underline text-slate-700">실청구금액 입력</a>
+            에서 월별로 입력하거나 엑셀로 업로드하면 이 표에 자동으로 반영됩니다.
           </p>
         </div>
         <div className="flex items-end gap-2 flex-wrap">
@@ -332,6 +185,9 @@ export default function UtilityPage() {
           </button>
           <a href={`/api/utility-export?from=${fromMonth}&to=${toMonth}`} className="text-xs border border-slate-300 rounded-md px-3 py-1.5 bg-white h-fit">
             엑셀 다운로드
+          </a>
+          <a href="/utility/billing" className="text-xs border border-slate-300 rounded-md px-3 py-1.5 bg-white h-fit">
+            실청구금액 입력
           </a>
         </div>
       </div>
@@ -382,7 +238,9 @@ export default function UtilityPage() {
               <th className="px-2 py-2 text-right bg-indigo-50">전력합계(kWh)</th>
               <th className="px-2 py-2 text-right">전력금액(원)</th>
               <th className="px-2 py-2 text-right">전력단가</th>
-              <th className="px-2 py-2 text-right">LNG(㎥)</th>
+              <th className="px-2 py-2 text-right">건조로 LNG(㎥)</th>
+              <th className="px-2 py-2 text-right">RTO LNG(㎥)</th>
+              <th className="px-2 py-2 text-right bg-indigo-50">LNG 합계(㎥)</th>
               <th className="px-2 py-2 text-right">LNG금액(원)</th>
               <th className="px-2 py-2 text-right">경유(ℓ)</th>
               <th className="px-2 py-2 text-right">경유금액(원)</th>
@@ -402,7 +260,9 @@ export default function UtilityPage() {
                 <td className="px-2 py-1.5 text-right bg-indigo-50 font-medium">{fmt(r.elecTotalKwh)}</td>
                 <td className="px-2 py-1.5 text-right">{fmt(r.elecTotalWon)}</td>
                 <td className="px-2 py-1.5 text-right">{fmt(r.elecUnitPrice, 1)}</td>
-                <td className="px-2 py-1.5 text-right">{fmt(r.lngM3)}</td>
+                <td className="px-2 py-1.5 text-right">{fmt(r.lngDryerM3)}</td>
+                <td className="px-2 py-1.5 text-right">{fmt(r.lngRtoM3)}</td>
+                <td className="px-2 py-1.5 text-right bg-indigo-50 font-medium">{fmt(r.lngM3)}</td>
                 <td className="px-2 py-1.5 text-right">{fmt(r.lngWon)}</td>
                 <td className="px-2 py-1.5 text-right">{fmt(r.dieselLiter)}</td>
                 <td className="px-2 py-1.5 text-right">{fmt(r.dieselWon)}</td>
@@ -415,7 +275,7 @@ export default function UtilityPage() {
             ))}
             {sheet.length === 0 && !loading && (
               <tr>
-                <td colSpan={15} className="px-3 py-8 text-center text-slate-400">데이터가 없습니다.</td>
+                <td colSpan={16} className="px-3 py-8 text-center text-slate-400">데이터가 없습니다.</td>
               </tr>
             )}
           </tbody>
@@ -425,21 +285,29 @@ export default function UtilityPage() {
 
       {/* 월별 생산량 + 누계 */}
       {monthlyTab === "production" && (
-      <div className="bg-white rounded-xl border p-4">
+      <div className="bg-white rounded-xl border p-4 overflow-x-auto">
           <h2 className="text-sm font-semibold text-slate-700 mb-3">월별 생산량 + 누계 (ton)</h2>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={cumulative}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="month" fontSize={11} />
-                <YAxis fontSize={11} />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="production" name="월 생산량" fill="#10b981" />
-                <Line type="monotone" dataKey="cumulative" name="누계" stroke="#6366f1" dot={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
+          <table className="text-xs w-full tabular-nums">
+            <thead className="text-slate-500">
+              <tr className="border-b">
+                <th className="text-left px-2 py-1.5">월</th>
+                <th className="text-right px-2 py-1.5">월 생산량</th>
+                <th className="text-right px-2 py-1.5">누계</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cumulative.map((r) => (
+                <tr key={r.month} className="border-b border-slate-100">
+                  <td className="text-left px-2 py-1.5 font-medium">{r.month}</td>
+                  <td className="text-right px-2 py-1.5">{fmt(r.production, 1)}</td>
+                  <td className="text-right px-2 py-1.5 font-medium">{fmt(r.cumulative, 1)}</td>
+                </tr>
+              ))}
+              {cumulative.length === 0 && (
+                <tr><td colSpan={3} className="px-2 py-6 text-center text-slate-400">데이터가 없습니다.</td></tr>
+              )}
+            </tbody>
+          </table>
       </div>
       )}
 
@@ -491,21 +359,6 @@ export default function UtilityPage() {
       {monthlyTab === "monthlyYoy" && (
       <div className="bg-white rounded-xl border p-4">
         <h2 className="text-sm font-semibold text-slate-700 mb-3">전년동월 대비 증감 (전력·LNG·경유)</h2>
-        <div className="h-64 mb-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={yoy.map((y) => ({ month: y.month.slice(2), 전력: y.elecKwhDelta, LNG: y.lngM3Delta, 경유: y.dieselDelta }))}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="month" fontSize={11} />
-              <YAxis fontSize={11} />
-              <Tooltip />
-              <Legend />
-              <ReferenceLine y={0} stroke="#94a3b8" />
-              <Bar dataKey="전력" fill="#6366f1" />
-              <Bar dataKey="LNG" fill="#f59e0b" />
-              <Bar dataKey="경유" fill="#ef4444" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
         <div className="overflow-x-auto">
           <table className="text-xs w-full tabular-nums min-w-[700px]">
             <thead className="text-slate-500">
@@ -546,38 +399,7 @@ export default function UtilityPage() {
       {/* 연도별 유틸증감량 (YoY) */}
       {monthlyTab === "yearlyYoy" && (
       <div className="bg-white rounded-xl border p-4">
-        <h2 className="text-sm font-semibold text-slate-700 mb-3">연도별 전력·가스 사용량 추이</h2>
-        <div className="h-64 mb-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={yearly.map((y) => ({ year: y.year, 전력: y.elecTotalKwh, LNG: y.lngM3, 경유: y.dieselLiter }))}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="year" fontSize={11} />
-              <YAxis fontSize={11} />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="전력" fill="#6366f1" />
-              <Bar dataKey="LNG" fill="#f59e0b" />
-              <Bar dataKey="경유" fill="#ef4444" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <h2 className="text-sm font-semibold text-slate-700 mb-3">연도별 전년대비 증감 (전력·LNG·경유)</h2>
-        <div className="h-64 mb-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={yearly.map((y) => ({ year: y.year, 전력: y.elecKwhDelta, LNG: y.lngM3Delta, 경유: y.dieselDelta }))}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="year" fontSize={11} />
-              <YAxis fontSize={11} />
-              <Tooltip />
-              <Legend />
-              <ReferenceLine y={0} stroke="#94a3b8" />
-              <Bar dataKey="전력" fill="#6366f1" />
-              <Bar dataKey="LNG" fill="#f59e0b" />
-              <Bar dataKey="경유" fill="#ef4444" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <h2 className="text-sm font-semibold text-slate-700 mb-3">연도별 전력·가스 사용량 및 전년대비 증감</h2>
         <div className="overflow-x-auto">
           <table className="text-xs w-full tabular-nums min-w-[700px]">
             <thead className="text-slate-500">
@@ -635,291 +457,35 @@ export default function UtilityPage() {
             />
           </label>
         </div>
-        <div className="h-64 mb-4">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={dailyDelta}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="date" fontSize={10} />
-              <YAxis fontSize={11} />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="elec" name="전력(kWh)" stroke="#6366f1" dot={false} connectNulls />
-              <Line type="monotone" dataKey="gas" name="가스(㎥)" stroke="#f59e0b" dot={false} connectNulls />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="h-52">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={dailyDelta}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="date" fontSize={10} />
-              <YAxis fontSize={11} />
-              <Tooltip />
-              <Legend />
-              <ReferenceLine y={0} stroke="#94a3b8" />
-              <Bar dataKey="elecDelta" name="전력 증감" fill="#818cf8" />
-              <Bar dataKey="gasDelta" name="가스 증감" fill="#fbbf24" />
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="overflow-x-auto">
+          <table className="text-xs w-full tabular-nums min-w-[500px]">
+            <thead className="text-slate-500">
+              <tr className="border-b">
+                <th className="text-left px-2 py-1.5">날짜</th>
+                <th className="text-right px-2 py-1.5">전력(kWh)</th>
+                <th className="text-right px-2 py-1.5">전력 증감</th>
+                <th className="text-right px-2 py-1.5">가스(㎥)</th>
+                <th className="text-right px-2 py-1.5">가스 증감</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dailyDelta.map((d) => (
+                <tr key={d.date} className="border-b border-slate-100">
+                  <td className="text-left px-2 py-1.5 font-medium">{d.date}</td>
+                  <td className="text-right px-2 py-1.5">{fmt(d.elec)}</td>
+                  <td className="text-right px-2 py-1.5"><Delta value={d.elecDelta} /></td>
+                  <td className="text-right px-2 py-1.5">{fmt(d.gas)}</td>
+                  <td className="text-right px-2 py-1.5"><Delta value={d.gasDelta} /></td>
+                </tr>
+              ))}
+              {dailyDelta.length === 0 && (
+                <tr><td colSpan={5} className="px-2 py-6 text-center text-slate-400">데이터가 없습니다.</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
       )}
-
-      {/* 월별 유틸리티 입력 + 엑셀 업로드 (재무 데이터라 관리자만 편집 가능) */}
-      {monthlyTab === "daily" && (
-      <div className="bg-white rounded-xl border p-5 flex flex-col gap-4">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <h2 className="text-sm font-semibold text-slate-700">월별 금액·경유 입력 (청구서 기준)</h2>
-          <div className="flex items-center gap-2">
-            <a href="/api/utility-template" className="text-xs border border-slate-300 rounded-md px-3 py-1.5">
-              엑셀 양식 받기
-            </a>
-            {admin.loggedIn ? (
-              <label className="text-xs border border-slate-300 rounded-md px-3 py-1.5 cursor-pointer">
-                엑셀 업로드
-                <input type="file" accept=".xlsx,.xls" onChange={onImport} className="hidden" />
-              </label>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowAdminModal(true)}
-                className="text-xs border border-slate-300 rounded-md px-3 py-1.5 text-slate-400"
-              >
-                엑셀 업로드 (관리자 전용)
-              </button>
-            )}
-          </div>
-        </div>
-        {importMsg && <p className="text-xs text-slate-600">{importMsg}</p>}
-        {!canManageMonthly && (
-          <div className="flex items-center justify-between gap-3 text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-md px-3 py-2">
-            <span>
-              금액·경유 등 재무 데이터는 관리자 또는 수정 권한 계정만 입력/수정할 수 있습니다.
-              조회는 누구나 볼 수 있습니다.
-            </span>
-            <button
-              type="button"
-              onClick={() => setShowAdminModal(true)}
-              className="underline whitespace-nowrap"
-            >
-              관리자 로그인
-            </button>
-          </div>
-        )}
-        {showAdminModal && (
-          <AdminLoginModal
-            onClose={() => setShowAdminModal(false)}
-            onSuccess={() => {
-              admin.setLoggedIn(true);
-              session.refresh();
-              setShowAdminModal(false);
-            }}
-          />
-        )}
-        <form
-          onSubmit={saveMonth}
-          className={`grid grid-cols-2 md:grid-cols-4 gap-3 ${!canManageMonthly ? "opacity-50 pointer-events-none" : ""}`}
-        >
-          <EnteredByField
-            value={enteredBy}
-            onChange={setEnteredBy}
-            error={nameError}
-            lockedValue={session.loggedIn ? session.displayName : null}
-          />
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="text-slate-600">월</span>
-            <input type="month" value={mForm.month} onChange={(e) => setMF("month", e.target.value)} className="border rounded-md px-2 py-1.5" required />
-          </label>
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="text-slate-600">1공장 사용량(kWh)</span>
-            <input type="number" step="any" value={mForm.elec1_kwh} onChange={(e) => setMF("elec1_kwh", e.target.value)} placeholder="비우면 일별합산" className="border rounded-md px-2 py-1.5" />
-          </label>
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="text-slate-600">1공장 금액(원)</span>
-            <input type="number" step="any" value={mForm.elec1_won} onChange={(e) => setMF("elec1_won", e.target.value)} className="border rounded-md px-2 py-1.5" />
-            <AmountHint value={mForm.elec1_won} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="text-slate-600">2공장 사용량(kWh)</span>
-            <input type="number" step="any" value={mForm.elec2_kwh} onChange={(e) => setMF("elec2_kwh", e.target.value)} placeholder="비우면 일별합산" className="border rounded-md px-2 py-1.5" />
-          </label>
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="text-slate-600">2공장 금액(원)</span>
-            <input type="number" step="any" value={mForm.elec2_won} onChange={(e) => setMF("elec2_won", e.target.value)} className="border rounded-md px-2 py-1.5" />
-            <AmountHint value={mForm.elec2_won} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="text-slate-600">LNG 사용량(㎥)</span>
-            <input type="number" step="any" value={mForm.lng_m3} onChange={(e) => setMF("lng_m3", e.target.value)} placeholder="비우면 일별합산" className="border rounded-md px-2 py-1.5" />
-          </label>
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="text-slate-600">LNG 금액(원)</span>
-            <input type="number" step="any" value={mForm.lng_won} onChange={(e) => setMF("lng_won", e.target.value)} className="border rounded-md px-2 py-1.5" />
-            <AmountHint value={mForm.lng_won} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="text-slate-600">경유 사용량(ℓ)</span>
-            <input type="number" step="any" value={mForm.diesel_liter} onChange={(e) => setMF("diesel_liter", e.target.value)} className="border rounded-md px-2 py-1.5" />
-          </label>
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="text-slate-600">경유 금액(원)</span>
-            <input type="number" step="any" value={mForm.diesel_won} onChange={(e) => setMF("diesel_won", e.target.value)} className="border rounded-md px-2 py-1.5" />
-            <AmountHint value={mForm.diesel_won} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="text-slate-600">생산량 보정(ton)</span>
-            <input type="number" step="any" value={mForm.production_ton} onChange={(e) => setMF("production_ton", e.target.value)} placeholder="비우면 일별합산" className="border rounded-md px-2 py-1.5" />
-          </label>
-          <label className="flex flex-col gap-1 text-xs md:col-span-2">
-            <span className="text-slate-600">비고</span>
-            <input type="text" value={mForm.note} onChange={(e) => setMF("note", e.target.value)} className="border rounded-md px-2 py-1.5" />
-          </label>
-          <div className="col-span-2 md:col-span-4 flex items-center gap-3">
-            <button type="submit" disabled={savingMonth} className="bg-slate-900 text-white rounded-md px-4 py-2 text-sm font-medium disabled:opacity-50">
-              {savingMonth ? "저장 중..." : "월별 저장"}
-            </button>
-            <button
-              type="button"
-              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-              className="border rounded-md px-4 py-2 text-sm font-medium"
-            >
-              ↑ 맨 위로
-            </button>
-            {monthMsg && <span className="text-sm text-slate-600">{monthMsg}</span>}
-          </div>
-        </form>
-
-        {/* 저장된 월별 값 목록 (수정은 관리자·수정 권한, 승인/승인해제는 관리자만) */}
-        <MonthlyList
-          onEdit={editMonth}
-          refreshKey={sheet.length}
-          isAdmin={admin.loggedIn}
-          isModifier={session.isModifier}
-          enteredBy={enteredBy}
-          onNameError={() => setNameError(true)}
-        />
-      </div>
-      )}
-    </div>
-  );
-}
-
-function MonthlyList({
-  onEdit,
-  refreshKey,
-  isAdmin,
-  isModifier,
-  enteredBy,
-  onNameError,
-}: {
-  onEdit: (m: MonthlyUtility) => void;
-  refreshKey: number;
-  isAdmin: boolean;
-  isModifier: boolean;
-  enteredBy: string;
-  onNameError: () => void;
-}) {
-  const [rows, setRows] = useState<MonthlyUtility[]>([]);
-  const load = useCallback(async () => {
-    setRows(await apiGet<MonthlyUtility[]>("/api/monthly-utility"));
-  }, []);
-  useEffect(() => {
-    let cancelled = false;
-    apiGet<MonthlyUtility[]>("/api/monthly-utility").then((data) => {
-      if (!cancelled) setRows(data);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshKey]);
-
-  function canEditRow(m: MonthlyUtility) {
-    return !m.locked && (isAdmin || isModifier);
-  }
-  function canDeleteRow(m: MonthlyUtility) {
-    if (m.locked) return false;
-    if (isAdmin) return true;
-    return isModifier && !m.approved_at;
-  }
-  async function remove(m: MonthlyUtility) {
-    if (!enteredBy.trim()) {
-      onNameError();
-      return;
-    }
-    if (!confirm(`${m.month} 월 데이터를 삭제할까요?`)) return;
-    await apiDelete(`/api/monthly-utility/${m.month}`, { entered_by: enteredBy });
-    await load();
-  }
-  async function toggleLock(m: MonthlyUtility) {
-    if (!enteredBy.trim()) {
-      onNameError();
-      return;
-    }
-    await apiPut(`/api/monthly-utility/${m.month}/lock`, { entered_by: enteredBy, locked: !m.locked });
-    await load();
-  }
-
-  if (rows.length === 0) return null;
-  const canManage = isAdmin || isModifier;
-  return (
-    <div className="overflow-x-auto">
-      <table className="text-xs w-full tabular-nums">
-        <thead className="text-slate-500">
-          <tr className="border-b">
-            <th className="text-left px-2 py-1.5">월</th>
-            <th className="text-right px-2 py-1.5">전력금액</th>
-            <th className="text-right px-2 py-1.5">LNG금액</th>
-            <th className="text-right px-2 py-1.5">경유(ℓ)</th>
-            <th className="text-right px-2 py-1.5">경유금액</th>
-            <th className="text-left px-2 py-1.5">입력자/수정자</th>
-            <th className="text-left px-2 py-1.5">상태</th>
-            <th className="px-2 py-1.5"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((m) => (
-            <tr key={m.month} className="border-b border-slate-100">
-              <td className="text-left px-2 py-1.5 font-medium">{m.month}</td>
-              <td className="text-right px-2 py-1.5">{fmt((m.elec1_won ?? 0) + (m.elec2_won ?? 0))}</td>
-              <td className="text-right px-2 py-1.5">{fmt(m.lng_won)}</td>
-              <td className="text-right px-2 py-1.5">{fmt(m.diesel_liter)}</td>
-              <td className="text-right px-2 py-1.5">{fmt(m.diesel_won)}</td>
-              <td className="text-left px-2 py-1.5 text-slate-500 whitespace-nowrap">
-                {m.entered_by ?? "-"}
-                {m.updated_by && m.updated_by !== m.entered_by ? ` → ${m.updated_by}` : ""}
-              </td>
-              <td className="text-left px-2 py-1.5">
-                {m.locked ? (
-                  <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
-                    승인됨
-                  </span>
-                ) : (
-                  <span className="text-slate-300">-</span>
-                )}
-              </td>
-              <td className="text-right px-2 py-1.5">
-                {!canManage ? (
-                  <span className="text-slate-300">-</span>
-                ) : (
-                  <div className="flex items-center justify-end gap-2">
-                    {canEditRow(m) && (
-                      <button onClick={() => onEdit(m)} className="text-sky-600 hover:underline">수정</button>
-                    )}
-                    {canDeleteRow(m) && (
-                      <button onClick={() => remove(m)} className="text-red-600 hover:underline">삭제</button>
-                    )}
-                    {isAdmin && (
-                      <button onClick={() => toggleLock(m)} className="text-slate-600 hover:underline">
-                        {m.locked ? "승인해제" : "승인"}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }

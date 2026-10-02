@@ -339,13 +339,17 @@ export function importMonthlyUtility(buf: Buffer, actor: string): ImportResult {
     elec2_kwh: findCol(["2공장"], ["금액", "원"]),
     elec2_won: findCol(["2공장", "금액"]),
     lng_m3: (() => {
-      const i = findCol(["lng"], ["금액", "원"]);
-      return i >= 0 ? i : findCol(["가스"], ["금액", "원"]);
+      const i = findCol(["lng"], ["금액", "원", "건조로", "rto"]);
+      return i >= 0 ? i : findCol(["가스"], ["금액", "원", "건조로", "rto"]);
     })(),
     lng_won: (() => {
-      const i = findCol(["lng", "금액"]);
-      return i >= 0 ? i : findCol(["가스", "금액"]);
+      const i = findCol(["lng", "금액"], ["건조로", "rto"]);
+      return i >= 0 ? i : findCol(["가스", "금액"], ["건조로", "rto"]);
     })(),
+    lng_dryer_m3: findCol(["건조로"], ["금액", "원"]),
+    lng_dryer_won: findCol(["건조로", "금액"]),
+    lng_rto_m3: findCol(["rto"], ["금액", "원"]),
+    lng_rto_won: findCol(["rto", "금액"]),
     diesel_liter: findCol(["경유"], ["금액", "원"]),
     diesel_won: findCol(["경유", "금액"]),
     production_ton: (() => {
@@ -358,8 +362,8 @@ export function importMonthlyUtility(buf: Buffer, actor: string): ImportResult {
   const db = getDb();
   const upsert = db.prepare(`
     INSERT INTO monthly_utility
-      (month, elec1_kwh, elec1_won, elec2_kwh, elec2_won, lng_m3, lng_won, diesel_liter, diesel_won, production_ton, note, entered_by, updated_by)
-    VALUES (@month, @elec1_kwh, @elec1_won, @elec2_kwh, @elec2_won, @lng_m3, @lng_won, @diesel_liter, @diesel_won, @production_ton, @note, @actor, @actor)
+      (month, elec1_kwh, elec1_won, elec2_kwh, elec2_won, lng_m3, lng_won, lng_dryer_m3, lng_dryer_won, lng_rto_m3, lng_rto_won, diesel_liter, diesel_won, production_ton, note, entered_by, updated_by)
+    VALUES (@month, @elec1_kwh, @elec1_won, @elec2_kwh, @elec2_won, @lng_m3, @lng_won, @lng_dryer_m3, @lng_dryer_won, @lng_rto_m3, @lng_rto_won, @diesel_liter, @diesel_won, @production_ton, @note, @actor, @actor)
     ON CONFLICT(month) DO UPDATE SET
       elec1_kwh = COALESCE(excluded.elec1_kwh, monthly_utility.elec1_kwh),
       elec1_won = COALESCE(excluded.elec1_won, monthly_utility.elec1_won),
@@ -367,6 +371,10 @@ export function importMonthlyUtility(buf: Buffer, actor: string): ImportResult {
       elec2_won = COALESCE(excluded.elec2_won, monthly_utility.elec2_won),
       lng_m3 = COALESCE(excluded.lng_m3, monthly_utility.lng_m3),
       lng_won = COALESCE(excluded.lng_won, monthly_utility.lng_won),
+      lng_dryer_m3 = COALESCE(excluded.lng_dryer_m3, monthly_utility.lng_dryer_m3),
+      lng_dryer_won = COALESCE(excluded.lng_dryer_won, monthly_utility.lng_dryer_won),
+      lng_rto_m3 = COALESCE(excluded.lng_rto_m3, monthly_utility.lng_rto_m3),
+      lng_rto_won = COALESCE(excluded.lng_rto_won, monthly_utility.lng_rto_won),
       diesel_liter = COALESCE(excluded.diesel_liter, monthly_utility.diesel_liter),
       diesel_won = COALESCE(excluded.diesel_won, monthly_utility.diesel_won),
       production_ton = COALESCE(excluded.production_ton, monthly_utility.production_ton),
@@ -399,6 +407,10 @@ export function importMonthlyUtility(buf: Buffer, actor: string): ImportResult {
       elec2_won: cellNum(row, col.elec2_won),
       lng_m3: cellNum(row, col.lng_m3),
       lng_won: cellNum(row, col.lng_won),
+      lng_dryer_m3: cellNum(row, col.lng_dryer_m3),
+      lng_dryer_won: cellNum(row, col.lng_dryer_won),
+      lng_rto_m3: cellNum(row, col.lng_rto_m3),
+      lng_rto_won: cellNum(row, col.lng_rto_won),
       diesel_liter: cellNum(row, col.diesel_liter),
       diesel_won: cellNum(row, col.diesel_won),
       production_ton: cellNum(row, col.production_ton),

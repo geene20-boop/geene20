@@ -19,7 +19,11 @@ const ALLOWED = [
   "granulation_input",
   "fine_powder",
   "hopper",
+  "hopper_a",
+  "hopper_b",
   "moisture",
+  "ph",
+  "disintegration",
   "moisture_note",
   "worker",
 ];

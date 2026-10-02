@@ -45,7 +45,25 @@ export async function PUT(
     return NextResponse.json({ error: reason }, { status: 403 });
   }
 
-  const updated: PackingEntry = { ...before, ...body };
+  // body는 프론트에서 camelCase(wrapKey 등)로 오고 DB 레코드는 snake_case(wrap_key 등)라서
+  // 단순 스프레드({ ...before, ...body })로는 랩·부자재 필드가 덮어써지지 않는다. 필드별로 명시 매핑한다.
+  const updated: PackingEntry = {
+    ...before,
+    date: body.date ?? before.date,
+    type: body.type ?? before.type,
+    product_key: body.productKey ?? before.product_key,
+    qty: body.qty ?? before.qty,
+    unit: body.unit !== undefined ? body.unit : before.unit,
+    topsheet_key: body.topsheetKey !== undefined ? body.topsheetKey : before.topsheet_key,
+    topsheet_qty: body.topsheetQty !== undefined ? body.topsheetQty : before.topsheet_qty,
+    wrap_key: body.wrapKey !== undefined ? body.wrapKey : before.wrap_key,
+    wrap_qty: body.wrapQty !== undefined ? body.wrapQty : before.wrap_qty,
+    bag_mat_key: body.bagMatKey !== undefined ? body.bagMatKey : before.bag_mat_key,
+    bag_mat_qty: body.bagMatQty !== undefined ? body.bagMatQty : before.bag_mat_qty,
+    aux_use_key: body.auxUseKey !== undefined ? body.auxUseKey : before.aux_use_key,
+    aux_use_qty: body.auxUseQty !== undefined ? body.auxUseQty : before.aux_use_qty,
+    worker: body.worker !== undefined ? body.worker : before.worker,
+  };
   if (typeof updated.qty !== "number" || updated.qty <= 0) {
     return NextResponse.json({ error: "qty는 0보다 커야 합니다." }, { status: 400 });
   }

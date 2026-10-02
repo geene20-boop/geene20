@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AccountRole, isAdminRequest, resetAccountPassword, updateAccount } from "@/lib/auth";
+import { AccountRole, isAdminRequest, resetAccountPassword, updateAccount, deleteAccount } from "@/lib/auth";
 
 const VALID_ROLES: AccountRole[] = ["viewer", "editor", "modifier"];
 
@@ -35,6 +35,23 @@ export async function PUT(
       active: body.active !== undefined ? Boolean(body.active) : undefined,
     });
     return NextResponse.json(account);
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 404 });
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  if (!isAdminRequest(req)) {
+    return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 403 });
+  }
+
+  try {
+    const { id } = await params;
+    deleteAccount(Number(id));
+    return NextResponse.json({ success: true });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 404 });
   }

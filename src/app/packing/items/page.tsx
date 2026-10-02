@@ -10,7 +10,6 @@ import { KIND_LABELS, itemLabel } from "@/lib/packingClient";
 import { useSiteSession } from "@/lib/useSiteSession";
 
 type NewItemForm = {
-  key: string;
   kind: PackingKind;
   category: string;
   sub: string;
@@ -21,7 +20,7 @@ type NewItemForm = {
 };
 
 function emptyForm(): NewItemForm {
-  return { key: "", kind: "product", category: "", sub: "", unit: "", bagKg: "", bagMatKey: "", initialStock: "" };
+  return { kind: "product", category: "", sub: "", unit: "", bagKg: "", bagMatKey: "", initialStock: "" };
 }
 
 export default function PackingItemsPage() {
@@ -68,7 +67,6 @@ export default function PackingItemsPage() {
     try {
       await apiPost("/api/packing-item", {
         entered_by: enteredBy,
-        key: form.key,
         kind: form.kind,
         category: form.category || null,
         sub: form.sub || null,
@@ -187,16 +185,6 @@ export default function PackingItemsPage() {
             lockedValue={session.loggedIn ? session.displayName : null}
           />
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">품목 키 (영문/숫자, 고유값)</span>
-            <input
-              type="text"
-              value={form.key}
-              onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))}
-              className="border rounded-md px-2 py-1.5"
-              required
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">구분</span>
             <select
               value={form.kind}
@@ -227,13 +215,6 @@ export default function PackingItemsPage() {
         </div>
         {message && <p className="text-sm text-slate-600">{message}</p>}
         <div className="flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            className="border rounded-md px-4 py-1.5 text-sm font-medium"
-          >
-            ↑ 맨 위로
-          </button>
           <button type="submit" disabled={saving} className="bg-slate-900 text-white rounded-md px-4 py-1.5 text-sm font-medium disabled:opacity-50">
             {saving ? "저장 중..." : "추가"}
           </button>
