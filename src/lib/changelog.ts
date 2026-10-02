@@ -7,6 +7,14 @@ export interface ChangelogEntry {
 // 새 기능을 배포할 때 배열 맨 앞에 새 항목을 추가한다 (버전 문자열은 날짜 기반 권장).
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2026.10.02",
+    date: "2026-10-02",
+    items: [
+      { title: "개선계획 순위 바로 입력", desc: "진행 중인 계획 목록에서 순위 숫자를 누르고 옮길 순위(예: 3)를 입력한 뒤 Enter를 누르면 그 자리로 한 번에 이동합니다. ▲▼ 버튼은 지금처럼 한 칸씩 옮길 때 쓰면 됩니다." },
+      { title: "맨 위로·맨 아래로 이동", desc: "▲▼ 버튼 아래 ⋯ 버튼을 누르면 맨 위로 또는 맨 아래로 바로 옮길 수 있습니다." },
+    ],
+  },
+  {
     version: "2026.10.01",
     date: "2026-10-01",
     items: [

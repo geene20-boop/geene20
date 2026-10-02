@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
-import { computeDashboard, isOverdue, parseCost, parsePlanForm } from "@/lib/improvementPlan";
+import { computeDashboard, isOverdue, moveToPosition, parseCost, parsePlanForm } from "@/lib/improvementPlan";
 import { addHistory, addPhoto, countPhotos, countTodo, loadPlanView, loadPlanViews } from "@/lib/improvementPlanStore";
 
 function makeDb(): Database.Database {
@@ -166,5 +166,23 @@ describe("improvementPlanStore", () => {
     expect(countTodo(db, true, "박성준", "2026-10-01")).toBe(1);
     expect(countTodo(db, false, "김은미", "2026-10-01")).toBe(2);
     expect(countTodo(db, false, null, "2026-10-01")).toBe(0);
+  });
+});
+
+describe("moveToPosition 순위 바로 이동", () => {
+  const ids = [10, 20, 30, 40, 50];
+  it("아래에서 위로 옮기면 사이 항목이 한 칸씩 밀린다", () => {
+    expect(moveToPosition(ids, 50, 2)).toEqual([10, 50, 20, 30, 40]);
+  });
+  it("위에서 아래로 옮긴다", () => {
+    expect(moveToPosition(ids, 10, 4)).toEqual([20, 30, 40, 10, 50]);
+  });
+  it("범위를 넘으면 맨 위/맨 아래로 맞춘다", () => {
+    expect(moveToPosition(ids, 30, 99)).toEqual([10, 20, 40, 50, 30]);
+    expect(moveToPosition(ids, 30, 0)).toEqual([30, 10, 20, 40, 50]);
+  });
+  it("같은 자리·없는 id는 그대로", () => {
+    expect(moveToPosition(ids, 30, 3)).toEqual(ids);
+    expect(moveToPosition(ids, 99, 1)).toEqual(ids);
   });
 });

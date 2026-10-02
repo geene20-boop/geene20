@@ -126,3 +126,13 @@ export function computeDashboard(
   }
   return d;
 }
+
+// 진행 목록(화면 순서대로 정렬된 id 목록)에서 한 계획을 원하는 순위(1부터)로 옮긴 새 순서를 돌려준다.
+// 범위를 벗어난 순위는 맨 위/맨 아래로 맞춘다.
+export function moveToPosition(orderedIds: number[], id: number, position: number): number[] {
+  const from = orderedIds.indexOf(id);
+  if (from < 0) return orderedIds;
+  const rest = orderedIds.filter((x) => x !== id);
+  const to = Math.max(0, Math.min(Math.round(position) - 1, rest.length));
+  return [...rest.slice(0, to), id, ...rest.slice(to)];
+}
