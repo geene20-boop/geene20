@@ -155,12 +155,35 @@ export async function runPmeterSyncForRange(fromDate: string, toDate: string): P
   return results;
 }
 
-/** 전일(어제, KST 기준) 사용량을 1공장·2공장 각각 동기화한다. */
+// 재배포로 서버 프로세스가 재시작되면 오전 8시 체크를 아예 놓친 날이 생길 수 있고,
+// 원래는 "어제"만 동기화해서 그런 날은 영영 비어버렸다. 최근 며칠 안에 기록이 없는
+// 날짜를 매번 함께 다시 조회해 자동으로 메꾼다.
+const CATCHUP_WINDOW_DAYS = 30;
+
+function datesWithoutRecord(plant: Plant, fromDate: string, toDate: string): string[] {
+  const db = getDb();
+  const rows = db
+    .prepare("SELECT date FROM electricity_usage WHERE plant = ? AND date >= ? AND date <= ?")
+    .all(plant, fromDate, toDate) as { date: string }[];
+  const existing = new Set(rows.map((r) => r.date));
+  const missing: string[] = [];
+  for (let date = fromDate; date <= toDate; date = addDays(date, 1)) {
+    if (!existing.has(date)) missing.push(date);
+  }
+  return missing;
+}
+
+/** 전일(어제, KST 기준) 사용량을 1공장·2공장 각각 동기화하고, 최근 밀린 날짜가 있으면 함께 채운다. */
 export async function runDailyPmeterSync(): Promise<PmeterSyncResult[]> {
-  const date = kstYesterday();
+  const yesterday = kstYesterday();
+  const windowStart = addDays(yesterday, -(CATCHUP_WINDOW_DAYS - 1));
   const results: PmeterSyncResult[] = [];
   for (const plant of PLANT_OPTIONS) {
-    results.push(await syncPlantUsage(plant, date));
+    const missedDates = datesWithoutRecord(plant, windowStart, addDays(yesterday, -1));
+    for (const date of missedDates) {
+      results.push(await syncPlantUsage(plant, date));
+    }
+    results.push(await syncPlantUsage(plant, yesterday));
   }
   return results;
 }

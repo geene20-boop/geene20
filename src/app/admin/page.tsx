@@ -647,6 +647,8 @@ function PmeterCard() {
         <p className="text-sm text-slate-500 mt-1">
           매일 오전 8시(KST)에 전일 전력사용량을 1공장·2공장 각각 자동으로 조회해 전력사용량
           화면에 채워 넣습니다. 같은 날짜에 이미 수동 입력이 있으면 자동 값으로 덮어쓰지 않습니다.
+          서버 재배포 등으로 특정 날짜를 놓쳤어도, 최근 30일 안에 비어있는 날짜가 있으면 다음
+          자동 실행 때 함께 채워집니다.
         </p>
       </div>
       {configured ? (
@@ -701,7 +703,7 @@ function PmeterCard() {
       {results && (
         <ul className="text-xs text-slate-600 flex flex-col gap-1">
           {results.map((r) => (
-            <li key={r.plant}>
+            <li key={`${r.plant}-${r.date}`}>
               {r.date} {r.plant}: {r.usage_kwh != null ? `${r.usage_kwh.toLocaleString()}kWh · ` : ""}
               {PMETER_STATUS_LABELS[r.status]}
               {r.error ? ` (${r.error})` : ""}
