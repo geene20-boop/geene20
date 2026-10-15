@@ -7,6 +7,13 @@ export interface ChangelogEntry {
 // 새 기능을 배포할 때 배열 맨 앞에 새 항목을 추가한다 (버전 문자열은 날짜 기반 권장).
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2026.10.15",
+    date: "2026-10-15",
+    items: [
+      { title: "전력사용량 자동 연동 밀린 날짜 자동 보충", desc: "서버 재배포 등으로 특정 날짜의 자동 입력을 놓쳐도, 최근 30일 안에 비어있는 날짜가 있으면 다음 날 자동 실행 때 함께 채워집니다." },
+    ],
+  },
+  {
     version: "2026.10.02",
     date: "2026-10-02",
     items: [
