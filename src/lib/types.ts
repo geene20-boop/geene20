@@ -613,3 +613,63 @@ export interface ImprovementPlanComment {
   body: string;
   created_at: string;
 }
+
+// ---------- [구매발주] 구매요청 → 관리자 승인(발주) → 입고 ----------
+// requested: 구매요청(승인 대기) | ordered: 발주(입고 대기, 부분입고 포함) | received: 입고완료
+// rejected: 반려(진행 안 함) | on_hold: 보류(나중에 다시 검토)
+export type PurchaseStatus = "requested" | "ordered" | "received" | "rejected" | "on_hold";
+export type PurchasePurpose = "고장수리" | "예방정비" | "소모품 교체" | "생산성 개선" | "안전/환경" | "기타";
+
+export interface PurchaseRequest {
+  id: number;
+  status: PurchaseStatus;
+  priority: number; // 구매요청 목록 내 우선순위 (작을수록 우선)
+  part_name: string;
+  qty: number;
+  unit: string;
+  expected_date: string | null; // 요청자가 원하는 예상 일정
+  budget: number;
+  vendor: string | null;
+  purpose: PurchasePurpose;
+  purpose_detail: string; // 사용처·목적 상세
+  urgent: number; // 1이면 긴급
+  requested_by: string;
+  requested_at: string; // 승인 대기 시작 시각 (UTC, 다시 요청하면 새로 시작)
+  created_at: string;
+  updated_at: string;
+  approved_by: string | null;
+  approved_at: string | null;
+  order_date: string | null;
+  eta: string | null; // 입고 예상일
+  order_amount: number | null;
+  received_qty: number;
+  received_date: string | null;
+  received_by: string | null;
+  kakao_shared_at: string | null;
+  kakao_shared_by: string | null;
+  decline_reason: string | null; // 반려·보류 사유
+  declined_by: string | null;
+}
+
+export interface PurchaseAttachment {
+  id: number;
+  which: "request" | "delivery"; // 요청 시 견적서·사진 / 입고 시 납품 사진
+  file_name: string;
+  mime_type: string | null;
+}
+
+export interface PurchaseView extends PurchaseRequest {
+  attachments: PurchaseAttachment[];
+  comment_count: number;
+  last_admin_comment: string | null; // 가장 최근 승인자 의견 (목록에 바로 보여줌)
+}
+
+export interface PurchaseComment {
+  id: number;
+  request_id: number;
+  kind: "comment" | "history";
+  author: string;
+  role: string | null; // '승인자' | '요청자' | NULL
+  body: string;
+  created_at: string;
+}

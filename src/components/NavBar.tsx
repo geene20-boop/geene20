@@ -17,6 +17,7 @@ const GROUP_ICON: Record<string, string> = {
   제품포장: "📦",
   "원재료·문서": "🧾",
   설비관리: "🔧",
+  구매발주: "🛒",
   근태: "👥",
   시스템: "⚙️",
 };
@@ -116,6 +117,36 @@ function useImprovementPlanTodoCount(enabled: boolean, pathname: string): number
   return count;
 }
 
+// [구매발주] 관리자에게 승인 대기 건수를 메뉴 옆에 보여준다.
+function usePurchaseTodoCount(enabled: boolean, pathname: string): number {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCount(0);
+      return;
+    }
+    let cancelled = false;
+    async function load() {
+      try {
+        const r = await apiGet<{ count: number }>("/api/purchase/todo");
+        if (!cancelled) setCount(r.count);
+      } catch {
+        if (!cancelled) setCount(0);
+      }
+    }
+    load();
+    const interval = setInterval(load, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [enabled, pathname]);
+
+  return count;
+}
+
 function ApprovalBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
@@ -153,8 +184,10 @@ export default function NavBar() {
   const canApprove = session.isAdmin || session.isModifier;
   const pendingCount = usePendingApprovalCount(canApprove, pathname);
   const planTodoCount = useImprovementPlanTodoCount(session.loggedIn || session.isAdmin, pathname);
-  // 메뉴 묶음별 알림 숫자: 근태 → 근태 승인대기, 설비관리 → 개선계획 처리할 건
-  const badgeFor = (label: string) => (label === "근태" ? pendingCount : label === "설비관리" ? planTodoCount : 0);
+  const purchaseTodoCount = usePurchaseTodoCount(session.isAdmin, pathname);
+  // 메뉴 묶음별 알림 숫자: 근태 → 근태 승인대기, 설비관리 → 개선계획 처리할 건, 구매발주 → 승인 대기
+  const badgeFor = (label: string) =>
+    label === "근태" ? pendingCount : label === "설비관리" ? planTodoCount : label === "구매발주" ? purchaseTodoCount : 0;
   // 외국인 근로자와 연동된 계정은 생산·품질/제품포장만 이용하므로 나머지는 메뉴에서 숨기고,
   // 지정된 개인 계정은 원재료·문서를 숨긴다. 관리자만 이력관리를 볼 수 있다.
   const visibleGroups = NAV_GROUPS.map((group) => {
@@ -335,6 +368,7 @@ export default function NavBar() {
                             {isQuickAccess && <span className="text-amber-300">★</span>}
                             {item.label}
                             {item.href === "/improvement-plan" && <ApprovalBadge count={planTodoCount} />}
+                            {item.href === "/purchase/request" && <ApprovalBadge count={purchaseTodoCount} />}
                           </Link>
                         </div>
                       );
@@ -472,6 +506,7 @@ export default function NavBar() {
                               {isQuickAccess && <span className="text-amber-300">★</span>}
                               {item.label}
                               {item.href === "/improvement-plan" && <ApprovalBadge count={planTodoCount} />}
+                            {item.href === "/purchase/request" && <ApprovalBadge count={purchaseTodoCount} />}
                             </Link>
                           </div>
                         );

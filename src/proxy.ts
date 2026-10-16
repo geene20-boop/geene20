@@ -34,6 +34,7 @@ const GROUP_API_PREFIXES: [string, string][] = [
   ["/api/self-test", "원재료·문서"],
   ["/api/lab-journal", "원재료·문서"],
   ["/api/board", "게시판"],
+  ["/api/purchase", "구매발주"],
 ];
 
 function groupForPath(pathname: string): string | null {

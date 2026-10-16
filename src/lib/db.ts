@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import { saveAttachmentFile } from "@/lib/fileStorage";
+import { PURCHASE_SCHEMA_SQL } from "@/lib/purchaseSchema";
 
 const DATA_DIR = process.env.DB_DIR ?? path.join(process.cwd(), "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -944,7 +945,10 @@ export function getDb(): Database.Database {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_improvement_plan_comment_plan ON improvement_plan_comment(plan_id, id);
+
   `);
+
+  db.exec(PURCHASE_SCHEMA_SQL);
 
   // 기존에 만들어진 DB에도 새 컬럼이 안전하게 추가되도록 마이그레이션
   function migrateColumns(table: string, migrations: [string, string][]) {

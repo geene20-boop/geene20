@@ -15,6 +15,7 @@ export const QUICK_ACCESS_HREFS = ["/production", "/packing/entry", "/raw-materi
 // 외국인 근로자와 연동된 계정은 생산·품질/제품포장만 이용할 수 있다.
 export const FOREIGN_WORKER_RESTRICTED_GROUPS = new Set([
   "원재료·문서",
+  "구매발주",
   "근태",
   "게시판",
   "시스템",
@@ -97,6 +98,14 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "설비관리",
     items: [{ href: "/improvement-plan", label: "[개선계획]" }],
+  },
+  {
+    label: "구매발주",
+    items: [
+      { href: "/purchase/request", label: "구매요청" },
+      { href: "/purchase/order", label: "발주" },
+      { href: "/purchase/receive", label: "입고" },
+    ],
   },
   {
     label: "근태",
