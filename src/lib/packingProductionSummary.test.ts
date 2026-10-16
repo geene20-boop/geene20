@@ -6,6 +6,7 @@ import {
   getDailyProduction,
   getMonthlyProduction,
   getSeasonProduction,
+  getSeasonProductionByCategory,
 } from "@/lib/packingProductionSummary";
 
 function makeDb(): Database.Database {
@@ -136,6 +137,7 @@ describe("getDailyPackingSummary", () => {
         key TEXT PRIMARY KEY,
         kind TEXT NOT NULL,
         category TEXT,
+        sub TEXT,
         bag_kg REAL
       );
       CREATE TABLE packing_entry (
@@ -147,11 +149,11 @@ describe("getDailyPackingSummary", () => {
       );
     `);
     const insertItem = db.prepare(
-      "INSERT INTO packing_item (key, kind, category, bag_kg) VALUES (?, ?, ?, ?)"
+      "INSERT INTO packing_item (key, kind, category, sub, bag_kg) VALUES (?, ?, ?, ?, ?)"
     );
-    insertItem.run("gyusan_a", "product", "입상규산", 20);
-    insertItem.run("sekhoego_a", "product", "석회고토", 20);
-    insertItem.run("tonbag_a", "product", "톤백", 1000);
+    insertItem.run("gyusan_a", "product", "입상규산", null, 20);
+    insertItem.run("sekhoego_a", "product", "석회고토", null, 20);
+    insertItem.run("tonbag_a", "product", "톤백", "규산(1T)", 1000);
     return db;
   }
 
@@ -164,7 +166,7 @@ describe("getDailyPackingSummary", () => {
   it("sums tons across all packed products regardless of classification", () => {
     const db = makeCategoryDb();
     addEntry(db, "1", "2026-07-01", "gyusan_a", 100); // 2톤
-    addEntry(db, "2", "2026-07-01", "tonbag_a", 1); // 1톤 (분류 안 됨)
+    addEntry(db, "2", "2026-07-01", "tonbag_a", 1); // 1톤
     const summary = getDailyPackingSummary(db, "2026-07-01");
     expect(summary.totalTons).toBe(3);
   });
@@ -177,9 +179,54 @@ describe("getDailyPackingSummary", () => {
     expect(summary.suggestedProduct).toBe("석회고토");
   });
 
+  it("classifies 톤백 packed products via sub so a tonbag-only day still suggests a product", () => {
+    const db = makeCategoryDb();
+    addEntry(db, "1", "2026-07-01", "tonbag_a", 3); // 3톤, sub="규산(1T)" -> 입상규산
+    const summary = getDailyPackingSummary(db, "2026-07-01");
+    expect(summary.suggestedProduct).toBe("입상규산");
+  });
+
   it("returns zero/null when no packing entries exist for the date", () => {
     const db = makeCategoryDb();
     const summary = getDailyPackingSummary(db, "2026-07-01");
     expect(summary).toEqual({ totalTons: 0, suggestedProduct: null });
+  });
+});
+
+describe("getSeasonProductionByCategory", () => {
+  function makeDbWithSub(): Database.Database {
+    const db = new Database(":memory:");
+    db.exec(`
+      CREATE TABLE packing_item (
+        key TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        category TEXT,
+        sub TEXT,
+        bag_kg REAL
+      );
+      CREATE TABLE packing_entry (
+        id TEXT PRIMARY KEY,
+        date TEXT NOT NULL,
+        type TEXT NOT NULL,
+        product_key TEXT NOT NULL,
+        qty REAL NOT NULL
+      );
+    `);
+    return db;
+  }
+
+  it("실제 품목처럼 카테고리에 관리번호가 붙어있어도(\"[04]톤백\") 톤백 제품을 올바른 대분류로 집계한다", () => {
+    const db = makeDbWithSub();
+    db.prepare(
+      "INSERT INTO packing_item (key, kind, category, sub, bag_kg) VALUES ('tonbag_gyusan', 'product', '[04]톤백', '[2-D]규산(1T)', 1000)"
+    ).run();
+    db.prepare(
+      "INSERT INTO packing_entry (id, date, type, product_key, qty) VALUES ('1', '2026-07-01', 'pack', 'tonbag_gyusan', 3)"
+    ).run();
+
+    const rows = getSeasonProductionByCategory(db);
+    const season = rows.find((r) => r.season === "2026-2027");
+    expect(season?.tons).toBe(3);
+    expect(season?.byCategory.find((c) => c.category === "입상규산")?.tons).toBe(3);
   });
 });

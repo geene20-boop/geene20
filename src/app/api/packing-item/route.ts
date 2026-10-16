@@ -11,14 +11,19 @@ export async function GET() {
 
 const VALID_KINDS: PackingKind[] = ["product", "bagmat", "aux"];
 
+// 화면에서 품목 키 입력란을 없앤 뒤로는 서버가 내부 식별용 고유 키를 자동 생성한다.
+function generateItemKey(kind: string): string {
+  const rand = Math.random().toString(36).slice(2, 8);
+  return `${kind}_${Date.now().toString(36)}${rand}`;
+}
+
 export async function POST(req: NextRequest) {
   const db = getDb();
   const body = await req.json();
 
-  const key = typeof body.key === "string" ? body.key.trim() : "";
   const kind = body.kind as PackingKind;
-  if (!key || !VALID_KINDS.includes(kind)) {
-    return NextResponse.json({ error: "key, kind(product/bagmat/aux)는 필수입니다." }, { status: 400 });
+  if (!VALID_KINDS.includes(kind)) {
+    return NextResponse.json({ error: "kind(product/bagmat/aux)는 필수입니다." }, { status: 400 });
   }
 
   const actor = requireActor(req, body);
@@ -26,9 +31,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "입력자명을 입력해주세요." }, { status: 400 });
   }
 
-  const existing = db.prepare("SELECT key FROM packing_item WHERE key = ?").get(key);
-  if (existing) {
-    return NextResponse.json({ error: `이미 존재하는 품목 키입니다: ${key}` }, { status: 409 });
+  let key = typeof body.key === "string" && body.key.trim() ? body.key.trim() : generateItemKey(kind);
+  while (db.prepare("SELECT key FROM packing_item WHERE key = ?").get(key)) {
+    key = generateItemKey(kind);
   }
 
   db.prepare(

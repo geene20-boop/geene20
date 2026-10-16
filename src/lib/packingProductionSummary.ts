@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { stripCode } from "@/lib/packingClient";
 
 export interface MonthlyProductionRow {
   month: string; // "YYYY-MM"
@@ -117,22 +118,24 @@ export interface DailyPackingSummary {
 
 // 생산일지 "일일포장량/생산품목" 자동 반영용: 제품포장(packing_entry)에 그날 입력된
 // 생산제품+수량을 톤으로 환산해 합계 내고, 분류별 톤수가 가장 큰 것을 생산품목으로 제안한다.
+// 톤백 포장(category="톤백")도 sub(세부명)로 대분류를 판별해 제안에 포함시킨다 —
+// 그렇지 않으면 그날 전량이 톤백으로 포장된 경우 생산품목이 제안되지 않는다.
 export function getDailyPackingSummary(db: Database.Database, date: string): DailyPackingSummary {
   const rows = db
     .prepare(
-      `SELECT pe.qty as qty, pi.bag_kg as bag_kg, pi.category as category
+      `SELECT pe.qty as qty, pi.bag_kg as bag_kg, pi.category as category, pi.sub as sub
        FROM packing_entry pe
        JOIN packing_item pi ON pe.product_key = pi.key
        WHERE pe.type = 'pack' AND pi.kind = 'product' AND pe.date = ?`
     )
-    .all(date) as { qty: number; bag_kg: number | null; category: string | null }[];
+    .all(date) as { qty: number; bag_kg: number | null; category: string | null; sub: string | null }[];
 
   let totalTons = 0;
   const tonsByCategory = new Map<string, number>();
   for (const row of rows) {
     const tons = (row.qty * (row.bag_kg ?? 0)) / 1000;
     totalTons += tons;
-    const category = row.category ? classifyProductCategory(row.category) : null;
+    const category = classifyCategoryWithTonbag(row.category, row.sub);
     if (category) tonsByCategory.set(category, (tonsByCategory.get(category) ?? 0) + tons);
   }
 
@@ -234,7 +237,7 @@ function classifyCategoryWithTonbag(category: string | null, sub: string | null)
   if (cat.includes("입상규산")) return "입상규산";
   if (cat.includes("석회고토")) return "석회고토";
   if (cat.includes("칼슘") || cat.includes("유황")) return "칼슘유황";
-  if (cat === "톤백") {
+  if (stripCode(cat) === "톤백") {
     const s = sub ?? "";
     if (s.includes("석회고토")) return "석회고토";
     if (s.includes("규산")) return "입상규산";
@@ -245,6 +248,26 @@ function classifyCategoryWithTonbag(category: string | null, sub: string | null)
 
 function byCategoryOf(catMap: Map<string, number> | undefined): CategoryTons[] {
   return DISPLAY_CATEGORIES.map((category) => ({ category, tons: catMap?.get(category) ?? 0 }));
+}
+
+// 조회기간(from~to) 내 날짜별 · 품목 대분류별 실제 포장량(톤)을 계산한다.
+// 생산일지에 수기로 입력하는 daily_pack_amount 대신, 제품포장(packing_entry)에 실제
+// 입력된 생산/출하 실적을 포장량의 근거로 쓰기 위한 것이다.
+export function getDailyPackingTonsByCategory(
+  db: Database.Database,
+  from: string,
+  to: string
+): Map<string, Map<string, number>> {
+  const entries = getRawEntriesWithSub(db).filter((e) => e.date >= from && e.date <= to);
+  const byDate = new Map<string, Map<string, number>>();
+  for (const e of entries) {
+    const category = classifyCategoryWithTonbag(e.category, e.sub);
+    if (!category) continue;
+    const catMap = byDate.get(e.date) ?? new Map<string, number>();
+    catMap.set(category, (catMap.get(category) ?? 0) + tonsOf(e));
+    byDate.set(e.date, catMap);
+  }
+  return byDate;
 }
 
 export function getMonthlyProductionByCategory(db: Database.Database): MonthlyProductionByCategoryRow[] {

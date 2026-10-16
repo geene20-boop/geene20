@@ -32,8 +32,11 @@ export async function GET(req: NextRequest) {
     base["조립제당도"] = r.granulation_brix ?? "";
     base["조립제투입량"] = r.granulation_input ?? "";
     base["미분말"] = r.fine_powder ?? "";
-    base["호퍼"] = r.hopper ?? "";
+    base["호퍼 A"] = r.hopper_a ?? "";
+    base["호퍼 B"] = r.hopper_b ?? "";
     base["수분"] = r.moisture ?? "";
+    base["pH"] = r.ph ?? "";
+    base["붕괴도(%)"] = r.disintegration ?? "";
     base["수분 비고"] = r.moisture_note ?? "";
     base["작업자"] = r.worker ?? "";
     return base;

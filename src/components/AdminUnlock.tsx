@@ -17,6 +17,7 @@ export function useAdminSession() {
   async function logout() {
     await fetch("/api/admin/logout", { method: "POST" });
     setLoggedIn(false);
+    window.dispatchEvent(new Event("site-session-changed"));
   }
 
   return { loggedIn, checked, refresh, logout, setLoggedIn };
@@ -42,6 +43,7 @@ function RecoverForm({ onSuccess, onBack }: { onSuccess: () => void; onBack: () 
         body: JSON.stringify({ code, newPassword }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "복구에 실패했습니다.");
+      window.dispatchEvent(new Event("site-session-changed"));
       onSuccess();
     } catch (err) {
       setError((err as Error).message);
@@ -154,6 +156,7 @@ export default function AdminLoginModal({
         });
         if (!res.ok) throw new Error((await res.json()).error ?? "로그인에 실패했습니다.");
       }
+      window.dispatchEvent(new Event("site-session-changed"));
       onSuccess();
     } catch (err) {
       setError((err as Error).message);
